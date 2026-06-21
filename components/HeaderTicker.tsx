@@ -1,13 +1,13 @@
-'use client';
+"use client";
 
-import React from 'react';
+import React from "react";
 
 const messages = [
-  "LIVE: Sentimen pasar Bakwan Jaksel menguat akibat krisis minyak goreng",
+  "Sentimen pasar Bakwan Jaksel menguat akibat krisis minyak goreng",
   "Warga Rawamangun laporkan tahu isi sekarang dominan isi angin daripada tauge",
   "BREAKING: Ukuran tempe mendoan Grogol menyusut 15% WoW",
   "WARNING: Cabe rawit hijau langka, pedagang mulai menggunakan cabe merah keriting",
-  "SCBD Bakwan Index mencapai level tertinggi sepanjang masa, Rp 3.000 per biji"
+  "SCBD Bakwan Index mencapai level tertinggi sepanjang masa, Rp 3.000 per biji",
 ];
 
 export default function HeaderTicker() {

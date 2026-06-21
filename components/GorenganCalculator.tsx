@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { calculateNetWorth, getSocialClass, RegionalIndex } from '@/data/gorenganData';
+import CustomSelect from './CustomSelect';
 
 interface GorenganCalculatorProps {
   regions: RegionalIndex[];
@@ -26,31 +27,34 @@ export default function GorenganCalculator({ regions }: GorenganCalculatorProps)
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
           <label className="text-xs text-zinc-500">PROVINCE</label>
-          <select 
-            className="bg-black border border-zinc-800 rounded p-2 text-yellow-400 focus:outline-none focus:border-zinc-500"
+          <CustomSelect
+            options={[...regions]
+              .sort((a, b) => a.region.localeCompare(b.region))
+              .map(r => ({ label: r.region, value: r.region }))}
             value={selectedRegion}
-            onChange={(e) => {
-              setSelectedRegion(e.target.value);
+            onChange={(val) => {
+              setSelectedRegion(val);
               // Auto-update salary to UMP when region changes to show comparison
-              const newRegion = regions.find(r => r.region === e.target.value);
+              const newRegion = regions.find((r) => r.region === val);
               if (newRegion) setSalary(newRegion.ump);
             }}
-          >
-            {/* Sort alphabetically for the dropdown */}
-            {[...regions].sort((a,b) => a.region.localeCompare(b.region)).map(r => (
-              <option key={r.region} value={r.region}>{r.region}</option>
-            ))}
-          </select>
+          />
         </div>
 
         <div className="flex flex-col gap-1">
           <label className="text-xs text-zinc-500">MONTHLY SALARY (IDR)</label>
-          <input 
-            type="number" 
-            className="bg-black border border-zinc-800 rounded p-2 text-green-400 focus:outline-none focus:border-zinc-500"
-            value={salary}
-            onChange={(e) => setSalary(Number(e.target.value))}
-          />
+          <div className="relative">
+            <span className="absolute left-3 top-[10px] text-zinc-500 font-mono text-sm">Rp</span>
+            <input 
+              type="text" 
+              className="w-full bg-black border border-zinc-800 rounded py-2 pl-9 pr-2 text-green-400 focus:outline-none focus:border-zinc-500"
+              value={salary.toLocaleString('id-ID')}
+              onChange={(e) => {
+                const rawVal = e.target.value.replace(/\D/g, '');
+                setSalary(rawVal ? Number(rawVal) : 0);
+              }}
+            />
+          </div>
           <div className="text-[10px] text-zinc-600 mt-1 flex justify-between">
             <span>UMP 2026: Rp {activeRegion?.ump?.toLocaleString('id-ID')}</span>
             <span className={umpRatio >= 100 ? "text-green-500" : "text-red-500"}>

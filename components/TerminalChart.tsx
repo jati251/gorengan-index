@@ -109,19 +109,19 @@ export default function TerminalChart({ livePrice, sentiment }: TerminalChartPro
     chartRef.current = chart;
     seriesRef.current = series;
 
-    const handleResize = () => {
-      if (chartContainerRef.current && chartRef.current) {
-        chartRef.current.applyOptions({ width: chartContainerRef.current.clientWidth });
+    const resizeObserver = new ResizeObserver(entries => {
+      if (entries.length === 0 || entries[0].target !== chartContainerRef.current) {
+        return;
       }
-    };
+      const newRect = entries[0].contentRect;
+      chart.applyOptions({ width: newRect.width });
+    });
 
-    window.addEventListener('resize', handleResize);
+    resizeObserver.observe(chartContainerRef.current);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
-      if (chartRef.current) {
-        chartRef.current.remove();
-      }
+      resizeObserver.disconnect();
+      chart.remove();
     };
   }, []);
 
@@ -165,22 +165,28 @@ export default function TerminalChart({ livePrice, sentiment }: TerminalChartPro
   }, [chartData, livePrice, timeframe]);
 
   return (
-    <div className="w-full h-auto bg-zinc-950 border border-zinc-800 rounded-md p-4 shadow-xl">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-zinc-400 font-mono text-sm tracking-widest flex items-center gap-4">
-          SIG TREND ANALYTICS
-          <div className="flex gap-1 bg-zinc-900 rounded p-1 overflow-x-auto">
-            <button onClick={() => setTimeframe('5m')} className={`px-2 py-0.5 rounded text-xs ${timeframe === '5m' ? 'bg-yellow-500 text-black' : 'text-zinc-500 hover:text-white'}`}>5m</button>
-            <button onClick={() => setTimeframe('1d')} className={`px-2 py-0.5 rounded text-xs ${timeframe === '1d' ? 'bg-yellow-500 text-black' : 'text-zinc-500 hover:text-white'}`}>1D</button>
-            <button onClick={() => setTimeframe('1w')} className={`px-2 py-0.5 rounded text-xs ${timeframe === '1w' ? 'bg-yellow-500 text-black' : 'text-zinc-500 hover:text-white'}`}>1W</button>
-            <button onClick={() => setTimeframe('1M')} className={`px-2 py-0.5 rounded text-xs ${timeframe === '1M' ? 'bg-yellow-500 text-black' : 'text-zinc-500 hover:text-white'}`}>1M</button>
-            <button onClick={() => setTimeframe('1y')} className={`px-2 py-0.5 rounded text-xs ${timeframe === '1y' ? 'bg-yellow-500 text-black' : 'text-zinc-500 hover:text-white'}`}>1Y</button>
-            <button onClick={() => setTimeframe('ALL')} className={`px-2 py-0.5 rounded text-xs ${timeframe === 'ALL' ? 'bg-yellow-500 text-black' : 'text-zinc-500 hover:text-white'}`}>ALL</button>
-          </div>
-        </h2>
-        <span className={`text-xs font-mono px-2 py-1 rounded ${sentiment === 'BEARISH' ? 'bg-red-900/30 text-red-400' : sentiment === 'BULLISH' ? 'bg-green-900/30 text-green-400' : 'bg-zinc-800 text-zinc-400'}`}>
+    <div className="bg-black border border-zinc-800 rounded-md p-4 shadow-xl">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+        <h2 className="text-zinc-400 font-mono text-sm tracking-widest shrink-0">SIG TREND ANALYTICS</h2>
+        
+        <div className="flex flex-wrap gap-2 font-mono text-xs w-full md:w-auto">
+          {['5m', '1d', '1w', '1M', '1y', 'ALL'].map(tf => (
+            <button 
+              key={tf}
+              onClick={() => setTimeframe(tf)}
+              className={`px-2 py-1 rounded transition-colors ${timeframe === tf ? 'bg-yellow-500 text-black font-bold' : 'text-zinc-500 hover:text-white'}`}
+            >
+              {tf.toUpperCase()}
+            </button>
+          ))}
+        </div>
+        
+        <div className={`text-xs font-bold px-2 py-1 rounded bg-black/50 border shrink-0 ${
+          sentiment === 'BULLISH' ? 'text-green-500 border-green-900' :
+          sentiment === 'BEARISH' ? 'text-red-500 border-red-900' : 'text-zinc-500 border-zinc-800'
+        }`}>
           {sentiment || 'STAGNANT'}
-        </span>
+        </div>
       </div>
       <div ref={chartContainerRef} className="relative h-64 w-full" />
     </div>

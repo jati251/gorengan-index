@@ -2,12 +2,15 @@
 
 import React, { useState } from 'react';
 import { indonesiaUMP } from '@/data/indonesiaUmp';
+import CustomSelect from './CustomSelect';
 
 export default function ReportPriceModal() {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [displayPrice, setDisplayPrice] = useState("Rp 2.000");
+  const [selectedRegion, setSelectedRegion] = useState(indonesiaUMP[0].name);
+  const [selectedTipe, setSelectedTipe] = useState("BAKWAN");
 
   const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     // Remove all non-digits
@@ -87,21 +90,27 @@ export default function ReportPriceModal() {
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div>
               <label className="block text-zinc-500 text-xs mb-1">PROVINCE REGION</label>
-              <select name="region" required className="w-full bg-zinc-900 border border-zinc-700 text-white p-2">
-                {indonesiaUMP.map(p => (
-                  <option key={p.id} value={p.name}>{p.name}</option>
-                ))}
-              </select>
+              <CustomSelect 
+                name="region" 
+                value={selectedRegion}
+                onChange={setSelectedRegion}
+                options={indonesiaUMP.map(p => ({ label: p.name, value: p.name }))}
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-zinc-500 text-xs mb-1">ASSET TYPE</label>
-                <select name="tipeGorengan" className="w-full bg-zinc-900 border border-zinc-700 text-white p-2">
-                  <option value="BAKWAN">BAKWAN</option>
-                  <option value="TAHU">TAHU</option>
-                  <option value="TEMPE">TEMPE</option>
-                </select>
+                <CustomSelect 
+                  name="tipeGorengan" 
+                  value={selectedTipe}
+                  onChange={setSelectedTipe}
+                  options={[
+                    { label: "BAKWAN", value: "BAKWAN" },
+                    { label: "TAHU", value: "TAHU" },
+                    { label: "TEMPE", value: "TEMPE" },
+                  ]}
+                />
               </div>
               <div>
                 <label className="block text-zinc-500 text-xs mb-1">SPOT PRICE (IDR)</label>
