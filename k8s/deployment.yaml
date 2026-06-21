@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gorengan-index
+  namespace: default
+  labels:
+    app: gorengan-index
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gorengan-index
+  template:
+    metadata:
+      labels:
+        app: gorengan-index
+    spec:
+      containers:
+        - name: gorengan-index
+          image: ghcr.io/jati251/gorengan-index:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: gorengan-index-secrets
+                  key: DATABASE_URL
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
