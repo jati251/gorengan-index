@@ -6,27 +6,22 @@ export default function FearGreedWidget({ sentiment, volatility }: { sentiment: 
   const [index, setIndex] = useState(50);
   
   useEffect(() => {
-    // Calculate a fake fear & greed index 0-100
-    // 0 = Extreme Fear (Bearish, High Volatility)
-    // 100 = Extreme Greed (Bullish, Low Volatility)
     let base = 50;
     if (sentiment === "BULLISH" || sentiment === "EXTREME_BULLISH") base += 25;
     if (sentiment === "BEARISH") base -= 25;
     
-    // Add noise based on volatility
-    const noise = Math.floor(volatility * 1000); // volatility is tiny, scale it up
-    
-    // Smooth transition
+    const noise = Math.floor(volatility * 1000);
     const target = Math.max(0, Math.min(100, base + noise));
     setIndex(target);
   }, [sentiment, volatility]);
 
   let statusText = "NEUTRAL";
   let statusColor = "text-yellow-400";
-  if (index >= 75) { statusText = "EXTREME GREED"; statusColor = "text-green-500"; }
-  else if (index >= 55) { statusText = "GREED"; statusColor = "text-green-400"; }
-  else if (index <= 25) { statusText = "EXTREME FEAR"; statusColor = "text-red-500"; }
-  else if (index <= 45) { statusText = "FEAR"; statusColor = "text-red-400"; }
+  let dotColor = "bg-yellow-400";
+  if (index >= 75) { statusText = "EXTREME GREED"; statusColor = "text-green-500"; dotColor = "bg-green-500"; }
+  else if (index >= 55) { statusText = "GREED"; statusColor = "text-green-400"; dotColor = "bg-green-400"; }
+  else if (index <= 25) { statusText = "EXTREME FEAR"; statusColor = "text-red-500"; dotColor = "bg-red-500"; }
+  else if (index <= 45) { statusText = "FEAR"; statusColor = "text-red-400"; dotColor = "bg-red-400"; }
 
   return (
     <div className="bg-black border border-zinc-800 p-4 rounded-md shadow-lg flex flex-col">
@@ -35,22 +30,25 @@ export default function FearGreedWidget({ sentiment, volatility }: { sentiment: 
         FEAR & GREED
       </h3>
       
-      <div className="flex flex-col gap-2 pt-2">
+      <div className="flex flex-col gap-3 pt-2">
         <div className="flex justify-between items-end">
           <span className={`text-3xl font-bold font-mono ${statusColor}`}>{index}</span>
           <span className={`text-sm font-mono ${statusColor} mb-1`}>{statusText}</span>
         </div>
         
-        <div className="w-full h-2 bg-zinc-900 rounded overflow-hidden flex">
-          <div className="h-full bg-red-500 transition-all duration-1000" style={{ width: `${Math.min(100, Math.max(0, 50 - index))}%` }} />
-          <div className="h-full bg-zinc-700 w-0.5" />
-          <div className="h-full bg-green-500 transition-all duration-1000" style={{ width: `${Math.max(0, index - 50)}%` }} />
+        {/* Full-width gradient gauge */}
+        <div className="relative w-full h-3 rounded-full overflow-hidden" style={{ background: "linear-gradient(to right, #ef4444, #f97316, #eab308, #84cc16, #22c55e)" }}>
+          {/* Needle / Position indicator */}
+          <div 
+            className="absolute top-0 h-full w-1 bg-white shadow-[0_0_6px_rgba(255,255,255,0.8)] transition-all duration-1000 ease-out"
+            style={{ left: `${index}%` }}
+          />
         </div>
         
-        <div className="flex justify-between text-[10px] text-zinc-600 font-mono mt-1">
-          <span>0 (FEAR)</span>
-          <span>50</span>
-          <span>100 (GREED)</span>
+        <div className="flex justify-between text-[10px] text-zinc-600 font-mono">
+          <span>EXTREME FEAR</span>
+          <span>NEUTRAL</span>
+          <span>EXTREME GREED</span>
         </div>
       </div>
     </div>
