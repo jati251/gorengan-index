@@ -9,6 +9,10 @@ import ReportPriceModal from "@/components/ReportPriceModal";
 import MacroIndicators from "@/components/MacroIndicators";
 import ProvincialTable from "@/components/ProvincialTable";
 import BtcParityWidget from "@/components/BtcParityWidget";
+import FearGreedWidget from "@/components/FearGreedWidget";
+import OrderBookWidget from "@/components/OrderBookWidget";
+import TopMoversWidget from "@/components/TopMoversWidget";
+import FuturesYieldWidget from "@/components/FuturesYieldWidget";
 import { RegionalIndex } from "@/data/gorenganData";
 
 interface DashboardData {
@@ -126,21 +130,27 @@ export default function Home() {
                 sentiment={benchmarkSentiment}
               />
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <FearGreedWidget sentiment={benchmarkSentiment} volatility={data.volatilityIndex} />
+                <TopMoversWidget regions={data.regions} />
+              </div>
+
               <ProvincialTable regions={data.regions} />
+              
+              <FuturesYieldWidget currentPrice={benchmarkPrice} />
             </div>
 
             <div className="lg:col-span-1 flex flex-col gap-6">
-              {/* BTC Parity Widget */}
-              <BtcParityWidget 
-                btcIdrPrice={data.macro.btcIdrPrice} 
-                benchmarkPrice={benchmarkPrice} 
-              />
-
-              {/* Existing Calculator Widget */}
-              <GorenganCalculator regions={data.regions} />
-
-              {/* News Feed Widget */}
+              <OrderBookWidget currentPrice={benchmarkPrice} />
               <MarketNewsWidget headlines={data.newsHeadlines} />
+
+              <div className="grid grid-cols-2 lg:grid-cols-1 gap-6">
+                <BtcParityWidget 
+                  btcIdrPrice={data.macro.btcIdrPrice} 
+                  benchmarkPrice={benchmarkPrice} 
+                />
+                <GorenganCalculator regions={data.regions} />
+              </div>
             </div>
           </div>
         </div>
