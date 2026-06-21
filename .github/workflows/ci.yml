@@ -51,3 +51,47 @@ jobs:
 
           git diff-index --quiet HEAD || git commit -m "ci: update gorengan-index to ${GITHUB_SHA}"
           git push origin master
+
+      - name: Ensure Cloudflare DNS Record
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ZONE_ID: "6788c8b247af1479236b727951fe295a"
+          RECORD_NAME: "gorengan-index.cekcok.my.id"
+          TUNNEL_TARGET: "350467bc-439c-4c53-9e61-90d8dfe00e26.cfargotunnel.com"
+        run: |
+          echo "Checking if DNS record $RECORD_NAME already exists..."
+          RESPONSE=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?name=$RECORD_NAME&type=CNAME" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Content-Type: application/json")
+          
+          if echo "$RESPONSE" | grep -q '"success":true'; then
+            COUNT=$(echo "$RESPONSE" | grep -o '"count":[0-9]*' | cut -d':' -f2)
+            
+            if [ -n "$COUNT" ] && [ "$COUNT" -gt 0 ]; then
+              echo "DNS Record $RECORD_NAME already exists. Skipping creation."
+            else
+              echo "DNS Record $RECORD_NAME not found. Creating..."
+              CREATE_RESP=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
+                -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+                -H "Content-Type: application/json" \
+                --data '{
+                  "type": "CNAME",
+                  "name": "'"$RECORD_NAME"'",
+                  "content": "'"$TUNNEL_TARGET"'",
+                  "ttl": 1,
+                  "proxied": true
+                }')
+              
+              if echo "$CREATE_RESP" | grep -q '"success":true'; then
+                echo "DNS Record created successfully."
+              else
+                echo "Failed to create DNS record!"
+                echo "Response: $CREATE_RESP"
+                exit 1
+              fi
+            fi
+          else
+            echo "Error checking Cloudflare API! Verify token permissions."
+            echo "API Response: $RESPONSE"
+            exit 1
+          fi
