@@ -170,7 +170,7 @@ export default function TerminalChart({ livePrice, sentiment }: TerminalChartPro
         <h2 className="text-zinc-400 font-mono text-sm tracking-widest shrink-0">SIG TREND ANALYTICS</h2>
         
         <div className="flex flex-wrap gap-2 font-mono text-xs w-full md:w-auto">
-          {['5m', '1d', '1w', '1M', '1y', 'ALL'].map(tf => (
+          {(['5m', '1d', '1w', '1M', '1y', 'ALL'] as const).map(tf => (
             <button 
               key={tf}
               onClick={() => setTimeframe(tf)}
