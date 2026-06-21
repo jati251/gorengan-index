@@ -13,7 +13,7 @@ export async function GET() {
     let isRaining = false;
     let temperature = 32;
     let btcIdrPrice = 1142829537;
-    let newsHeadlines: string[] = [];
+    let newsHeadlines: any[] = [];
     let wheatIndex = 613.25;
     let palmOilIndex = 65.94;
 
@@ -60,7 +60,16 @@ export async function GET() {
       try { const d = await btcRes.value.json(); if(d.bitcoin?.idr) btcIdrPrice = d.bitcoin.idr; } catch(e){}
     }
     if (rssRes.status === 'fulfilled' && rssRes.value.ok) {
-      try { const d = await rssRes.value.json(); if(d.items) newsHeadlines = d.items.slice(0, 7).map((i: any) => i.title.toUpperCase()); } catch(e){}
+      try { 
+        const d = await rssRes.value.json(); 
+        if(d.items) {
+          newsHeadlines = d.items.slice(0, 15).map((i: any) => ({
+            title: i.title.toUpperCase(),
+            link: i.link,
+            pubDate: i.pubDate
+          }));
+        }
+      } catch(e){}
     }
     if (wheatRes.status === 'fulfilled' && wheatRes.value.ok) {
       try { const d = await wheatRes.value.json(); if(d?.chart?.result?.[0]?.meta?.regularMarketPrice) wheatIndex = d.chart.result[0].meta.regularMarketPrice; } catch(e){}

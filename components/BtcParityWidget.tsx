@@ -18,7 +18,7 @@ export default function BtcParityWidget({
         {parity.toLocaleString("id-ID")}
       </div>
       <div className="text-xs font-mono text-zinc-500">
-        1 BTC setara dengan {parity.toLocaleString("id-ID")} potong Bakwan.
+        1 BTC = {parity.toLocaleString("id-ID")} potong Bakwan.
       </div>
     </div>
   );

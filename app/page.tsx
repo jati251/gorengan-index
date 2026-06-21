@@ -22,7 +22,7 @@ interface DashboardData {
     btcIdrPrice: number;
     marketSentiment: string;
   };
-  newsHeadlines: string[];
+  newsHeadlines: { title: string; link: string; pubDate: string }[];
   regions: RegionalIndex[];
   volatilityIndex: number;
 }
@@ -101,12 +101,15 @@ export default function Home() {
             </div>
             <div className="mt-4 md:mt-0 flex flex-col items-end gap-2 font-mono text-sm">
               <ReportPriceModal />
-              <div className="text-right">
-                <div className="text-zinc-500">SYSTEM TIME (WIB)</div>
-                <div className="text-yellow-400">
-                  {currentTime.toLocaleTimeString("id-ID", {
-                    timeZone: "Asia/Jakarta",
-                  })}
+              <div className="text-right flex items-center gap-4 border border-zinc-800 p-2 rounded bg-black">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                  <span className="text-zinc-500">MKT: OPEN</span>
+                </div>
+                <div className="text-zinc-500">|</div>
+                <div className="text-zinc-500">SYS_TIME:</div>
+                <div className="text-yellow-400 font-bold">
+                  {currentTime.toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" })} {currentTime.toLocaleTimeString("en-GB", { timeZone: "Asia/Jakarta" })} WIB
                 </div>
               </div>
             </div>
