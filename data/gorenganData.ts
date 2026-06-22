@@ -1,17 +1,4 @@
-import { indonesiaUMP } from './indonesiaUmp';
-
-export interface RegionalIndex {
-  region: string;
-  ump: number;
-  bakwanPrice: number;
-  tahuPrice: number;
-  tempePrice: number;
-  chiliRatio: number;      
-  sizePercentage: number;  
-  inflationRate: number;
-  sentiment: 'BULLISH' | 'BEARISH' | 'STAGNANT';
-}
-
+// Math utilities for calculation
 export function calculateShrinkage(kursIDR: number, wheatIndex: number): number {
   // Shrinkage drops if IDR weakens or wheat price spikes
   const idrFactor = ((kursIDR - 15000) / 100);

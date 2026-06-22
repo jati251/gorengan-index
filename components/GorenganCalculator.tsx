@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { calculateNetWorth, getSocialClass, RegionalIndex } from '@/data/gorenganData';
+import { calculateNetWorth, getSocialClass } from '@/data/gorenganData';
+import { RegionalIndex } from '@/types';
 import CustomSelect from './CustomSelect';
 
 interface GorenganCalculatorProps {

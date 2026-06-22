@@ -1,15 +1,14 @@
 'use client';
 
 import React, { useState } from 'react';
-import { indonesiaUMP } from '@/data/indonesiaUmp';
 import CustomSelect from './CustomSelect';
 
-export default function ReportPriceModal() {
+export default function ReportPriceModal({ regionNames }: { regionNames: string[] }) {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [displayPrice, setDisplayPrice] = useState("Rp 2.000");
-  const [selectedRegion, setSelectedRegion] = useState(indonesiaUMP[0].name);
+  const [selectedRegion, setSelectedRegion] = useState(regionNames[0] || "DKI Jakarta");
   const [selectedTipe, setSelectedTipe] = useState("BAKWAN");
 
   const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -94,7 +93,7 @@ export default function ReportPriceModal() {
                 name="region" 
                 value={selectedRegion}
                 onChange={setSelectedRegion}
-                options={indonesiaUMP.map(p => ({ label: p.name, value: p.name }))}
+                options={regionNames.map(name => ({ label: name, value: name }))}
               />
             </div>
 

@@ -1,5 +1,5 @@
 import React from "react";
-import { RegionalIndex } from "@/data/gorenganData";
+import { RegionalIndex } from "@/types";
 
 export default function ProvincialTable({ regions }: { regions: RegionalIndex[] }) {
   return (

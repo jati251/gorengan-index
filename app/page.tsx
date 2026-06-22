@@ -13,62 +13,11 @@ import FearGreedWidget from "@/components/FearGreedWidget";
 import OrderBookWidget from "@/components/OrderBookWidget";
 import TopMoversWidget from "@/components/TopMoversWidget";
 import FuturesYieldWidget from "@/components/FuturesYieldWidget";
-import { RegionalIndex } from "@/data/gorenganData";
-
-interface DashboardData {
-  timestamp: string;
-  macro: {
-    kursIDR: number;
-    isRaining: boolean;
-    temperature: number;
-    wheatIndex: number;
-    palmOilIndex: number;
-    btcIdrPrice: number;
-    marketSentiment: string;
-  };
-  newsHeadlines: { title: string; link: string; pubDate: string }[];
-  regions: RegionalIndex[];
-  volatilityIndex: number;
-}
+import SystemTime from "@/components/SystemTime";
+import { useDashboardData } from "@/hooks/useDashboardData";
 
 export default function Home() {
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [currentTime, setCurrentTime] = useState<Date>(new Date());
-  const [timeOffset, setTimeOffset] = useState<number>(0);
-
-  const fetchData = async () => {
-    try {
-      const res = await fetch("/api/gorengan-engine", { cache: "no-store" });
-      if (res.ok) {
-        const json = await res.json();
-        setData(json);
-
-        // Calculate offset between API true time and local browser time
-        const apiTime = new Date(json.timestamp).getTime();
-        const localTime = Date.now();
-        setTimeOffset(apiTime - localTime);
-      }
-    } catch (e) {
-      console.error("Failed to fetch dashboard data", e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 10000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Ticking clock every second synced with API offset
-  useEffect(() => {
-    const clockInterval = setInterval(() => {
-      setCurrentTime(new Date(Date.now() + timeOffset));
-    }, 1000);
-    return () => clearInterval(clockInterval);
-  }, [timeOffset]);
+  const { data, loading, timeOffset } = useDashboardData();
 
   if (loading || !data) {
     return (
@@ -104,7 +53,7 @@ export default function Home() {
               </p>
             </div>
             <div className="mt-4 md:mt-0 flex flex-col items-end gap-2 font-mono text-sm">
-              <ReportPriceModal />
+              <ReportPriceModal regionNames={data.regions.map(r => r.region)} />
               <div className="text-right flex items-center gap-4 border border-zinc-800 p-2 rounded bg-black">
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
@@ -112,9 +61,7 @@ export default function Home() {
                 </div>
                 <div className="text-zinc-500">|</div>
                 <div className="text-zinc-500">SYS_TIME:</div>
-                <div className="text-yellow-400 font-bold">
-                  {currentTime.toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" })} {currentTime.toLocaleTimeString("en-GB", { timeZone: "Asia/Jakarta" })} WIB
-                </div>
+                <SystemTime timeOffset={timeOffset} />
               </div>
             </div>
           </header>

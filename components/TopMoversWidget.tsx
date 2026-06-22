@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { RegionalIndex } from "@/data/gorenganData";
+import { RegionalIndex } from "@/types";
 
 export default function TopMoversWidget({ regions }: { regions: RegionalIndex[] }) {
   // Generate deterministic daily changes using a seeded hash

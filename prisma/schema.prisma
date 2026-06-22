@@ -34,3 +34,13 @@ model HistoricalData {
 
   @@index([timeframe, timestamp])
 }
+
+model ProvinceData {
+  id                String   @id @default(uuid())
+  region            String   @unique
+  ump2026           Int
+  population        Int      @default(0)
+  gdpPerCapita      Float    @default(0.0)
+  dominantCommodity String   @default("Services")
+  updatedAt         DateTime @updatedAt
+}

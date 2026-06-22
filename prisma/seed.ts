@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { indonesiaUMP } from './seedData';
 
 const prisma = new PrismaClient();
 
@@ -131,6 +132,42 @@ async function main() {
   for (let i = 0; i < minData.length; i += 1000) {
     await prisma.historicalData.createMany({ data: minData.slice(i, i + 1000) });
   }
+
+  console.log('Seeding ProvinceData from indonesiaUmp.ts...');
+  await prisma.provinceData.deleteMany({});
+  
+  const provinceDataToInsert = indonesiaUMP.map((ump, idx) => {
+    // Generate deterministic additional data based on region name
+    let hash = 0;
+    for (let i = 0; i < ump.name.length; i++) hash = ump.name.charCodeAt(i) + ((hash << 5) - hash);
+    const positiveHash = Math.abs(hash);
+
+    let commodity = "Services";
+    if (ump.name.includes("Kalimantan")) commodity = "Coal & Palm Oil";
+    else if (ump.name.includes("Sumatera") || ump.name.includes("Riau") || ump.name.includes("Jambi")) commodity = "Palm Oil & Rubber";
+    else if (ump.name.includes("Papua") || ump.name.includes("Maluku")) commodity = "Mining & Fisheries";
+    else if (ump.name.includes("Jawa") || ump.name.includes("Banten")) commodity = "Manufacturing";
+    else if (ump.name.includes("Bali") || ump.name.includes("Nusa")) commodity = "Tourism & Agriculture";
+    else if (ump.name.includes("Sulawesi")) commodity = "Nickel & Cocoa";
+    else if (ump.name === "DKI Jakarta") commodity = "Finance & Tech";
+
+    // Population ranges from 1M to 50M
+    const population = 1000000 + (positiveHash % 49000000);
+    
+    // GDP Per Capita (in USD) ranges from 1500 to 20000
+    const gdpPerCapita = 1500 + (positiveHash % 18500);
+
+    return {
+      region: ump.name,
+      ump2026: ump.ump2026,
+      population,
+      gdpPerCapita,
+      dominantCommodity: commodity,
+    };
+  });
+
+  await prisma.provinceData.createMany({ data: provinceDataToInsert });
+  console.log(`Inserted ${provinceDataToInsert.length} province records.`);
 
   console.log('Database Seeding Completed Successfully! 🚀');
 }
