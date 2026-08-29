@@ -9,7 +9,9 @@ Gorengan Index adalah platform terminal *trading* fiktif namun berbasis makroeko
 - **Gorengan Net Worth Calculator**: Hitung kekayaan riil dan kasta sosial Anda berdasarkan jumlah gorengan yang bisa Anda beli setiap bulannya.
 - **Crowdsource Market Reporter**: Sistem desentralisasi bagi warga untuk melaporkan harga gorengan lokal dan mendeteksi adanya *Shrinkflation* (ukuran gorengan mengecil).
 
-## Cara Menjalankan Secara Lokal 💻
+
+
+
 
 ### 1. Prasyarat
 - Node.js (versi 18+)

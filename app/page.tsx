@@ -17,9 +17,19 @@ import SystemTime from "@/components/SystemTime";
 import { useDashboardData } from "@/hooks/useDashboardData";
 
 export default function Home() {
-  const { data, loading, timeOffset } = useDashboardData();
+  const { data, loading, error, timeOffset } = useDashboardData();
 
-  if (loading || !data) {
+  if (error) {
+    return (
+      <div className="flex flex-col h-screen w-full items-center justify-center bg-black text-red-500 font-mono p-4 text-center">
+        <div className="text-2xl mb-2">SYSTEM FAILURE</div>
+        <div className="text-zinc-400">UNABLE TO FETCH MARKET DATA</div>
+        <div className="text-red-700 text-sm mt-4">{error}</div>
+      </div>
+    );
+  }
+
+  if (loading || !data || !data.regions) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-black text-green-500 font-mono text-xl">
         INITIALIZING NATIONAL GORENGAN TERMINAL...
