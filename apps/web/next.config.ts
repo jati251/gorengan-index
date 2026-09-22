@@ -3,6 +3,14 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   transpilePackages: ["@gorengan/shared"],
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "*.googleusercontent.com",
+      },
+    ],
+  },
   async rewrites() {
     const marketServerUrl = process.env.MARKET_SERVER_INTERNAL_URL || "http://localhost:9000";
     return [

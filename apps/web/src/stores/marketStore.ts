@@ -61,7 +61,18 @@ export interface MarketStoreActions {
 
 export type MarketStore = MarketStoreState & MarketStoreActions;
 
-/* ─── Store Implementation ────────────────────────────────────────── */
+// Flash timeout registry to auto-decay directional price pulses back to neutral
+const flashTimeouts: Record<string, ReturnType<typeof setTimeout>> = {};
+
+const scheduleFlashReset = (symbol: string, resetFn: () => void) => {
+  if (flashTimeouts[symbol]) {
+    clearTimeout(flashTimeouts[symbol]);
+  }
+  flashTimeouts[symbol] = setTimeout(() => {
+    resetFn();
+    delete flashTimeouts[symbol];
+  }, 850);
+};
 
 export const useMarketStore = create<MarketStore>((set, get) => ({
   tickers: {},
@@ -145,10 +156,25 @@ export const useMarketStore = create<MarketStore>((set, get) => ({
     set((state) => {
       const prev = state.tickers[ticker.symbol];
       let direction: PriceDirection = "neutral";
-      if (prev) {
+      if (prev && typeof prev.price === "number" && typeof ticker.price === "number") {
         if (ticker.price > prev.price) direction = "up";
         else if (ticker.price < prev.price) direction = "down";
         else direction = state.priceDirections[ticker.symbol] || "neutral";
+      }
+
+      // If price moved up or down, schedule auto-reset back to neutral after 850ms
+      if (direction !== "neutral" && prev && prev.price !== ticker.price) {
+        scheduleFlashReset(ticker.symbol, () => {
+          set((s) => {
+            if (s.priceDirections[ticker.symbol] === "neutral") return s;
+            return {
+              priceDirections: {
+                ...s.priceDirections,
+                [ticker.symbol]: "neutral",
+              },
+            };
+          });
+        });
       }
 
       return {
@@ -168,9 +194,46 @@ export const useMarketStore = create<MarketStore>((set, get) => ({
     }),
 
   setFxQuote: (quote) =>
-    set((state) => ({
-      fxQuotes: { ...state.fxQuotes, [quote.instrument]: quote },
-    })),
+    set((state) => {
+      const prevTicker = state.tickers[quote.instrument];
+      let direction: PriceDirection = "neutral";
+      if (prevTicker && typeof prevTicker.price === "number" && typeof quote.mid === "number") {
+        if (quote.mid > prevTicker.price) direction = "up";
+        else if (quote.mid < prevTicker.price) direction = "down";
+        else direction = state.priceDirections[quote.instrument] || "neutral";
+      }
+
+      if (direction !== "neutral" && prevTicker && prevTicker.price !== quote.mid) {
+        scheduleFlashReset(quote.instrument, () => {
+          set((s) => {
+            if (s.priceDirections[quote.instrument] === "neutral") return s;
+            return {
+              priceDirections: {
+                ...s.priceDirections,
+                [quote.instrument]: "neutral",
+              },
+            };
+          });
+        });
+      }
+
+      const updatedTicker = prevTicker
+        ? {
+            ...prevTicker,
+            price: quote.mid,
+            bid: quote.bid,
+            ask: quote.ask,
+            spread: quote.spread,
+            timestamp: quote.providerTs || Date.now(),
+          }
+        : undefined;
+
+      return {
+        fxQuotes: { ...state.fxQuotes, [quote.instrument]: quote },
+        ...(updatedTicker ? { tickers: { ...state.tickers, [quote.instrument]: updatedTicker } } : {}),
+        ...(direction !== "neutral" ? { priceDirections: { ...state.priceDirections, [quote.instrument]: direction } } : {}),
+      };
+    }),
 
   setCandle: (candle) =>
     set((state) => ({

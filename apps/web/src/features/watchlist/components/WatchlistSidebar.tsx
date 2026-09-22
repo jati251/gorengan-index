@@ -33,6 +33,7 @@ const CATEGORIES: { id: MarketCategory; label: string; icon: string }[] = [
 export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarProps) {
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<"favorites" | "all">("favorites");
+  const [trendFilter, setTrendFilter] = useState<"all" | "gainers" | "losers">("all");
 
   const tickers = useMarketStore((s) => s.tickers);
   const priceDirections = useMarketStore((s) => s.priceDirections);
@@ -79,8 +80,31 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
     return categoryMatchedSymbols.filter((sym) => watchlist.includes(sym.id));
   }, [categoryMatchedSymbols, watchlist]);
 
-  // 3. Current active list to display
-  const displayedSymbols = tab === "favorites" ? categoryFavorites : categoryMatchedSymbols;
+  // 3. Current active base list before trend filter
+  const baseSymbols = tab === "favorites" ? categoryFavorites : categoryMatchedSymbols;
+
+  // 4. Trend counts (Gainers vs Losers)
+  const { gainersCount, losersCount } = useMemo(() => {
+    let g = 0;
+    let l = 0;
+    for (const sym of baseSymbols) {
+      const chg = tickers[sym.id]?.changePercent24h ?? 0;
+      if (chg > 0) g++;
+      else if (chg < 0) l++;
+    }
+    return { gainersCount: g, losersCount: l };
+  }, [baseSymbols, tickers]);
+
+  // 5. Final displayed symbols with Gainers/Losers filtering
+  const displayedSymbols = useMemo(() => {
+    if (trendFilter === "gainers") {
+      return baseSymbols.filter((sym) => (tickers[sym.id]?.changePercent24h ?? 0) > 0);
+    }
+    if (trendFilter === "losers") {
+      return baseSymbols.filter((sym) => (tickers[sym.id]?.changePercent24h ?? 0) < 0);
+    }
+    return baseSymbols;
+  }, [baseSymbols, trendFilter, tickers]);
 
   const searchPlaceholder = useMemo(() => {
     switch (selectedCategory) {
@@ -187,6 +211,48 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
               />
             )}
             <span className="relative z-10">All Pairs ({categoryMatchedSymbols.length})</span>
+          </button>
+        </div>
+
+        {/* Trend Filter (ALL | GAINERS | LOSERS) */}
+        <div className="grid grid-cols-3 gap-1 bg-black/30 p-0.5 rounded-lg border border-white/[0.05] text-[10px]">
+          <button
+            type="button"
+            onClick={() => setTrendFilter("all")}
+            className={clsx(
+              "py-1 px-1 rounded-md transition-all cursor-pointer font-semibold text-center border",
+              trendFilter === "all"
+                ? "bg-white/[0.08] text-white border-white/[0.18] shadow-xs"
+                : "text-slate-400 border-transparent hover:text-slate-200 hover:bg-white/[0.03]"
+            )}
+          >
+            All ({baseSymbols.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setTrendFilter("gainers")}
+            className={clsx(
+              "py-1 px-1 rounded-md transition-all cursor-pointer font-semibold text-center border flex items-center justify-center gap-1",
+              trendFilter === "gainers"
+                ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-[0_0_10px_rgba(16,185,129,0.25)] font-bold"
+                : "text-emerald-400/80 border-transparent hover:text-emerald-300 hover:bg-emerald-500/10"
+            )}
+          >
+            <TrendingUp className="w-2.5 h-2.5 text-emerald-400" />
+            <span>Gainers ({gainersCount})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setTrendFilter("losers")}
+            className={clsx(
+              "py-1 px-1 rounded-md transition-all cursor-pointer font-semibold text-center border flex items-center justify-center gap-1",
+              trendFilter === "losers"
+                ? "bg-rose-500/20 text-rose-300 border-rose-500/40 shadow-[0_0_10px_rgba(244,63,94,0.25)] font-bold"
+                : "text-rose-400/80 border-transparent hover:text-rose-300 hover:bg-rose-500/10"
+            )}
+          >
+            <TrendingDown className="w-2.5 h-2.5 text-rose-400" />
+            <span>Losers ({losersCount})</span>
           </button>
         </div>
       </div>
@@ -346,19 +412,33 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
                   <div className="text-right shrink-0 pl-2">
                     <div
                       className={clsx(
-                        "text-xs font-semibold tabular-nums transition-colors duration-200",
-                        direction === "up" && "text-emerald-400",
-                        direction === "down" && "text-rose-400",
-                        direction === "neutral" && "text-slate-200"
+                        "text-xs font-semibold tabular-nums px-1.5 py-0.5 rounded transition-all duration-300 flex items-center justify-end gap-1",
+                        direction === "up" &&
+                          "bg-emerald-500/25 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.4)] ring-1 ring-emerald-400/60 scale-[1.04]",
+                        direction === "down" &&
+                          "bg-rose-500/25 text-rose-300 shadow-[0_0_12px_rgba(244,63,94,0.4)] ring-1 ring-rose-400/60 scale-[1.04]",
+                        direction === "neutral" && "text-slate-200 bg-transparent ring-transparent"
                       )}
                     >
-                      {formattedPrice}
+                      <span>{formattedPrice}</span>
+                      {direction === "up" && (
+                        <span className="text-[9px] text-emerald-300 font-extrabold animate-pulse">
+                          ▲
+                        </span>
+                      )}
+                      {direction === "down" && (
+                        <span className="text-[9px] text-rose-300 font-extrabold animate-pulse">
+                          ▼
+                        </span>
+                      )}
                     </div>
 
                     <div
                       className={clsx(
-                        "text-[10px] font-medium flex items-center justify-end gap-0.5",
-                        isPositive ? "text-emerald-400" : "text-rose-400"
+                        "text-[10px] font-medium flex items-center justify-end gap-0.5 mt-0.5 px-1 py-0.2 rounded border transition-colors",
+                        isPositive
+                          ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+                          : "text-rose-400 bg-rose-500/10 border-rose-500/20"
                       )}
                     >
                       {isPositive ? (

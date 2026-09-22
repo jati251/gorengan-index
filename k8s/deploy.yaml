@@ -43,6 +43,26 @@ spec:
                   name: gorengan-index-secrets
                   key: DATABASE_URL
                   optional: true
+            - name: AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: gorengan-index-secrets
+                  key: AUTH_SECRET
+                  optional: true
+            - name: GOOGLE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: gorengan-index-secrets
+                  key: GOOGLE_CLIENT_ID
+                  optional: true
+            - name: GOOGLE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: gorengan-index-secrets
+                  key: GOOGLE_CLIENT_SECRET
+                  optional: true
+            - name: NEXTAUTH_URL
+              value: "https://gorengan-index.cekcok.my.id"
           resources:
             requests:
               cpu: "50m"

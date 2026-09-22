@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { Star } from "lucide-react";
+import { Star, TrendingUp, TrendingDown } from "lucide-react";
 import { motion } from "framer-motion";
 import { clsx } from "clsx";
 import type { MarketSymbol } from "@gorengan/shared";
@@ -133,7 +133,7 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
                     setSelectedSymbol(symbol.id);
                     onSelectSymbol?.(symbol.id);
                   }}
-                  whileHover={{ backgroundColor: "rgba(255, 255, 255, 0.035)" }}
+                  whileHover={{ backgroundColor: isPositive ? "rgba(16, 185, 129, 0.04)" : "rgba(244, 63, 94, 0.04)" }}
                   className={clsx(
                     "transition-all duration-150 cursor-pointer group select-none",
                     isSelected
@@ -144,7 +144,9 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
                           : isFx
                             ? "bg-blue-500/[0.12] border-l-2 border-blue-400 shadow-[inset_0_0_12px_rgba(59,130,246,0.12)]"
                             : "bg-emerald-500/[0.12] border-l-2 border-emerald-400 shadow-[inset_0_0_12px_rgba(16,185,129,0.12)]"
-                      : "hover:bg-white/[0.035] border-l-2 border-transparent"
+                      : isPositive
+                        ? "hover:bg-emerald-500/[0.04] border-l-2 border-transparent hover:border-emerald-500/50"
+                        : "hover:bg-rose-500/[0.04] border-l-2 border-transparent hover:border-rose-500/50"
                   )}
                 >
                   {/* Star / Watchlist toggle */}
@@ -219,40 +221,61 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
 
                   {/* Price with Animated Pulse */}
                   <td className="py-3 px-3 text-right">
-                    <motion.span
+                    <span
                       key={ticker?.price}
-                      initial={{ scale: 1.05 }}
-                      animate={{ scale: 1 }}
-                      transition={{ type: "spring", stiffness: 500, damping: 25 }}
                       className={clsx(
-                        "inline-block px-1.5 py-0.5 rounded font-semibold text-xs sm:text-sm tabular-nums transition-colors duration-200",
-                        direction === "up" && "bg-emerald-500/15 text-emerald-400",
-                        direction === "down" && "bg-rose-500/15 text-rose-400",
-                        direction === "neutral" && "text-slate-100"
+                        "inline-flex items-center justify-end gap-1 px-2 py-0.5 rounded-md font-semibold text-xs sm:text-sm tabular-nums transition-all duration-300",
+                        direction === "up" &&
+                          "bg-emerald-500/25 text-emerald-300 shadow-[0_0_14px_rgba(16,185,129,0.45)] ring-1 ring-emerald-400/60 scale-[1.04]",
+                        direction === "down" &&
+                          "bg-rose-500/25 text-rose-300 shadow-[0_0_14px_rgba(244,63,94,0.45)] ring-1 ring-rose-400/60 scale-[1.04]",
+                        direction === "neutral" && "text-slate-100 bg-white/[0.02]"
                       )}
                     >
-                      {formattedPrice}
-                    </motion.span>
+                      <span>{formattedPrice}</span>
+                      {direction === "up" && (
+                        <span className="text-[10px] text-emerald-300 font-extrabold animate-pulse">
+                          ▲
+                        </span>
+                      )}
+                      {direction === "down" && (
+                        <span className="text-[10px] text-rose-300 font-extrabold animate-pulse">
+                          ▼
+                        </span>
+                      )}
+                    </span>
                   </td>
 
                   {/* 24h Change % */}
                   <td className="py-3 px-3 text-right">
                     <span
                       className={clsx(
-                        "inline-flex items-center justify-end font-semibold tabular-nums",
-                        isPositive ? "text-emerald-400" : "text-rose-400"
+                        "inline-flex items-center justify-end gap-1 px-2 py-0.5 rounded-md font-semibold tabular-nums text-xs border transition-all",
+                        isPositive
+                          ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25 shadow-[0_0_8px_rgba(16,185,129,0.15)]"
+                          : "bg-rose-500/10 text-rose-400 border-rose-500/25 shadow-[0_0_8px_rgba(244,63,94,0.15)]"
                       )}
                     >
-                      {formatPercent(ticker?.changePercent24h)}
+                      {isPositive ? (
+                        <TrendingUp className="w-3 h-3 text-emerald-400" />
+                      ) : (
+                        <TrendingDown className="w-3 h-3 text-rose-400" />
+                      )}
+                      <span>{formatPercent(ticker?.changePercent24h)}</span>
                     </span>
                   </td>
 
                   {/* 24h Range Mini-bar */}
                   <td className="py-3 px-3 text-center hidden md:table-cell">
                     <div className="w-24 mx-auto flex flex-col gap-1">
-                      <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden relative">
+                      <div className="w-full bg-slate-800/90 h-1.5 rounded-full overflow-hidden relative shadow-inner">
                         <div
-                          className="h-full bg-emerald-500 transition-all duration-300 rounded-full"
+                          className={clsx(
+                            "h-full transition-all duration-300 rounded-full",
+                            isPositive
+                              ? "bg-gradient-to-r from-emerald-500 to-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.4)]"
+                              : "bg-gradient-to-r from-rose-500 to-rose-400 shadow-[0_0_8px_rgba(244,63,94,0.4)]"
+                          )}
                           style={{ width: `${rangePercent}%` }}
                         />
                       </div>

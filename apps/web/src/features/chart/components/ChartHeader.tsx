@@ -2,6 +2,7 @@
 
 import React, { useMemo } from "react";
 import { motion } from "framer-motion";
+import { TrendingUp, TrendingDown } from "lucide-react";
 import { clsx } from "clsx";
 import { useMarketStore } from "@/stores/marketStore";
 import {
@@ -118,31 +119,54 @@ export function ChartHeader() {
         </div>
 
         {/* Animated Live Price */}
-        <div className="flex items-baseline gap-2.5">
-          <motion.span
-            key={ticker?.price}
-            initial={{ scale: 1.04 }}
-            animate={{ scale: 1 }}
-            transition={{ type: "spring", stiffness: 500, damping: 25 }}
+        <div className="flex items-center gap-2.5">
+          <div
             className={clsx(
-              "text-xl font-bold tabular-nums tracking-tight transition-colors duration-200",
-              direction === "up" && "text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.35)]",
-              direction === "down" && "text-rose-400 drop-shadow-[0_0_8px_rgba(244,63,94,0.35)]",
-              (!direction || direction === "neutral") && "text-slate-100"
+              "flex items-center gap-1.5 px-3 py-1 rounded-lg transition-all duration-300 border",
+              direction === "up" &&
+                "bg-emerald-500/20 border-emerald-500/50 shadow-[0_0_20px_rgba(16,185,129,0.35)] scale-[1.03]",
+              direction === "down" &&
+                "bg-rose-500/20 border-rose-500/50 shadow-[0_0_20px_rgba(244,63,94,0.35)] scale-[1.03]",
+              (!direction || direction === "neutral") &&
+                "bg-white/[0.02] border-white/[0.06]"
             )}
           >
-            {formattedPrice}
-          </motion.span>
+            <motion.span
+              key={ticker?.price}
+              initial={{ scale: 1.05 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", stiffness: 500, damping: 25 }}
+              className={clsx(
+                "text-xl sm:text-2xl font-bold tabular-nums tracking-tight transition-colors duration-200",
+                direction === "up" && "text-emerald-300 drop-shadow-[0_0_12px_rgba(16,185,129,0.8)]",
+                direction === "down" && "text-rose-300 drop-shadow-[0_0_12px_rgba(244,63,94,0.8)]",
+                (!direction || direction === "neutral") && "text-slate-100"
+              )}
+            >
+              {formattedPrice}
+            </motion.span>
+            {direction === "up" && (
+              <span className="text-xs font-bold text-emerald-300 animate-pulse">▲</span>
+            )}
+            {direction === "down" && (
+              <span className="text-xs font-bold text-rose-300 animate-pulse">▼</span>
+            )}
+          </div>
 
           <span
             className={clsx(
-              "text-xs font-semibold px-2 py-0.5 rounded border transition-colors",
+              "text-xs font-semibold px-2.5 py-1 rounded-md border transition-all duration-200 flex items-center gap-1 shadow-sm",
               isPositive
-                ? "bg-emerald-950/60 text-emerald-400 border-emerald-800/40"
-                : "bg-rose-950/60 text-rose-400 border-rose-800/40"
+                ? "bg-emerald-950/60 text-emerald-400 border-emerald-800/40 shadow-[0_0_10px_rgba(16,185,129,0.2)]"
+                : "bg-rose-950/60 text-rose-400 border-rose-800/40 shadow-[0_0_10px_rgba(244,63,94,0.2)]"
             )}
           >
-            {formatPercent(ticker?.changePercent24h)}
+            {isPositive ? (
+              <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+            ) : (
+              <TrendingDown className="w-3.5 h-3.5 text-rose-400" />
+            )}
+            <span>{formatPercent(ticker?.changePercent24h)}</span>
           </span>
         </div>
 

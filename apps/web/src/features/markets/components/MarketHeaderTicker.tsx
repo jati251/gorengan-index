@@ -5,6 +5,7 @@ import { Activity } from "lucide-react";
 import { useMarketStore } from "@/stores/marketStore";
 import { MarketStatusBadge } from "./MarketStatusBadge";
 import { DeviceClock } from "./DeviceClock";
+import { UserNav } from "@/features/auth";
 
 export function MarketHeaderTicker() {
   const status = useMarketStore((s) => s.providerStatus);
@@ -24,9 +25,10 @@ export function MarketHeaderTicker() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 sm:gap-4">
+        <div className="flex items-center gap-2.5 sm:gap-3.5">
           <DeviceClock />
           <MarketStatusBadge status={status} />
+          <UserNav />
         </div>
       </div>
     </header>
