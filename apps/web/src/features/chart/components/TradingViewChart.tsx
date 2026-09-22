@@ -135,6 +135,15 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
     chartRef.current?.timeScale().fitContent();
   }, [candlesData]);
 
+  // Dynamically toggle secondsVisible when switching to 1s/5s/15s timeframes
+  useEffect(() => {
+    if (!chartRef.current) return;
+    const isSubMinute = ["1s", "5s", "15s", "30s"].includes(selectedTimeframe);
+    chartRef.current.timeScale().applyOptions({
+      secondsVisible: isSubMinute,
+    });
+  }, [selectedTimeframe]);
+
   // Subscribe to realtime live candle stream from Zustand store
   useEffect(() => {
     const unsubscribe = useMarketStore.subscribe((state) => {

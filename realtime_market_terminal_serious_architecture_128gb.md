@@ -2,6 +2,8 @@
 
 > Goal: build a production-style personal market terminal that behaves like a compact CoinMarketCap + TradingView: realtime price/ticker, live candlestick charts down to **1 second**, historical OHLCV, multi-provider support, and no dependency on metered SaaS market-data products such as CoinGecko, CoinMarketCap, TwelveData, Polygon, Alpha Vantage, or Metals-API.
 
+> **Deployment profile:** optimized for a **128 GB SSD/NVMe single-server deployment**. Realtime processing remains per-event/sub-second; storage pressure is controlled by hot-symbol-only 1-second persistence, short JetStream replay, bounded metrics/log retention, and automatic disk-pressure cleanup.
+
 ---
 
 ## 0. Non-Negotiable Requirements
@@ -527,13 +529,15 @@ Use Core NATS for ultra-low-latency transient fan-out.
 
 Use JetStream only where replay/durability is useful.
 
-Suggested short retention:
+Suggested **128 GB profile** retention:
 
 ```text
-normalized trades    15 min – 2 h
-provider status      24 h
-critical system evt  1–7 d
+normalized trades     5–15 min
+provider status       12–24 h
+critical system evt   1–3 d
 ```
+
+Hard-cap JetStream disk usage. Default target: **1 GB**, hard maximum: **2 GB**. Prefer Core NATS for transient fan-out and JetStream only for the minimal replay window needed to recover an aggregator after a short restart.
 
 Do NOT use JetStream as permanent tick storage.
 
@@ -693,42 +697,52 @@ Persist candles, not every UI movement.
 
 ---
 
-# 13. Retention Policy
+# 13. Retention Policy — 128 GB Profile
 
-Recommended serious personal-server policy:
+The 128 GB deployment must prioritize **realtime fidelity over archival depth**. Realtime tick processing is not reduced; only historical high-resolution persistence is bounded.
 
-| Data | Retention |
+Recommended policy:
+
+| Data | Retention / Limit |
 |---|---|
 | raw exchange payload | none |
-| normalized trade in JetStream | 15 min – 2 h |
-| raw trade DB persistence | disabled by default |
-| 1s candle — configured hot symbols | 30–90 days |
-| 1m candle | 2–5 years or permanent |
+| normalized trade in JetStream | **5–15 minutes** |
+| raw trade DB persistence | **disabled** |
+| 1s candle — configured hot symbols only | **14–30 days** |
+| 1m candle — broad universe | **180–365 days** |
 | 1h candle | permanent |
 | 1d candle | permanent |
-| latest ticker | Valkey / memory only |
-| provider health | days |
-| logs | 7–30 days |
+| latest ticker | RAM / Valkey only |
+| provider health/events | 1–3 days |
+| Prometheus metrics | **7–14 days or 2–3 GB max** |
+| application logs | **3–7 days and size capped** |
 
-For selected core instruments such as BTC and ETH, longer 1s retention can be enabled separately.
+Default hot-symbol target: **10–30 instruments**. A temporary chart-open subscription may still process other instruments at full realtime speed without persisting their 1-second candles.
 
 Example:
 
 ```yaml
 retention:
-  default_1s_days: 30
-  overrides:
-    BTC-USDT: 180
-    ETH-USDT: 90
+  candle_1s_days: 21
+  candle_1m_days: 365
+  candle_1h_days: 0
+  candle_1d_days: 0
+
+  jetstream_trade_minutes: 10
+  provider_status_hours: 24
+  logs_days: 5
+  prometheus_days: 10
 ```
+
+`0` means permanent.
+
+Do not configure per-symbol 1-second retention overrides above 30 days on the 128 GB profile unless disk telemetry proves sufficient headroom.
 
 ---
 
-# 14. Storage Sizing Guidance
+# 14. Storage Sizing Guidance — 128 GB Hard Budget
 
-Second-level storage is the first thing that becomes large.
-
-For one continuously traded instrument:
+Second-level storage is the dominant database cost. One continuously traded instrument can produce up to:
 
 ```text
 86,400 possible 1-second candles / day
@@ -736,27 +750,79 @@ For one continuously traded instrument:
 31,536,000 / year
 ```
 
-Therefore do NOT enable permanent 1s retention for thousands of symbols.
-
-Recommended strategy:
+Therefore:
 
 ```text
 Full universe        → realtime ticker + 1m history
-Hot/favorite symbols → 1s history
-Currently opened     → realtime per-event chart updates
+Hot/favorite symbols → persisted 1s history
+Currently opened     → realtime per-event updates even if not 1s-persisted
 ```
 
-Plan generous disk headroom for QuestDB, WAL/temporary data, logs and backups.
+### 14.1 Target disk allocation
 
-For a personal serious deployment, start with at least:
+Treat 128 GB as a hard ceiling, not usable database capacity. Maintain **20–30 GB free headroom** for filesystem safety, WAL, backfill, temporary files and emergency recovery.
+
+Recommended budget:
 
 ```text
-250 GB SSD/NVMe     comfortable small deployment
-500 GB NVMe         recommended
-1 TB NVMe           excellent if keeping months of 1s data for many symbols
+128 GB disk
+│
+├── OS + Docker images/volumes      15–20 GB
+├── QuestDB                          50–60 GB target
+│   ├── 1s hot-symbol candles
+│   ├── 1m broad-universe candles
+│   ├── 1h permanent history
+│   └── 1d permanent history
+├── NATS / JetStream                  1–2 GB hard cap
+├── Valkey                            <1 GB typical
+├── Prometheus                        2–3 GB hard cap
+├── Grafana                           <1 GB
+├── application / proxy logs          1–2 GB hard cap
+├── WAL / backfill / temp reserve      5–10 GB
+└── REQUIRED FREE HEADROOM            20–30 GB
 ```
 
-The architecture must expose per-table storage metrics so retention can be adjusted before the disk becomes critical.
+Operational target: keep normal usage below **70–75%** of the filesystem.
+
+### 14.2 Automatic disk-pressure guard
+
+Implement a storage guard in the market engine or a dedicated maintenance task.
+
+```yaml
+storage_guard:
+  warning_percent: 70
+  prune_1s_percent: 75
+  aggressive_cleanup_percent: 80
+  emergency_percent: 85
+  minimum_free_gb: 20
+```
+
+Required behavior:
+
+```text
+>= 70%  → warning metric + alert
+>= 75%  → prune oldest 1s partitions toward 14-day floor
+>= 80%  → trim JetStream, logs and metrics aggressively; suspend optional backfill
+>= 85%  → stop non-essential persistence before filesystem exhaustion
+< 70%   → resume normal retention/backfill policy
+```
+
+Never delete 1h/1d history automatically unless explicitly configured.
+
+### 14.3 Expected capacity
+
+For a practical personal deployment:
+
+```text
+10–30 hot symbols
+14–30 days of 1s OHLCV
+500–1000 symbols with 6–12 months of 1m OHLCV
+permanent 1h + 1d OHLCV
+no raw trade archive
+5–15 minute JetStream replay
+```
+
+This profile is designed to fit inside **128 GB** while retaining full sub-second realtime processing. Historical retention should adapt before disk usage exceeds safe thresholds.
 
 ---
 
@@ -1632,10 +1698,26 @@ candles:
     - 1d
 
 retention:
-  candle_1s_days: 30
-  candle_1m_days: 1825
+  candle_1s_days: 21
+  candle_1m_days: 365
   candle_1h_days: 0
   candle_1d_days: 0
+  jetstream_trade_minutes: 10
+  logs_days: 5
+  prometheus_days: 10
+
+storage_limits:
+  questdb_target_gb: 60
+  jetstream_max_gb: 2
+  prometheus_max_gb: 3
+  logs_max_gb: 2
+  minimum_free_gb: 20
+
+storage_guard:
+  warning_percent: 70
+  prune_1s_percent: 75
+  aggressive_cleanup_percent: 80
+  emergency_percent: 85
 ```
 
 `0` means permanent.
@@ -1956,7 +2038,8 @@ Preferred hardware characteristics:
 ```text
 CPU:      modern 4+ strong cores
 RAM:      16 GB minimum, 32 GB comfortable
-Storage:  NVMe, 500 GB recommended
+Storage:  128 GB SSD/NVMe supported by this profile
+           keep 20–30 GB free headroom
 Network:  stable low-loss internet connection
 Clock:    chrony synchronized
 ```
@@ -1981,8 +2064,9 @@ all enabled symbols
 trade stream
 → exact realtime ticker
 → 1s candles
-→ 30–90d 1s retention
-→ long-term 1m+
+→ 14–30d 1s retention
+→ 6–12mo 1m history
+→ permanent 1h / 1d
 ```
 
 ### Open chart
@@ -1994,6 +2078,21 @@ live WS
 ```
 
 This is the key balance between "serious" and "wasteful."
+
+---
+
+# 45.1 128 GB Non-Negotiable Storage Rules
+
+- Never persist raw trades or raw order-book deltas long-term.
+- Persist `1s` candles only for configured hot symbols.
+- Keep hot-symbol defaults at 10–30 instruments.
+- Keep `1s` retention at 14–30 days.
+- Keep broad-universe `1m` retention at 6–12 months.
+- Keep JetStream replay at 5–15 minutes and cap it at 2 GB.
+- Cap Prometheus storage at roughly 2–3 GB and logs at roughly 1–2 GB.
+- Maintain at least 20 GB free disk space.
+- Automatically reduce high-resolution retention before the filesystem reaches 85% usage.
+- Realtime browser updates remain per-event/sub-second regardless of persistence retention.
 
 ---
 
@@ -2041,12 +2140,37 @@ For the trading chart:
 upstream trade events      → processed realtime
 browser price movement     → realtime
 current candle             → realtime
-1-second OHLCV             → persisted for hot symbols
-1-minute+ OHLCV            → long-term history
+1-second OHLCV             → 14–30d for hot symbols
+1-minute OHLCV             → 6–12mo for broad universe
+1-hour / 1-day OHLCV       → permanent history
 raw payloads               → not permanently stored
 ```
 
 This architecture has enough headroom to remain useful even if the project later expands from a private terminal into a much larger self-hosted market-data platform.
+
+---
+
+# 46.1 Default 128 GB Deployment Profile
+
+```text
+Realtime processing:       per event / sub-second
+Persisted high resolution: 1s
+Hot symbols:               10–30 default
+1s retention:              21 days default, 30 max target
+1m retention:              365 days default
+1h retention:              permanent
+1d retention:              permanent
+Raw trade archive:         disabled
+JetStream replay:          10 minutes default
+QuestDB target:            <= 60 GB
+JetStream hard cap:        2 GB
+Prometheus hard cap:       3 GB
+Logs hard cap:             2 GB
+Minimum free disk:         20 GB
+Emergency threshold:       85% filesystem usage
+```
+
+This is the default implementation target unless the deployment is explicitly moved to a larger disk profile.
 
 ---
 

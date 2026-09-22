@@ -1,0 +1,36 @@
+# Multi-stage Dockerfile for Rust Market Pipeline (Collector, Aggregator, Gateway)
+FROM rust:1.85-bookworm AS builder
+WORKDIR /app
+
+# Copy dependency manifests and source trees
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+COPY apps/collector ./apps/collector
+COPY apps/aggregator ./apps/aggregator
+COPY apps/gateway ./apps/gateway
+
+# Build all three service binaries in release mode
+RUN cargo build --release --bin collector --bin aggregator --bin gateway
+
+# Minimal slim Debian runtime
+FROM debian:bookworm-slim AS runner
+WORKDIR /app
+
+# Install ca-certificates (for secure upstream exchange WebSocket TLS) and libssl
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    libssl3 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy compiled binaries from builder
+COPY --from=builder /app/target/release/collector /usr/local/bin/collector
+COPY --from=builder /app/target/release/aggregator /usr/local/bin/aggregator
+COPY --from=builder /app/target/release/gateway /usr/local/bin/gateway
+
+# Run as non-root user
+RUN useradd -m -u 10001 -U appuser && chown -R appuser:appuser /app
+USER appuser
+
+EXPOSE 9001
+CMD ["/usr/local/bin/gateway"]

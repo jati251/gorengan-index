@@ -1,4 +1,16 @@
-export type Timeframe = "1m" | "5m" | "15m" | "30m" | "1h" | "4h" | "1d" | "1w";
+export type Timeframe =
+  | "1s"
+  | "5s"
+  | "15s"
+  | "30s"
+  | "1m"
+  | "5m"
+  | "15m"
+  | "30m"
+  | "1h"
+  | "4h"
+  | "1d"
+  | "1w";
 
 export interface Candle {
   symbol: string;
@@ -16,6 +28,10 @@ export interface Candle {
 }
 
 export const TIMEFRAME_MS: Record<Timeframe, number> = {
+  "1s": 1000,
+  "5s": 5 * 1000,
+  "15s": 15 * 1000,
+  "30s": 30 * 1000,
   "1m": 60 * 1000,
   "5m": 5 * 60 * 1000,
   "15m": 15 * 60 * 1000,

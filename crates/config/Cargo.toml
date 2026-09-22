@@ -1,0 +1,12 @@
+[package]
+name = "market-config"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+config = { workspace = true }
+dotenvy = { workspace = true }
+thiserror = { workspace = true }

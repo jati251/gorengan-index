@@ -20,6 +20,7 @@ build/
 dist/
 **/dist/
 **/.next/
+target/
 
 # SQLite market database
 data/*.sqlite*
