@@ -37,6 +37,8 @@ struct AppState {
     provider_status: Arc<RwLock<HashMap<ProviderId, ProviderStatusEvent>>>,
     broadcast_tx: broadcast::Sender<ServerWsEvent>,
     http_client: reqwest::Client,
+    cached_news: Arc<RwLock<(Option<tokio::time::Instant>, Vec<NewsArticle>)>>,
+    cached_sentiment: Arc<RwLock<(Option<tokio::time::Instant>, SentimentData)>>,
 }
 
 #[tokio::main]
@@ -64,8 +66,10 @@ async fn main() -> Result<()> {
         provider_status: Arc::new(RwLock::new(HashMap::new())),
         broadcast_tx,
         http_client: reqwest::Client::builder()
-            .timeout(Duration::from_secs(3))
+            .timeout(Duration::from_secs(5))
             .build()?,
+        cached_news: Arc::new(RwLock::new((None, Vec::new()))),
+        cached_sentiment: Arc::new(RwLock::new((None, SentimentData::default()))),
     };
 
     info!("===============================================");
@@ -88,6 +92,8 @@ async fn main() -> Result<()> {
         .route("/v1/markets", get(handle_markets))
         .route("/v1/candles", get(handle_candles))
         .route("/v1/candles/{instrument}", get(handle_candles_path))
+        .route("/v1/news", get(handle_news))
+        .route("/v1/sentiment", get(handle_sentiment))
         .route("/v1/stream", get(handle_ws_upgrade))
         .layer(CorsLayer::permissive())
         .with_state(state);
@@ -451,7 +457,81 @@ async fn handle_candles(
         }
     }
 
-    // Fallback: If QuestDB is empty or starting up, inject latest in-memory candle if available
+    // Backfill warmup: If QuestDB has few candles, fetch historical klines from Binance Vision
+    if dtos.len() < 30 {
+        let binance_symbol = instrument.replace('-', "");
+        let binance_interval = match interval_str.as_str() {
+            "1s" => "1s",
+            "5s" => "1s",
+            "15s" => "1s",
+            "30s" => "1s",
+            "1m" => "1m",
+            "5m" => "5m",
+            "15m" => "15m",
+            "30m" => "30m",
+            "1h" => "1h",
+            "4h" => "4h",
+            "1d" => "1d",
+            "1w" => "1w",
+            _ => "1m",
+        };
+        let warmup_limit = limit.max(100).min(300);
+        let url = format!(
+            "https://data-api.binance.vision/api/v3/klines?symbol={}&interval={}&limit={}",
+            binance_symbol, binance_interval, warmup_limit
+        );
+        if let Ok(res) = state.http_client.get(&url).send().await {
+            if res.status().is_success() {
+                if let Ok(kline_array) = res.json::<Vec<serde_json::Value>>().await {
+                    let mut backfill = Vec::new();
+                    for kline in kline_array {
+                        if let Some(arr) = kline.as_array() {
+                            if arr.len() >= 9 {
+                                let open_time = arr[0].as_i64().unwrap_or(0);
+                                let open: f64 = arr[1].as_str().and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                                let high: f64 = arr[2].as_str().and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                                let low: f64 = arr[3].as_str().and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                                let close: f64 = arr[4].as_str().and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                                let volume: f64 = arr[5].as_str().and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                                let close_time = arr[6].as_i64().unwrap_or(open_time + 59_999);
+                                let trades = arr[8].as_u64().unwrap_or(1);
+
+                                backfill.push(CandleDto {
+                                    symbol: instrument.clone(),
+                                    timeframe: interval_str.clone(),
+                                    open_time,
+                                    close_time,
+                                    open,
+                                    high,
+                                    low,
+                                    close,
+                                    volume,
+                                    trades,
+                                    finalized: true,
+                                    provider: "binance".to_string(),
+                                });
+                            }
+                        }
+                    }
+                    if !backfill.is_empty() {
+                        if dtos.is_empty() {
+                            dtos = backfill;
+                        } else {
+                            let existing_times: HashSet<i64> = dtos.iter().map(|d| d.open_time).collect();
+                            for b in backfill {
+                                if !existing_times.contains(&b.open_time) {
+                                    dtos.push(b);
+                                }
+                            }
+                            dtos.sort_by_key(|d| d.open_time);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback: If still empty, inject latest in-memory candle if available
     if dtos.is_empty() {
         let key = format!("{}:{}", interval_str, instrument);
         let candles_lock = state.latest_candles.read().await;
@@ -481,6 +561,255 @@ async fn handle_candles(
             candles: dtos,
         }),
     )
+}
+
+// News & Sentiment Structs & Handlers
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NewsArticle {
+    pub id: String,
+    pub title: String,
+    pub link: String,
+    #[serde(rename = "publishedAt")]
+    pub published_at: String,
+    pub source: String,
+    pub sentiment: String, // "BULLISH" | "BEARISH" | "NEUTRAL"
+    pub impact: String,    // "HIGH" | "MEDIUM" | "LOW"
+    pub symbols: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SentimentData {
+    pub value: u8,
+    pub classification: String,
+    pub timestamp: String,
+}
+
+impl Default for SentimentData {
+    fn default() -> Self {
+        Self {
+            value: 75,
+            classification: "Greed".to_string(),
+            timestamp: "0".to_string(),
+        }
+    }
+}
+
+fn extract_xml_tag<'a>(item: &'a str, tag: &str) -> Option<&'a str> {
+    let open_tag = format!("<{}>", tag);
+    let close_tag = format!("</{}>", tag);
+    let start = item.find(&open_tag)? + open_tag.len();
+    let end = item[start..].find(&close_tag)? + start;
+    let mut val = &item[start..end];
+    if val.starts_with("<![CDATA[") && val.ends_with("]]>") {
+        val = &val[9..val.len() - 3];
+    }
+    Some(val.trim())
+}
+
+fn analyze_headline(title: &str) -> (&'static str, &'static str, Vec<String>) {
+    let lower = title.to_lowercase();
+
+    let mut symbols = Vec::new();
+    if lower.contains("bitcoin") || lower.contains("btc") {
+        symbols.push("BTC".to_string());
+    }
+    if lower.contains("ethereum") || lower.contains("eth") {
+        symbols.push("ETH".to_string());
+    }
+    if lower.contains("solana") || lower.contains("sol") {
+        symbols.push("SOL".to_string());
+    }
+    if lower.contains("gold") || lower.contains("paxg") {
+        symbols.push("GOLD".to_string());
+    }
+    if lower.contains("xrp") || lower.contains("ripple") {
+        symbols.push("XRP".to_string());
+    }
+    if lower.contains("bnb") || lower.contains("binance") {
+        symbols.push("BNB".to_string());
+    }
+    if lower.contains("fed")
+        || lower.contains("inflation")
+        || lower.contains("cpi")
+        || lower.contains("rate")
+        || lower.contains("oil")
+        || lower.contains("macro")
+    {
+        symbols.push("MACRO".to_string());
+    }
+    if symbols.is_empty() {
+        symbols.push("CRYPTO".to_string());
+    }
+
+    let bullish_words = [
+        "etf", "etp", "rally", "surges", "surge", "gain", "gains", "soar", "soars",
+        "approval", "support", "record", "bull", "ath", "inflow", "inflows", "highs",
+    ];
+    let bearish_words = [
+        "crash", "crashes", "plunge", "plunges", "fall", "falls", "drop", "drops",
+        "ban", "hack", "hacked", "lawsuit", "dump", "dips", "dip", "liquidat", "bear",
+        "outflow", "outflows",
+    ];
+    let high_impact_words = [
+        "etf", "sec", "fed", "inflation", "cpi", "war", "tariff", "rate cut", "rate hike",
+        "ban", "hack", "billion", "trump", "treasury", "central bank",
+    ];
+
+    let is_bullish = bullish_words.iter().any(|w| lower.contains(w));
+    let is_bearish = bearish_words.iter().any(|w| lower.contains(w));
+    let is_high_impact = high_impact_words.iter().any(|w| lower.contains(w));
+
+    let sentiment = if is_bullish && !is_bearish {
+        "BULLISH"
+    } else if is_bearish && !is_bullish {
+        "BEARISH"
+    } else {
+        "NEUTRAL"
+    };
+
+    let impact = if is_high_impact {
+        "HIGH"
+    } else {
+        "MEDIUM"
+    };
+
+    (sentiment, impact, symbols)
+}
+
+async fn handle_news(State(state): State<AppState>) -> Json<Vec<NewsArticle>> {
+    // Check in-memory cache (TTL 3 minutes)
+    {
+        let lock = state.cached_news.read().await;
+        if let (Some(instant), ref list) = *lock {
+            if instant.elapsed() < Duration::from_secs(180) && !list.is_empty() {
+                return Json(list.clone());
+            }
+        }
+    }
+
+    let mut articles = Vec::new();
+
+    // 1. Fetch from CoinTelegraph RSS
+    if let Ok(res) = state.http_client.get("https://cointelegraph.com/rss").send().await {
+        if res.status().is_success() {
+            if let Ok(xml) = res.text().await {
+                for (idx, item_block) in xml.split("<item>").skip(1).take(20).enumerate() {
+                    let title = extract_xml_tag(item_block, "title").unwrap_or("");
+                    let link = extract_xml_tag(item_block, "link").unwrap_or("");
+                    let pub_date = extract_xml_tag(item_block, "pubDate").unwrap_or("");
+
+                    if !title.is_empty() && !link.is_empty() {
+                        let (sentiment, impact, symbols) = analyze_headline(title);
+                        articles.push(NewsArticle {
+                            id: format!("ct-{}", idx),
+                            title: title.to_string(),
+                            link: link.to_string(),
+                            published_at: pub_date.to_string(),
+                            source: "CoinTelegraph".to_string(),
+                            sentiment: sentiment.to_string(),
+                            impact: impact.to_string(),
+                            symbols,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Supplement from Decrypt if needed
+    if articles.len() < 5 {
+        if let Ok(res) = state.http_client.get("https://decrypt.co/feed").send().await {
+            if res.status().is_success() {
+                if let Ok(xml) = res.text().await {
+                    for (idx, item_block) in xml.split("<item>").skip(1).take(10).enumerate() {
+                        let title = extract_xml_tag(item_block, "title").unwrap_or("");
+                        let link = extract_xml_tag(item_block, "link").unwrap_or("");
+                        let pub_date = extract_xml_tag(item_block, "pubDate").unwrap_or("");
+
+                        if !title.is_empty() && !link.is_empty() {
+                            let (sentiment, impact, symbols) = analyze_headline(title);
+                            articles.push(NewsArticle {
+                                id: format!("dc-{}", idx),
+                                title: title.to_string(),
+                                link: link.to_string(),
+                                published_at: pub_date.to_string(),
+                                source: "Decrypt".to_string(),
+                                sentiment: sentiment.to_string(),
+                                impact: impact.to_string(),
+                                symbols,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if !articles.is_empty() {
+        let mut lock = state.cached_news.write().await;
+        *lock = (Some(tokio::time::Instant::now()), articles.clone());
+    }
+
+    Json(articles)
+}
+
+async fn handle_sentiment(State(state): State<AppState>) -> Json<SentimentData> {
+    // Check in-memory cache (TTL 10 minutes)
+    {
+        let lock = state.cached_sentiment.read().await;
+        if let (Some(instant), ref data) = *lock {
+            if instant.elapsed() < Duration::from_secs(600) {
+                return Json(data.clone());
+            }
+        }
+    }
+
+    let mut sentiment = SentimentData::default();
+
+    if let Ok(res) = state
+        .http_client
+        .get("https://api.alternative.me/fng/?limit=1")
+        .send()
+        .await
+    {
+        if res.status().is_success() {
+            if let Ok(val) = res.json::<serde_json::Value>().await {
+                if let Some(arr) = val.get("data").and_then(|d| d.as_array()) {
+                    if let Some(first) = arr.first() {
+                        let value: u8 = first
+                            .get("value")
+                            .and_then(|v| v.as_str())
+                            .and_then(|s| s.parse().ok())
+                            .unwrap_or(75);
+                        let classification = first
+                            .get("value_classification")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("Greed")
+                            .to_string();
+                        let timestamp = first
+                            .get("timestamp")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("0")
+                            .to_string();
+
+                        sentiment = SentimentData {
+                            value,
+                            classification,
+                            timestamp,
+                        };
+                    }
+                }
+            }
+        }
+    }
+
+    {
+        let mut lock = state.cached_sentiment.write().await;
+        *lock = (Some(tokio::time::Instant::now()), sentiment.clone());
+    }
+
+    Json(sentiment)
 }
 
 // WebSocket Upgrade Handler

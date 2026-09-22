@@ -18,6 +18,11 @@ export interface MarketState {
   selectedSymbol: string;
   selectedTimeframe: Timeframe;
 
+  // Technical Indicators
+  showEma20: boolean;
+  showEma50: boolean;
+  showVolume: boolean;
+
   // Actions
   setTicker: (ticker: MarketTicker) => void;
   setTickers: (tickers: MarketTicker[]) => void;
@@ -25,6 +30,9 @@ export interface MarketState {
   setProviderStatus: (status: ProviderStatusLevel, lastEventAt?: number) => void;
   setSelectedSymbol: (symbol: string) => void;
   setSelectedTimeframe: (timeframe: Timeframe) => void;
+  toggleEma20: () => void;
+  toggleEma50: () => void;
+  toggleVolume: () => void;
   setSnapshot: (
     tickers: Record<string, MarketTicker>,
     candles: Record<string, Candle>,
@@ -40,6 +48,13 @@ export const useMarketStore = create<MarketState>((set) => ({
   lastEventAt: 0,
   selectedSymbol: "BTC-USDT",
   selectedTimeframe: "1m",
+  showEma20: true,
+  showEma50: true,
+  showVolume: true,
+
+  toggleEma20: () => set((state) => ({ showEma20: !state.showEma20 })),
+  toggleEma50: () => set((state) => ({ showEma50: !state.showEma50 })),
+  toggleVolume: () => set((state) => ({ showVolume: !state.showVolume })),
 
   setTicker: (ticker) =>
     set((state) => {

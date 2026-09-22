@@ -14,14 +14,14 @@ export function MarketStatusBadge({ status }: MarketStatusBadgeProps) {
       return (
         <Badge variant="success" className="animate-pulse">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-          FEED LIVE
+          Live
         </Badge>
       );
     case "STALE":
       return (
         <Badge variant="warning">
           <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
-          FEED STALE
+          Stale
         </Badge>
       );
     case "RECONNECTING":
