@@ -15,8 +15,15 @@ import { formatTickerChannel, formatCandleChannel } from "@gorengan/shared";
 export function useTerminalWebSocket(subscribedSymbols: string[] = []) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
   const selectedTimeframe = useMarketStore((s) => s.selectedTimeframe);
+
+  const symbolsRef = useRef(subscribedSymbols);
+  useEffect(() => {
+    symbolsRef.current = subscribedSymbols;
+  }, [subscribedSymbols]);
 
   const sendMessage = useCallback((msg: WebSocketClientMessage) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -24,6 +31,7 @@ export function useTerminalWebSocket(subscribedSymbols: string[] = []) {
     }
   }, []);
 
+  // Main persistent connection effect (runs once on mount)
   useEffect(() => {
     let isCancelled = false;
 
@@ -31,7 +39,10 @@ export function useTerminalWebSocket(subscribedSymbols: string[] = []) {
       if (isCancelled) return;
 
       try {
-        useMarketStore.getState().setProviderStatus("CONNECTING");
+        if (useMarketStore.getState().providerStatus !== "CONNECTING") {
+          useMarketStore.getState().setProviderStatus("CONNECTING");
+        }
+
         const ws = new WebSocket(ENV.WS_URL);
         wsRef.current = ws;
 
@@ -42,21 +53,33 @@ export function useTerminalWebSocket(subscribedSymbols: string[] = []) {
           }
           useMarketStore.getState().setProviderStatus("LIVE");
 
-          // Build channels list
+          // Build subscription list using latest state
+          const currentSymbols = symbolsRef.current;
+          const currentSelected = useMarketStore.getState().selectedSymbol;
+          const currentTimeframe = useMarketStore.getState().selectedTimeframe;
+
           const channels: string[] = [];
-          for (const sym of subscribedSymbols) {
+          for (const sym of currentSymbols) {
             channels.push(formatTickerChannel(sym));
             channels.push(formatCandleChannel(sym, "1s"));
             channels.push(formatCandleChannel(sym, "1m"));
           }
-          if (selectedSymbol && !subscribedSymbols.includes(selectedSymbol)) {
-            channels.push(formatTickerChannel(selectedSymbol));
-            channels.push(formatCandleChannel(selectedSymbol, selectedTimeframe));
+          if (currentSelected && !currentSymbols.includes(currentSelected)) {
+            channels.push(formatTickerChannel(currentSelected));
+            channels.push(formatCandleChannel(currentSelected, currentTimeframe));
           }
 
           if (channels.length > 0) {
             ws.send(JSON.stringify({ op: "subscribe", channels }));
           }
+
+          // Start ping heartbeat
+          if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
+          pingIntervalRef.current = setInterval(() => {
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+              wsRef.current.send(JSON.stringify({ op: "ping" }));
+            }
+          }, 15000);
         };
 
         ws.onmessage = (event) => {
@@ -142,13 +165,19 @@ export function useTerminalWebSocket(subscribedSymbols: string[] = []) {
         };
 
         ws.onclose = () => {
+          if (pingIntervalRef.current) {
+            clearInterval(pingIntervalRef.current);
+            pingIntervalRef.current = null;
+          }
           if (isCancelled) return;
           useMarketStore.getState().setProviderStatus("RECONNECTING");
           reconnectTimeoutRef.current = setTimeout(connect, 2000);
         };
 
         ws.onerror = () => {
-          ws.close();
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.close();
+          }
         };
       } catch {
         if (!isCancelled) {
@@ -162,14 +191,31 @@ export function useTerminalWebSocket(subscribedSymbols: string[] = []) {
     return () => {
       isCancelled = true;
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
       if (wsRef.current) {
-        wsRef.current.close();
+        if (wsRef.current.readyState === WebSocket.OPEN) {
+          wsRef.current.close();
+        }
         wsRef.current = null;
       }
     };
-  }, [subscribedSymbols, selectedSymbol, selectedTimeframe]);
+  }, []); // Run only on mount
 
-  // When timeframe or selectedSymbol changes, send subscribe for target candle
+  // Sync subscriptions whenever subscribedSymbols changes without reconnecting
+  const symbolsKey = subscribedSymbols.join(",");
+  useEffect(() => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && subscribedSymbols.length > 0) {
+      const channels: string[] = [];
+      for (const sym of subscribedSymbols) {
+        channels.push(formatTickerChannel(sym));
+        channels.push(formatCandleChannel(sym, "1s"));
+        channels.push(formatCandleChannel(sym, "1m"));
+      }
+      wsRef.current.send(JSON.stringify({ op: "subscribe", channels }));
+    }
+  }, [symbolsKey, subscribedSymbols]);
+
+  // When timeframe or selectedSymbol changes, send subscribe for target candle without reconnecting
   useEffect(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && selectedSymbol) {
       const channel = formatCandleChannel(selectedSymbol, selectedTimeframe);

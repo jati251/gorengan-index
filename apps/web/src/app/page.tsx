@@ -17,7 +17,7 @@ export default function TerminalPage() {
   useMarketsQuery();
 
   const symbols = symbolsData?.symbols || DEFAULT_SYMBOLS;
-  const symbolIds = symbols.map((s) => s.id);
+  const symbolIds = React.useMemo(() => symbols.map((s) => s.id), [symbols]);
 
   // Connect persistent WebSocket and subscribe to all registered symbols
   useTerminalWebSocket(symbolIds);
