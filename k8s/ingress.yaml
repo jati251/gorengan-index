@@ -1,0 +1,35 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gorengan-index-ingress
+  namespace: apps
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: 'false'
+    nginx.ingress.kubernetes.io/proxy-read-timeout: '3600'
+    nginx.ingress.kubernetes.io/proxy-send-timeout: '3600'
+    nginx.ingress.kubernetes.io/websocket-services: 'gorengan-gateway'
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: gorengan-index.cekcok.my.id
+    http:
+      paths:
+      - path: /v1
+        pathType: Prefix
+        backend:
+          service:
+            name: gorengan-gateway
+            port:
+              number: 9001
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: gorengan-index
+            port:
+              number: 80
+  tls:
+  - hosts:
+    - gorengan-index.cekcok.my.id
+    secretName: gorengan-index-ingress-tls

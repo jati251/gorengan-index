@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gorengan-index
+  namespace: apps
+  labels:
+    app: gorengan-index
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gorengan-index
+  template:
+    metadata:
+      labels:
+        app: gorengan-index
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      nodeSelector:
+        dedicated: market-data
+      tolerations:
+        - key: "dedicated"
+          operator: "Equal"
+          value: "market-data"
+          effect: "NoSchedule"
+      containers:
+        - name: gorengan-index
+          image: ghcr.io/jati251/gorengan-index:1a7313e16a8bc4ee2ffa575ccb05bc790fd90a18
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          env:
+            - name: PORT
+              value: "3000"
+            - name: NEXT_PUBLIC_API_URL
+              value: "/v1"
+            - name: NEXT_PUBLIC_WS_URL
+              value: "wss://gorengan-index.cekcok.my.id/v1/stream"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: gorengan-index-secrets
+                  key: DATABASE_URL
+                  optional: true
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gorengan-index
+  namespace: apps
+spec:
+  selector:
+    app: gorengan-index
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 3000

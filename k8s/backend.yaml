@@ -1,0 +1,164 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gorengan-collector
+  namespace: apps
+  labels:
+    app: gorengan-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gorengan-collector
+  template:
+    metadata:
+      labels:
+        app: gorengan-collector
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      nodeSelector:
+        dedicated: market-data
+      tolerations:
+        - key: "dedicated"
+          operator: "Equal"
+          value: "market-data"
+          effect: "NoSchedule"
+      containers:
+        - name: collector
+          image: ghcr.io/jati251/gorengan-backend:1a7313e16a8bc4ee2ffa575ccb05bc790fd90a18
+          imagePullPolicy: Always
+          command: ["/usr/local/bin/collector"]
+          env:
+            - name: NATS_URL
+              value: "nats://nats-svc.apps.svc.cluster.local:4222"
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+            limits:
+              cpu: "300m"
+              memory: "128Mi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gorengan-aggregator
+  namespace: apps
+  labels:
+    app: gorengan-aggregator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gorengan-aggregator
+  template:
+    metadata:
+      labels:
+        app: gorengan-aggregator
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      nodeSelector:
+        dedicated: market-data
+      tolerations:
+        - key: "dedicated"
+          operator: "Equal"
+          value: "market-data"
+          effect: "NoSchedule"
+      containers:
+        - name: aggregator
+          image: ghcr.io/jati251/gorengan-backend:1a7313e16a8bc4ee2ffa575ccb05bc790fd90a18
+          imagePullPolicy: Always
+          command: ["/usr/local/bin/aggregator"]
+          env:
+            - name: NATS_URL
+              value: "nats://nats-svc.apps.svc.cluster.local:4222"
+            - name: QUESTDB_ILP_HOST
+              value: "questdb-svc.apps.svc.cluster.local"
+            - name: QUESTDB_ILP_PORT
+              value: "9009"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "64Mi"
+            limits:
+              cpu: "500m"
+              memory: "192Mi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gorengan-gateway
+  namespace: apps
+  labels:
+    app: gorengan-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gorengan-gateway
+  template:
+    metadata:
+      labels:
+        app: gorengan-gateway
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      nodeSelector:
+        dedicated: market-data
+      tolerations:
+        - key: "dedicated"
+          operator: "Equal"
+          value: "market-data"
+          effect: "NoSchedule"
+      containers:
+        - name: gateway
+          image: ghcr.io/jati251/gorengan-backend:1a7313e16a8bc4ee2ffa575ccb05bc790fd90a18
+          imagePullPolicy: Always
+          command: ["/usr/local/bin/gateway"]
+          ports:
+            - name: http-ws
+              containerPort: 9001
+              protocol: TCP
+          env:
+            - name: GATEWAY_PORT
+              value: "9001"
+            - name: NATS_URL
+              value: "nats://nats-svc.apps.svc.cluster.local:4222"
+            - name: QUESTDB_HTTP_URL
+              value: "http://questdb-svc.apps.svc.cluster.local:9000"
+          readinessProbe:
+            httpGet:
+              path: /v1/health
+              port: 9001
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /v1/health
+              port: 9001
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "64Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gorengan-gateway
+  namespace: apps
+  labels:
+    app: gorengan-gateway
+spec:
+  selector:
+    app: gorengan-gateway
+  ports:
+    - name: http-ws
+      port: 9001
+      targetPort: 9001
