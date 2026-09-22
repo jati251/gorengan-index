@@ -3,8 +3,9 @@
 import React from "react";
 import { Activity } from "lucide-react";
 import { motion } from "framer-motion";
-import { useMarketStore } from "../../../stores/marketStore";
-import { formatPrice, formatPercent } from "../../../utils/formatters";
+import { useMarketStore } from "@/stores/marketStore";
+import { formatPrice, formatPercent } from "@/utils/formatters";
+import { formatFxPrice, isFxSymbol } from "@/features/forex";
 import { MarketStatusBadge } from "./MarketStatusBadge";
 import { DeviceClock } from "./DeviceClock";
 
@@ -45,6 +46,11 @@ export function MarketHeaderTicker() {
           ) : (
             tickerList.map((t) => {
               const isPositive = (t.changePercent24h ?? 0) >= 0;
+              const isFx = isFxSymbol(t.symbol);
+              const formattedPrice = isFx
+                ? formatFxPrice(t.price, t.symbol)
+                : `$${formatPrice(t.price)}`;
+
               return (
                 <motion.button
                   key={t.symbol}
@@ -54,7 +60,7 @@ export function MarketHeaderTicker() {
                   className="flex items-center gap-2 px-2 py-0.5 rounded hover:bg-slate-800/60 transition-colors cursor-pointer shrink-0 border border-transparent hover:border-slate-800"
                 >
                   <span className="font-semibold text-slate-300">{t.symbol}</span>
-                  <span className="text-slate-100 font-medium tabular-nums">${formatPrice(t.price)}</span>
+                  <span className="text-slate-100 font-medium tabular-nums">{formattedPrice}</span>
                   <span
                     className={`font-semibold tabular-nums ${
                       isPositive ? "text-emerald-400" : "text-rose-400"

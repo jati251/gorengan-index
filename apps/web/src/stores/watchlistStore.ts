@@ -1,16 +1,24 @@
 import { create } from "zustand";
 
-interface WatchlistState {
+/* ─── State ───────────────────────────────────────────────────────── */
+
+interface WatchlistStoreState {
   watchlist: string[];
+}
+
+/* ─── Actions ─────────────────────────────────────────────────────── */
+
+interface WatchlistStoreActions {
   addToWatchlist: (symbol: string) => void;
   removeFromWatchlist: (symbol: string) => void;
   toggleWatchlist: (symbol: string) => void;
-  isInWatchlist: (symbol: string) => boolean;
 }
+
+type WatchlistStore = WatchlistStoreState & WatchlistStoreActions;
 
 const DEFAULT_WATCHLIST = ["BTC-USDT", "ETH-USDT", "SOL-USDT", "PAXG-USDT"];
 
-export const useWatchlistStore = create<WatchlistState>((set, get) => ({
+export const useWatchlistStore = create<WatchlistStore>((set, get) => ({
   watchlist: DEFAULT_WATCHLIST,
 
   addToWatchlist: (symbol) =>
@@ -33,6 +41,4 @@ export const useWatchlistStore = create<WatchlistState>((set, get) => ({
       set({ watchlist: [...list, symbol] });
     }
   },
-
-  isInWatchlist: (symbol) => get().watchlist.includes(symbol),
 }));

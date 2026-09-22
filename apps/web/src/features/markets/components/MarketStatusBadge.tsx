@@ -2,7 +2,7 @@
 
 import React from "react";
 import type { ProviderStatusLevel } from "@gorengan/shared";
-import { Badge } from "../../../components/ui/badge";
+import { Badge } from "@/components/ui/badge";
 
 interface MarketStatusBadgeProps {
   status: ProviderStatusLevel;

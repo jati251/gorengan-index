@@ -11,16 +11,10 @@ import {
   Layers,
 } from "lucide-react";
 import { clsx } from "clsx";
-import { useMarketStore } from "../../../stores/marketStore";
-import { formatPrice, formatVolume } from "../../../utils/formatters";
-
-interface StatCardProps {
-  label: string;
-  value: string;
-  icon: React.ReactNode;
-  accent?: "emerald" | "rose" | "cyan" | "amber" | "slate";
-  subtext?: string;
-}
+import { useMarketStore } from "@/stores/marketStore";
+import { formatPrice, formatVolume } from "@/utils/formatters";
+import { formatFxPrice, isFxSymbol, getFxMetadata, formatPips } from "@/features/forex";
+import type { StatCardProps } from "../types";
 
 function StatCard({ label, value, icon, accent = "slate", subtext }: StatCardProps) {
   const accentClasses = {
@@ -59,13 +53,31 @@ export function MarketStats() {
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
   const ticker = tickers[selectedSymbol];
 
+  const isFx = isFxSymbol(selectedSymbol);
+  const fxMeta = getFxMetadata(selectedSymbol);
+
   const allTickers = Object.values(tickers);
   const gainersCount = allTickers.filter((t) => (t.changePercent24h ?? 0) > 0).length;
   const losersCount = allTickers.filter((t) => (t.changePercent24h ?? 0) < 0).length;
   const totalVol = allTickers.reduce((sum, t) => sum + (t.volume24h ?? 0), 0);
 
-  const spread =
-    ticker?.high24h && ticker?.low24h
+  const priceFormatted = isFx
+    ? formatFxPrice(ticker?.price, selectedSymbol, fxMeta?.displayDecimals)
+    : `$${formatPrice(ticker?.price)}`;
+
+  const highFormatted = isFx
+    ? formatFxPrice(ticker?.high24h, selectedSymbol, fxMeta?.displayDecimals)
+    : `$${formatPrice(ticker?.high24h)}`;
+
+  const lowFormatted = isFx
+    ? formatFxPrice(ticker?.low24h, selectedSymbol, fxMeta?.displayDecimals)
+    : `$${formatPrice(ticker?.low24h)}`;
+
+  const spreadVal = isFx
+    ? ticker?.spreadPips != null
+      ? `${ticker.spreadPips} pip`
+      : formatPips(ticker?.spread, fxMeta?.pipSize ?? 0.0001)
+    : ticker?.high24h && ticker?.low24h
       ? ((ticker.high24h - ticker.low24h) / ticker.low24h * 100).toFixed(2) + "%"
       : "—";
 
@@ -73,17 +85,17 @@ export function MarketStats() {
     <div className="grid grid-cols-2 gap-2">
       <StatCard
         label="Selected Price"
-        value={`$${formatPrice(ticker?.price)}`}
+        value={priceFormatted}
         icon={<DollarSign className="w-3.5 h-3.5" />}
         accent="cyan"
         subtext={selectedSymbol}
       />
       <StatCard
-        label="24h Spread"
-        value={spread}
+        label={isFx ? "Spread (Pips)" : "24h Spread"}
+        value={spreadVal}
         icon={<BarChart3 className="w-3.5 h-3.5" />}
         accent="amber"
-        subtext={`H: $${formatPrice(ticker?.high24h)} / L: $${formatPrice(ticker?.low24h)}`}
+        subtext={`H: ${highFormatted} / L: ${lowFormatted}`}
       />
       <StatCard
         label="Gainers"
@@ -100,11 +112,11 @@ export function MarketStats() {
         subtext={`of ${allTickers.length} tracked`}
       />
       <StatCard
-        label="Total Volume"
-        value={formatVolume(totalVol)}
+        label={isFx ? "Active Venue" : "Total Volume"}
+        value={isFx ? "Interbank" : formatVolume(totalVol)}
         icon={<Activity className="w-3.5 h-3.5" />}
         accent="slate"
-        subtext="Across all pairs"
+        subtext={isFx ? "Venues streaming" : "Across crypto pairs"}
       />
       <StatCard
         label="Pairs Tracked"

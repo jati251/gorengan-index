@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { apiGet } from "../../../services/apiClient";
+import { apiGet } from "@/services/apiClient";
 import type { SymbolsResponse } from "@gorengan/shared";
 
 export function useSymbolsQuery() {

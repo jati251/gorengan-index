@@ -4,32 +4,45 @@ import type {
   Candle,
   Timeframe,
   ProviderStatusLevel,
+  AssetClass,
+  FxQuoteTick,
 } from "@gorengan/shared";
+import type { PriceDirection } from "../types";
 
-export type PriceDirection = "up" | "down" | "neutral";
+// Re-export for backward compatibility
+export type { PriceDirection } from "../types";
 
-export interface MarketState {
+/* ─── State (data only) ───────────────────────────────────────────── */
+
+export interface MarketStoreState {
   tickers: Record<string, MarketTicker>;
-  // Price directions for flash animation e.g. { "BTC-USDT": "up" }
+  /** Price directions for flash animation e.g. { "BTC-USDT": "up" } */
   priceDirections: Record<string, PriceDirection>;
   candles: Record<string, Candle>;
   providerStatus: ProviderStatusLevel;
   lastEventAt: number;
   selectedSymbol: string;
   selectedTimeframe: Timeframe;
+  selectedAssetClass: AssetClass;
+  fxQuotes: Record<string, FxQuoteTick>;
 
   // Technical Indicators
   showEma20: boolean;
   showEma50: boolean;
   showVolume: boolean;
+}
 
-  // Actions
+/* ─── Actions (methods only) ──────────────────────────────────────── */
+
+export interface MarketStoreActions {
   setTicker: (ticker: MarketTicker) => void;
   setTickers: (tickers: MarketTicker[]) => void;
+  setFxQuote: (quote: FxQuoteTick) => void;
   setCandle: (candle: Candle) => void;
   setProviderStatus: (status: ProviderStatusLevel, lastEventAt?: number) => void;
   setSelectedSymbol: (symbol: string) => void;
   setSelectedTimeframe: (timeframe: Timeframe) => void;
+  setSelectedAssetClass: (assetClass: AssetClass) => void;
   toggleEma20: () => void;
   toggleEma50: () => void;
   toggleVolume: () => void;
@@ -40,7 +53,11 @@ export interface MarketState {
   ) => void;
 }
 
-export const useMarketStore = create<MarketState>((set) => ({
+export type MarketStore = MarketStoreState & MarketStoreActions;
+
+/* ─── Store Implementation ────────────────────────────────────────── */
+
+export const useMarketStore = create<MarketStore>((set) => ({
   tickers: {},
   priceDirections: {},
   candles: {},
@@ -48,6 +65,8 @@ export const useMarketStore = create<MarketState>((set) => ({
   lastEventAt: 0,
   selectedSymbol: "BTC-USDT",
   selectedTimeframe: "1m",
+  selectedAssetClass: "crypto",
+  fxQuotes: {},
   showEma20: true,
   showEma50: true,
   showVolume: true,
@@ -55,6 +74,32 @@ export const useMarketStore = create<MarketState>((set) => ({
   toggleEma20: () => set((state) => ({ showEma20: !state.showEma20 })),
   toggleEma50: () => set((state) => ({ showEma50: !state.showEma50 })),
   toggleVolume: () => set((state) => ({ showVolume: !state.showVolume })),
+
+  setSelectedAssetClass: (assetClass) =>
+    set((state) => {
+      let nextSymbol = state.selectedSymbol;
+      let nextTimeframe = state.selectedTimeframe;
+
+      if (assetClass === "fx") {
+        if (!nextSymbol.includes("-") || nextSymbol.endsWith("USDT")) {
+          nextSymbol = "EUR-USD";
+        }
+        // Sub-minute not supported for forex (1m minimum per user instruction)
+        if (nextTimeframe === "1s" || nextTimeframe === "5s" || nextTimeframe === "15s") {
+          nextTimeframe = "1m";
+        }
+      } else if (assetClass === "crypto") {
+        if (!nextSymbol.endsWith("USDT")) {
+          nextSymbol = "BTC-USDT";
+        }
+      }
+
+      return {
+        selectedAssetClass: assetClass,
+        selectedSymbol: nextSymbol,
+        selectedTimeframe: nextTimeframe,
+      };
+    }),
 
   setTicker: (ticker) =>
     set((state) => {
@@ -82,6 +127,11 @@ export const useMarketStore = create<MarketState>((set) => ({
       return { tickers: newMap };
     }),
 
+  setFxQuote: (quote) =>
+    set((state) => ({
+      fxQuotes: { ...state.fxQuotes, [quote.instrument]: quote },
+    })),
+
   setCandle: (candle) =>
     set((state) => ({
       candles: {
@@ -96,7 +146,19 @@ export const useMarketStore = create<MarketState>((set) => ({
       lastEventAt: lastEventAt ?? state.lastEventAt,
     })),
 
-  setSelectedSymbol: (symbol) => set({ selectedSymbol: symbol }),
+  setSelectedSymbol: (symbol) =>
+    set((state) => {
+      const isFx = !symbol.endsWith("USDT");
+      let nextTimeframe = state.selectedTimeframe;
+      if (isFx && (nextTimeframe === "1s" || nextTimeframe === "5s" || nextTimeframe === "15s")) {
+        nextTimeframe = "1m";
+      }
+      return {
+        selectedSymbol: symbol,
+        selectedTimeframe: nextTimeframe,
+        selectedAssetClass: isFx ? "fx" : "crypto",
+      };
+    }),
 
   setSelectedTimeframe: (timeframe) => set({ selectedTimeframe: timeframe }),
 

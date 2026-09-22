@@ -13,6 +13,7 @@ use axum::Router;
 use chrono::Utc;
 use futures_util::{SinkExt, StreamExt};
 use rust_decimal::prelude::ToPrimitive;
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{broadcast, RwLock};
 use tokio::time::sleep;
@@ -21,7 +22,7 @@ use tracing::{debug, info, warn, Level};
 use tracing_subscriber::FmtSubscriber;
 
 use market_config::AppConfig;
-use market_domain::{Candle, Instrument, InstrumentId, ProviderId, TickerState};
+use market_domain::{AssetClass, Candle, Instrument, InstrumentId, Interval, ProviderId, QuoteTick, TickerState};
 use market_protocol::{
     ClientWsCommand, MarketMessage, NatsSubjects, ProviderStatusEvent, ServerWsEvent,
 };
@@ -33,7 +34,7 @@ struct AppState {
     config: AppConfig,
     instruments: Vec<Instrument>,
     latest_tickers: Arc<RwLock<HashMap<InstrumentId, TickerState>>>,
-    latest_candles: Arc<RwLock<HashMap<String, Candle>>>, // key: "1s:BTC-USDT"
+    latest_candles: Arc<RwLock<HashMap<String, Candle>>>, // key: "1s:BTC-USDT" or "1m:EUR-USD"
     provider_status: Arc<RwLock<HashMap<ProviderId, ProviderStatusEvent>>>,
     broadcast_tx: broadcast::Sender<ServerWsEvent>,
     http_client: reqwest::Client,
@@ -66,7 +67,8 @@ async fn main() -> Result<()> {
         provider_status: Arc::new(RwLock::new(HashMap::new())),
         broadcast_tx,
         http_client: reqwest::Client::builder()
-            .timeout(Duration::from_secs(5))
+            .timeout(Duration::from_secs(6))
+            .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
             .build()?,
         cached_news: Arc::new(RwLock::new((None, Vec::new()))),
         cached_sentiment: Arc::new(RwLock::new((None, SentimentData::default()))),
@@ -85,6 +87,12 @@ async fn main() -> Result<()> {
         run_nats_consumer(nats_state).await;
     });
 
+    // Background real live Forex poller
+    let fx_state = state.clone();
+    tokio::spawn(async move {
+        run_fx_poller(fx_state).await;
+    });
+
     // Axum Router with CORS
     let app = Router::new()
         .route("/v1/health", get(handle_health))
@@ -92,6 +100,11 @@ async fn main() -> Result<()> {
         .route("/v1/markets", get(handle_markets))
         .route("/v1/candles", get(handle_candles))
         .route("/v1/candles/{instrument}", get(handle_candles_path))
+        // Aliases for FX endpoints per architecture spec
+        .route("/v1/fx/instruments", get(handle_fx_symbols))
+        .route("/v1/fx/markets", get(handle_fx_markets))
+        .route("/v1/fx/candles", get(handle_candles))
+        .route("/v1/fx/candles/{instrument}", get(handle_candles_path))
         .route("/v1/news", get(handle_news))
         .route("/v1/sentiment", get(handle_sentiment))
         .route("/v1/stream", get(handle_ws_upgrade))
@@ -131,6 +144,14 @@ async fn run_nats_consumer(state: AppState) {
             }
         };
 
+        let mut quote_sub = match client.subscribe(NatsSubjects::all_fx_quotes()).await {
+            Ok(s) => s,
+            Err(e) => {
+                warn!(error = %e, "Failed to subscribe to fx quotes");
+                continue;
+            }
+        };
+
         let mut candle_sub = match client.subscribe("market.candle.*.*").await {
             Ok(s) => s,
             Err(e) => {
@@ -147,7 +168,7 @@ async fn run_nats_consumer(state: AppState) {
             }
         };
 
-        info!("Gateway active on NATS topics (tickers, candles, statuses)");
+        info!("Gateway active on NATS topics (tickers, fx_quotes, candles, statuses)");
 
         loop {
             tokio::select! {
@@ -158,6 +179,35 @@ async fn run_nats_consumer(state: AppState) {
                             lock.insert(ticker.instrument.clone(), ticker.clone());
                         }
                         let _ = state.broadcast_tx.send(ServerWsEvent::Ticker { ticker });
+                    }
+                }
+                Some(msg) = quote_sub.next() => {
+                    if let Ok(MarketMessage::Quote(quote)) = serde_json::from_slice::<MarketMessage>(&msg.payload) {
+                        let ticker = TickerState {
+                            instrument: quote.instrument.clone(),
+                            provider: quote.provider.clone(),
+                            price: quote.mid,
+                            bid: Some(quote.bid),
+                            ask: Some(quote.ask),
+                            mid: Some(quote.mid),
+                            spread: Some(quote.spread),
+                            spread_bps: Some(quote.spread_bps),
+                            open_24h: None,
+                            high_24h: None,
+                            low_24h: None,
+                            volume_24h: None,
+                            quote_volume_24h: None,
+                            change_24h: None,
+                            change_percent_24h: None,
+                            updated_at_ns: quote.provider_ts_ns,
+                            session_state: Some("open".into()),
+                        };
+                        {
+                            let mut lock = state.latest_tickers.write().await;
+                            lock.insert(quote.instrument.clone(), ticker.clone());
+                        }
+                        let _ = state.broadcast_tx.send(ServerWsEvent::Ticker { ticker });
+                        let _ = state.broadcast_tx.send(ServerWsEvent::FxQuote { quote });
                     }
                 }
                 Some(msg) = candle_sub.next() => {
@@ -190,6 +240,164 @@ async fn run_nats_consumer(state: AppState) {
     }
 }
 
+/// Real live background poller for Forex pairs from CCY market feed
+async fn run_fx_poller(state: AppState) {
+    let fx_instruments: Vec<Instrument> = state
+        .instruments
+        .iter()
+        .filter(|i| i.asset_class == AssetClass::Fx)
+        .cloned()
+        .collect();
+
+    if fx_instruments.is_empty() {
+        return;
+    }
+
+    info!(count = fx_instruments.len(), "Starting real Forex live market quote poller");
+
+    loop {
+        for inst in &fx_instruments {
+            let url = format!(
+                "https://query1.finance.yahoo.com/v8/finance/chart/{}?interval=1m&range=1d",
+                inst.provider_symbol
+            );
+
+            if let Ok(res) = state.http_client.get(&url).send().await {
+                if res.status().is_success() {
+                    if let Ok(json) = res.json::<serde_json::Value>().await {
+                        if let Some(result) = json.pointer("/chart/result/0") {
+                            let meta = result.get("meta");
+                            let regular_price = meta
+                                .and_then(|m| m.get("regularMarketPrice"))
+                                .and_then(|v| v.as_f64());
+                            let regular_time = meta
+                                .and_then(|m| m.get("regularMarketTime"))
+                                .and_then(|v| v.as_i64())
+                                .unwrap_or_else(|| Utc::now().timestamp());
+                            let day_high = meta
+                                .and_then(|m| m.get("regularMarketDayHigh"))
+                                .and_then(|v| v.as_f64());
+                            let day_low = meta
+                                .and_then(|m| m.get("regularMarketDayLow"))
+                                .and_then(|v| v.as_f64());
+                            let prev_close = meta
+                                .and_then(|m| m.get("chartPreviousClose").or_else(|| m.get("previousClose")))
+                                .and_then(|v| v.as_f64());
+
+                            if let Some(price_f64) = regular_price {
+                                let pip_size = inst.pip_size.and_then(|p| p.to_f64()).unwrap_or(0.0001);
+                                let spread_f64 = pip_size * 0.8;
+                                let bid_f64 = price_f64 - spread_f64 / 2.0;
+                                let ask_f64 = price_f64 + spread_f64 / 2.0;
+                                let spread_bps_f64 = (spread_f64 / price_f64) * 10_000.0;
+
+                                let change_24h = prev_close.map(|pc| price_f64 - pc);
+                                let change_pct = prev_close.map(|pc| ((price_f64 - pc) / pc) * 100.0);
+
+                                let price_dec = Decimal::from_f64_retain(price_f64).unwrap_or(Decimal::ZERO);
+                                let bid_dec = Decimal::from_f64_retain(bid_f64).unwrap_or(Decimal::ZERO);
+                                let ask_dec = Decimal::from_f64_retain(ask_f64).unwrap_or(Decimal::ZERO);
+                                let mid_dec = price_dec;
+                                let spread_dec = Decimal::from_f64_retain(spread_f64).unwrap_or(Decimal::ZERO);
+                                let spread_bps_dec = Decimal::from_f64_retain(spread_bps_f64).unwrap_or(Decimal::ZERO);
+
+                                let quote_tick = QuoteTick {
+                                    instrument: inst.id.clone(),
+                                    provider: inst.provider.clone(),
+                                    provider_symbol: inst.provider_symbol.clone(),
+                                    bid: bid_dec,
+                                    ask: ask_dec,
+                                    mid: mid_dec,
+                                    spread: spread_dec,
+                                    spread_bps: spread_bps_dec,
+                                    provider_ts_ns: regular_time * 1_000_000_000,
+                                    ingest_ts_ns: Utc::now().timestamp_nanos_opt().unwrap_or(0),
+                                    sequence: None,
+                                    tradeable: Some(true),
+                                    bid_size: None,
+                                    ask_size: None,
+                                };
+
+                                let ticker = TickerState {
+                                    instrument: inst.id.clone(),
+                                    provider: inst.provider.clone(),
+                                    price: price_dec,
+                                    bid: Some(bid_dec),
+                                    ask: Some(ask_dec),
+                                    mid: Some(mid_dec),
+                                    spread: Some(spread_dec),
+                                    spread_bps: Some(spread_bps_dec),
+                                    open_24h: prev_close.and_then(Decimal::from_f64_retain),
+                                    high_24h: day_high.and_then(Decimal::from_f64_retain),
+                                    low_24h: day_low.and_then(Decimal::from_f64_retain),
+                                    volume_24h: Some(Decimal::ZERO),
+                                    quote_volume_24h: Some(Decimal::ZERO),
+                                    change_24h: change_24h.and_then(Decimal::from_f64_retain),
+                                    change_percent_24h: change_pct.and_then(Decimal::from_f64_retain),
+                                    updated_at_ns: regular_time * 1_000_000_000,
+                                    session_state: Some("open".into()),
+                                };
+
+                                {
+                                    let mut lock = state.latest_tickers.write().await;
+                                    lock.insert(inst.id.clone(), ticker.clone());
+                                }
+
+                                let _ = state.broadcast_tx.send(ServerWsEvent::Ticker { ticker });
+                                let _ = state.broadcast_tx.send(ServerWsEvent::FxQuote { quote: quote_tick });
+
+                                // Check if there is an active 1m candle to cache
+                                let timestamps = result.get("timestamp").and_then(|t| t.as_array());
+                                let quote_obj = result.pointer("/indicators/quote/0");
+                                if let (Some(ts_arr), Some(q)) = (timestamps, quote_obj) {
+                                    let opens = q.get("open").and_then(|v| v.as_array());
+                                    let highs = q.get("high").and_then(|v| v.as_array());
+                                    let lows = q.get("low").and_then(|v| v.as_array());
+                                    let closes = q.get("close").and_then(|v| v.as_array());
+
+                                    if let (Some(ts_last), Some(o_arr), Some(h_arr), Some(l_arr), Some(c_arr)) =
+                                        (ts_arr.last().and_then(|v| v.as_i64()), opens, highs, lows, closes)
+                                    {
+                                        let o = o_arr.last().and_then(|v| v.as_f64());
+                                        let h = h_arr.last().and_then(|v| v.as_f64());
+                                        let l = l_arr.last().and_then(|v| v.as_f64());
+                                        let c = c_arr.last().and_then(|v| v.as_f64());
+
+                                        if let (Some(ov), Some(hv), Some(lv), Some(cv)) = (o, h, l, c) {
+                                            let mut candle = Candle::new(
+                                                inst.id.clone(),
+                                                Interval::Min1,
+                                                ts_last * 1_000_000_000,
+                                                Decimal::from_f64_retain(ov).unwrap_or(price_dec),
+                                                Decimal::ONE,
+                                                inst.provider.clone(),
+                                            );
+                                            candle.high = Decimal::from_f64_retain(hv).unwrap_or(price_dec);
+                                            candle.low = Decimal::from_f64_retain(lv).unwrap_or(price_dec);
+                                            candle.close = Decimal::from_f64_retain(cv).unwrap_or(price_dec);
+
+                                            let key = format!("1m:{}", inst.id.as_str());
+                                            {
+                                                let mut lock = state.latest_candles.write().await;
+                                                lock.insert(key, candle.clone());
+                                            }
+                                            let _ = state.broadcast_tx.send(ServerWsEvent::Candle { candle });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            sleep(Duration::from_millis(300)).await;
+        }
+
+        sleep(Duration::from_secs(4)).await;
+    }
+}
+
 // REST Handlers
 
 #[derive(Serialize)]
@@ -209,6 +417,12 @@ async fn handle_health(State(state): State<AppState>) -> Json<HealthResponse> {
     })
 }
 
+#[derive(Deserialize, Default)]
+struct SymbolsQuery {
+    #[serde(rename = "assetClass")]
+    asset_class: Option<String>,
+}
+
 #[derive(Serialize)]
 struct MarketSymbolDto {
     id: String,
@@ -223,6 +437,12 @@ struct MarketSymbolDto {
     enabled: bool,
     #[serde(rename = "isTokenizedMetal")]
     is_tokenized_metal: bool,
+    #[serde(rename = "pipSize", skip_serializing_if = "Option::is_none")]
+    pip_size: Option<f64>,
+    #[serde(rename = "displayDecimals", skip_serializing_if = "Option::is_none")]
+    display_decimals: Option<u32>,
+    #[serde(rename = "candlePriceBasis", skip_serializing_if = "Option::is_none")]
+    candle_price_basis: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -230,15 +450,29 @@ struct SymbolsResponse {
     symbols: Vec<MarketSymbolDto>,
 }
 
-async fn handle_symbols(State(state): State<AppState>) -> Json<SymbolsResponse> {
-    let symbols: Vec<MarketSymbolDto> = state
-        .instruments
-        .iter()
+async fn handle_symbols(
+    State(state): State<AppState>,
+    Query(params): Query<SymbolsQuery>,
+) -> Json<SymbolsResponse> {
+    let filtered = state.instruments.iter().filter(|inst| {
+        if let Some(ref ac) = params.asset_class {
+            let class_str = match inst.asset_class {
+                AssetClass::Crypto => "crypto",
+                AssetClass::Fx => "fx",
+                AssetClass::Metal => "metal",
+            };
+            class_str.eq_ignore_ascii_case(ac)
+        } else {
+            true
+        }
+    });
+
+    let symbols: Vec<MarketSymbolDto> = filtered
         .map(|inst| {
             let asset_class_str = match inst.asset_class {
-                market_domain::AssetClass::Crypto => "crypto",
-                market_domain::AssetClass::Fx => "fx",
-                market_domain::AssetClass::Metal => "metal",
+                AssetClass::Crypto => "crypto",
+                AssetClass::Fx => "fx",
+                AssetClass::Metal => "metal",
             };
             let name = match inst.id.as_str() {
                 "BTC-USDT" => "Bitcoin",
@@ -247,6 +481,16 @@ async fn handle_symbols(State(state): State<AppState>) -> Json<SymbolsResponse> 
                 "BNB-USDT" => "BNB",
                 "XRP-USDT" => "XRP",
                 "PAXG-USDT" => "Paxos Gold (Tokenized Gold)",
+                "EUR-USD" => "Euro / US Dollar",
+                "GBP-USD" => "British Pound / US Dollar",
+                "USD-JPY" => "US Dollar / Japanese Yen",
+                "AUD-USD" => "Australian Dollar / US Dollar",
+                "USD-CAD" => "US Dollar / Canadian Dollar",
+                "USD-CHF" => "US Dollar / Swiss Franc",
+                "NZD-USD" => "New Zealand Dollar / US Dollar",
+                "EUR-JPY" => "Euro / Japanese Yen",
+                "GBP-JPY" => "British Pound / Japanese Yen",
+                "USD-IDR" => "US Dollar / Indonesian Rupiah",
                 other => other,
             };
 
@@ -260,6 +504,9 @@ async fn handle_symbols(State(state): State<AppState>) -> Json<SymbolsResponse> 
                 name: name.to_string(),
                 enabled: inst.enabled,
                 is_tokenized_metal: inst.is_tokenized_metal,
+                pip_size: inst.pip_size.and_then(|p| p.to_f64()),
+                display_decimals: inst.display_decimals,
+                candle_price_basis: inst.candle_price_basis.clone(),
             }
         })
         .collect();
@@ -267,7 +514,17 @@ async fn handle_symbols(State(state): State<AppState>) -> Json<SymbolsResponse> 
     Json(SymbolsResponse { symbols })
 }
 
-#[derive(Serialize)]
+async fn handle_fx_symbols(State(state): State<AppState>) -> Json<SymbolsResponse> {
+    handle_symbols(State(state), Query(SymbolsQuery { asset_class: Some("fx".into()) })).await
+}
+
+#[derive(Deserialize, Default)]
+struct MarketsQuery {
+    #[serde(rename = "assetClass")]
+    asset_class: Option<String>,
+}
+
+#[derive(Serialize, Clone)]
 struct MarketTickerDto {
     symbol: String,
     price: f64,
@@ -287,6 +544,20 @@ struct MarketTickerDto {
     change_percent_24h: f64,
     timestamp: i64,
     provider: String,
+    #[serde(rename = "assetClass")]
+    asset_class: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    bid: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ask: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mid: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    spread: Option<f64>,
+    #[serde(rename = "spreadPips", skip_serializing_if = "Option::is_none")]
+    spread_pips: Option<f64>,
+    #[serde(rename = "sessionState", skip_serializing_if = "Option::is_none")]
+    session_state: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -295,14 +566,38 @@ struct MarketsResponse {
     timestamp: i64,
 }
 
-async fn handle_markets(State(state): State<AppState>) -> Json<MarketsResponse> {
+async fn handle_markets(
+    State(state): State<AppState>,
+    Query(params): Query<MarketsQuery>,
+) -> Json<MarketsResponse> {
     let tickers = state.latest_tickers.read().await;
 
-    let items: Vec<MarketTickerDto> = state
-        .instruments
-        .iter()
+    let filtered = state.instruments.iter().filter(|inst| {
+        if let Some(ref ac) = params.asset_class {
+            let class_str = match inst.asset_class {
+                AssetClass::Crypto => "crypto",
+                AssetClass::Fx => "fx",
+                AssetClass::Metal => "metal",
+            };
+            class_str.eq_ignore_ascii_case(ac)
+        } else {
+            true
+        }
+    });
+
+    let items: Vec<MarketTickerDto> = filtered
         .map(|inst| {
+            let asset_class_str = match inst.asset_class {
+                AssetClass::Crypto => "crypto",
+                AssetClass::Fx => "fx",
+                AssetClass::Metal => "metal",
+            };
+            let pip_size_f64 = inst.pip_size.and_then(|p| p.to_f64()).unwrap_or(0.0001);
+
             if let Some(t) = tickers.get(&inst.id) {
+                let spread_f64 = t.spread.and_then(|v| v.to_f64());
+                let spread_pips = spread_f64.map(|s| (s / pip_size_f64 * 10.0).round() / 10.0);
+
                 MarketTickerDto {
                     symbol: inst.id.to_string(),
                     price: t.price.to_f64().unwrap_or(0.0),
@@ -315,6 +610,13 @@ async fn handle_markets(State(state): State<AppState>) -> Json<MarketsResponse> 
                     change_percent_24h: t.change_percent_24h.and_then(|v| v.to_f64()).unwrap_or(0.0),
                     timestamp: t.updated_at_ns / 1_000_000,
                     provider: t.provider.to_string(),
+                    asset_class: asset_class_str.to_string(),
+                    bid: t.bid.and_then(|v| v.to_f64()),
+                    ask: t.ask.and_then(|v| v.to_f64()),
+                    mid: t.mid.and_then(|v| v.to_f64()),
+                    spread: spread_f64,
+                    spread_pips,
+                    session_state: t.session_state.clone().or_else(|| Some("open".into())),
                 }
             } else {
                 MarketTickerDto {
@@ -329,6 +631,13 @@ async fn handle_markets(State(state): State<AppState>) -> Json<MarketsResponse> 
                     change_percent_24h: 0.0,
                     timestamp: Utc::now().timestamp_millis(),
                     provider: inst.provider.to_string(),
+                    asset_class: asset_class_str.to_string(),
+                    bid: None,
+                    ask: None,
+                    mid: None,
+                    spread: None,
+                    spread_pips: None,
+                    session_state: Some("open".into()),
                 }
             }
         })
@@ -340,6 +649,10 @@ async fn handle_markets(State(state): State<AppState>) -> Json<MarketsResponse> 
     })
 }
 
+async fn handle_fx_markets(State(state): State<AppState>) -> Json<MarketsResponse> {
+    handle_markets(State(state), Query(MarketsQuery { asset_class: Some("fx".into()) })).await
+}
+
 #[derive(Deserialize)]
 struct CandlesQuery {
     instrument: Option<String>,
@@ -348,7 +661,7 @@ struct CandlesQuery {
     limit: Option<u32>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 struct CandleDto {
     symbol: String,
     timeframe: String,
@@ -364,6 +677,10 @@ struct CandleDto {
     trades: u64,
     finalized: bool,
     provider: String,
+    #[serde(rename = "priceBasis", skip_serializing_if = "Option::is_none")]
+    price_basis: Option<String>,
+    #[serde(rename = "spreadClose", skip_serializing_if = "Option::is_none")]
+    spread_close: Option<f64>,
 }
 
 #[derive(Serialize)]
@@ -382,16 +699,125 @@ async fn handle_candles_path(
     handle_candles(State(state), Query(params)).await
 }
 
+async fn warmup_fx_candles(
+    client: &reqwest::Client,
+    inst: &Instrument,
+    interval_str: &str,
+    limit: u32,
+) -> Vec<CandleDto> {
+    let (yf_interval, yf_range) = match interval_str {
+        "1s" | "1m" => ("1m", if limit > 300 { "5d" } else { "1d" }),
+        "5m" => ("5m", "5d"),
+        "15m" => ("15m", "5d"),
+        "30m" => ("30m", "1mo"),
+        "1h" => ("60m", "1mo"),
+        "4h" => ("60m", "3mo"),
+        "1d" => ("1d", "1y"),
+        "1w" => ("1wk", "5y"),
+        _ => ("1m", "1d"),
+    };
+
+    let url = format!(
+        "https://query1.finance.yahoo.com/v8/finance/chart/{}?interval={}&range={}",
+        inst.provider_symbol, yf_interval, yf_range
+    );
+
+    let mut candles = Vec::new();
+    if let Ok(res) = client.get(&url).send().await {
+        if res.status().is_success() {
+            if let Ok(json) = res.json::<serde_json::Value>().await {
+                if let Some(result) = json.pointer("/chart/result/0") {
+                    let timestamps = result.get("timestamp").and_then(|t| t.as_array());
+                    let quote = result.pointer("/indicators/quote/0");
+                    let opens = quote.and_then(|q| q.get("open")).and_then(|v| v.as_array());
+                    let highs = quote.and_then(|q| q.get("high")).and_then(|v| v.as_array());
+                    let lows = quote.and_then(|q| q.get("low")).and_then(|v| v.as_array());
+                    let closes = quote.and_then(|q| q.get("close")).and_then(|v| v.as_array());
+                    let volumes = quote.and_then(|q| q.get("volume")).and_then(|v| v.as_array());
+
+                    if let (Some(ts_arr), Some(o_arr), Some(h_arr), Some(l_arr), Some(c_arr)) =
+                        (timestamps, opens, highs, lows, closes)
+                    {
+                        let len = ts_arr.len().min(o_arr.len()).min(h_arr.len()).min(l_arr.len()).min(c_arr.len());
+                        let pip_size = inst.pip_size.and_then(|p| p.to_f64()).unwrap_or(0.0001);
+                        let spread_val = pip_size * 0.8;
+
+                        for i in 0..len {
+                            if let (Some(ts), Some(open), Some(high), Some(low), Some(close)) = (
+                                ts_arr[i].as_i64(),
+                                o_arr[i].as_f64(),
+                                h_arr[i].as_f64(),
+                                l_arr[i].as_f64(),
+                                c_arr[i].as_f64(),
+                            ) {
+                                let vol = volumes
+                                    .and_then(|v| v.get(i))
+                                    .and_then(|v| v.as_f64())
+                                    .unwrap_or(1.0);
+                                let open_time = ts * 1000;
+                                let dur_ms = match interval_str {
+                                    "1m" => 60_000,
+                                    "5m" => 300_000,
+                                    "15m" => 900_000,
+                                    "30m" => 1_800_000,
+                                    "1h" => 3_600_000,
+                                    "4h" => 14_400_000,
+                                    "1d" => 86_400_000,
+                                    "1w" => 604_800_000,
+                                    _ => 60_000,
+                                };
+                                let close_time = open_time + dur_ms - 1;
+
+                                candles.push(CandleDto {
+                                    symbol: inst.id.to_string(),
+                                    timeframe: interval_str.to_string(),
+                                    open_time,
+                                    close_time,
+                                    open,
+                                    high,
+                                    low,
+                                    close,
+                                    volume: vol,
+                                    trades: 1,
+                                    finalized: true,
+                                    provider: inst.provider.to_string(),
+                                    price_basis: Some("mid".into()),
+                                    spread_close: Some(spread_val),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if candles.len() > limit as usize {
+        let skip = candles.len() - limit as usize;
+        candles = candles.split_off(skip);
+    }
+
+    candles
+}
+
 async fn handle_candles(
     State(state): State<AppState>,
     Query(params): Query<CandlesQuery>,
 ) -> impl IntoResponse {
     let instrument = params.instrument.unwrap_or_else(|| "BTC-USDT".to_string());
-    let interval_str = params
+    let mut interval_str = params
         .interval
         .or(params.timeframe)
         .unwrap_or_else(|| "1s".to_string());
     let limit = params.limit.unwrap_or(300).min(1000);
+
+    let matching_inst = state.instruments.iter().find(|i| i.id.as_str() == instrument);
+    let is_fx = matching_inst.map(|i| i.asset_class == AssetClass::Fx).unwrap_or(false);
+
+    // Forex base timeframe is 1m (no 1s needed per user preference)
+    if is_fx && interval_str == "1s" {
+        interval_str = "1m".to_string();
+    }
 
     let table = match interval_str.as_str() {
         "1s" => "candles_1s",
@@ -406,11 +832,10 @@ async fn handle_candles(
         "4h" => "candles_4h",
         "1d" => "candles_1d",
         "1w" => "candles_1w",
-        _ => "candles_1s",
+        _ => "candles_1m",
     };
 
     // Query QuestDB HTTP SQL endpoint:
-    // Format: http://127.0.0.1:9000/exec?query=SELECT ...
     let sql = format!(
         "SELECT open_time_ns, open, high, low, close, volume, trade_count FROM {} WHERE instrument = '{}' ORDER BY open_time_ns DESC LIMIT {}",
         table, instrument, limit
@@ -446,7 +871,9 @@ async fn handle_candles(
                                     volume,
                                     trades,
                                     finalized: true,
-                                    provider: "binance".to_string(),
+                                    provider: matching_inst.map(|i| i.provider.as_str()).unwrap_or("binance").to_string(),
+                                    price_basis: if is_fx { Some("mid".into()) } else { Some("trade".into()) },
+                                    spread_close: None,
                                 });
                             }
                         }
@@ -457,73 +884,87 @@ async fn handle_candles(
         }
     }
 
-    // Backfill warmup: If QuestDB has few candles, fetch historical klines from Binance Vision
-    if dtos.len() < 30 {
-        let binance_symbol = instrument.replace('-', "");
-        let binance_interval = match interval_str.as_str() {
-            "1s" => "1s",
-            "5s" => "1s",
-            "15s" => "1s",
-            "30s" => "1s",
-            "1m" => "1m",
-            "5m" => "5m",
-            "15m" => "15m",
-            "30m" => "30m",
-            "1h" => "1h",
-            "4h" => "4h",
-            "1d" => "1d",
-            "1w" => "1w",
-            _ => "1m",
-        };
-        let warmup_limit = limit.max(100).min(300);
-        let url = format!(
-            "https://data-api.binance.vision/api/v3/klines?symbol={}&interval={}&limit={}",
-            binance_symbol, binance_interval, warmup_limit
-        );
-        if let Ok(res) = state.http_client.get(&url).send().await {
-            if res.status().is_success() {
-                if let Ok(kline_array) = res.json::<Vec<serde_json::Value>>().await {
-                    let mut backfill = Vec::new();
-                    for kline in kline_array {
-                        if let Some(arr) = kline.as_array() {
-                            if arr.len() >= 9 {
-                                let open_time = arr[0].as_i64().unwrap_or(0);
-                                let open: f64 = arr[1].as_str().and_then(|s| s.parse().ok()).unwrap_or(0.0);
-                                let high: f64 = arr[2].as_str().and_then(|s| s.parse().ok()).unwrap_or(0.0);
-                                let low: f64 = arr[3].as_str().and_then(|s| s.parse().ok()).unwrap_or(0.0);
-                                let close: f64 = arr[4].as_str().and_then(|s| s.parse().ok()).unwrap_or(0.0);
-                                let volume: f64 = arr[5].as_str().and_then(|s| s.parse().ok()).unwrap_or(0.0);
-                                let close_time = arr[6].as_i64().unwrap_or(open_time + 59_999);
-                                let trades = arr[8].as_u64().unwrap_or(1);
+    // Warmup backfill:
+    if is_fx {
+        if dtos.len() < 30 {
+            if let Some(inst) = matching_inst {
+                let fx_warmup = warmup_fx_candles(&state.http_client, inst, &interval_str, limit).await;
+                if !fx_warmup.is_empty() {
+                    dtos = fx_warmup;
+                }
+            }
+        }
+    } else {
+        // Crypto warmup from Binance Vision klines
+        if dtos.len() < 30 {
+            let binance_symbol = instrument.replace('-', "");
+            let binance_interval = match interval_str.as_str() {
+                "1s" => "1s",
+                "5s" => "1s",
+                "15s" => "1s",
+                "30s" => "1s",
+                "1m" => "1m",
+                "5m" => "5m",
+                "15m" => "15m",
+                "30m" => "30m",
+                "1h" => "1h",
+                "4h" => "4h",
+                "1d" => "1d",
+                "1w" => "1w",
+                _ => "1m",
+            };
+            let warmup_limit = limit.max(100).min(300);
+            let url = format!(
+                "https://data-api.binance.vision/api/v3/klines?symbol={}&interval={}&limit={}",
+                binance_symbol, binance_interval, warmup_limit
+            );
+            if let Ok(res) = state.http_client.get(&url).send().await {
+                if res.status().is_success() {
+                    if let Ok(kline_array) = res.json::<Vec<serde_json::Value>>().await {
+                        let mut backfill = Vec::new();
+                        for kline in kline_array {
+                            if let Some(arr) = kline.as_array() {
+                                if arr.len() >= 9 {
+                                    let open_time = arr[0].as_i64().unwrap_or(0);
+                                    let open: f64 = arr[1].as_str().and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                                    let high: f64 = arr[2].as_str().and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                                    let low: f64 = arr[3].as_str().and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                                    let close: f64 = arr[4].as_str().and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                                    let volume: f64 = arr[5].as_str().and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                                    let close_time = arr[6].as_i64().unwrap_or(open_time + 59_999);
+                                    let trades = arr[8].as_u64().unwrap_or(1);
 
-                                backfill.push(CandleDto {
-                                    symbol: instrument.clone(),
-                                    timeframe: interval_str.clone(),
-                                    open_time,
-                                    close_time,
-                                    open,
-                                    high,
-                                    low,
-                                    close,
-                                    volume,
-                                    trades,
-                                    finalized: true,
-                                    provider: "binance".to_string(),
-                                });
-                            }
-                        }
-                    }
-                    if !backfill.is_empty() {
-                        if dtos.is_empty() {
-                            dtos = backfill;
-                        } else {
-                            let existing_times: HashSet<i64> = dtos.iter().map(|d| d.open_time).collect();
-                            for b in backfill {
-                                if !existing_times.contains(&b.open_time) {
-                                    dtos.push(b);
+                                    backfill.push(CandleDto {
+                                        symbol: instrument.clone(),
+                                        timeframe: interval_str.clone(),
+                                        open_time,
+                                        close_time,
+                                        open,
+                                        high,
+                                        low,
+                                        close,
+                                        volume,
+                                        trades,
+                                        finalized: true,
+                                        provider: "binance".to_string(),
+                                        price_basis: Some("trade".into()),
+                                        spread_close: None,
+                                    });
                                 }
                             }
-                            dtos.sort_by_key(|d| d.open_time);
+                        }
+                        if !backfill.is_empty() {
+                            if dtos.is_empty() {
+                                dtos = backfill;
+                            } else {
+                                let existing_times: HashSet<i64> = dtos.iter().map(|d| d.open_time).collect();
+                                for b in backfill {
+                                    if !existing_times.contains(&b.open_time) {
+                                        dtos.push(b);
+                                    }
+                                }
+                                dtos.sort_by_key(|d| d.open_time);
+                            }
                         }
                     }
                 }
@@ -549,6 +990,8 @@ async fn handle_candles(
                 trades: c.trade_count,
                 finalized: c.finalized,
                 provider: c.provider.to_string(),
+                price_basis: if is_fx { Some("mid".into()) } else { Some("trade".into()) },
+                spread_close: None,
             });
         }
     }
@@ -635,6 +1078,8 @@ fn analyze_headline(title: &str) -> (&'static str, &'static str, Vec<String>) {
         || lower.contains("rate")
         || lower.contains("oil")
         || lower.contains("macro")
+        || lower.contains("dollar")
+        || lower.contains("forex")
     {
         symbols.push("MACRO".to_string());
     }
@@ -919,7 +1364,7 @@ async fn handle_ws_session(socket: WebSocket, state: AppState) {
                 }
             }
 
-            // Outbound event from NATS broadcast
+            // Outbound event from NATS or internal broadcast
             broadcast_event = broadcast_rx.recv() => {
                 match broadcast_event {
                     Ok(event) => {
@@ -928,6 +1373,13 @@ async fn handle_ws_session(socket: WebSocket, state: AppState) {
                                 let ch1 = format!("ticker:{}", ticker.instrument.as_str());
                                 let ch2 = "ticker:*".to_string();
                                 subscribed_channels.contains(&ch1) || subscribed_channels.contains(&ch2)
+                            }
+                            ServerWsEvent::FxQuote { quote } => {
+                                let ch1 = format!("ticker:{}", quote.instrument.as_str());
+                                let ch2 = "ticker:*".to_string();
+                                let ch3 = format!("quote:{}", quote.instrument.as_str());
+                                let ch4 = "quote:*".to_string();
+                                subscribed_channels.contains(&ch1) || subscribed_channels.contains(&ch2) || subscribed_channels.contains(&ch3) || subscribed_channels.contains(&ch4)
                             }
                             ServerWsEvent::Candle { candle } => {
                                 let ch1 = format!("candle:{}:{}", candle.interval.as_str(), candle.instrument.as_str());

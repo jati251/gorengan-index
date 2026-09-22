@@ -2,15 +2,18 @@
 
 import React from "react";
 import { DEFAULT_SYMBOLS } from "@gorengan/shared";
-import { MarketHeaderTicker, MarketOverviewTable, MarketStats } from "../features/markets/index";
-import { useSymbolsQuery, useMarketsQuery } from "../features/markets/index";
-import { TradingViewChart, ChartHeader } from "../features/chart/index";
-import { WatchlistSidebar } from "../features/watchlist/index";
-import { NewsFeed, SentimentGauge } from "../features/news/index";
-import { useTerminalWebSocket } from "../hooks/useTerminalWebSocket";
-import { useMarketStore } from "../stores/marketStore";
-import { Card, CardHeader, CardTitle, CardContent } from "../components/ui/card";
 import { Zap, BarChart3 } from "lucide-react";
+
+import { MarketHeaderTicker, MarketOverviewTable, MarketStats } from "@/features/markets";
+import { useSymbolsQuery, useMarketsQuery } from "@/features/markets";
+import { TradingViewChart, ChartHeader } from "@/features/chart";
+import { WatchlistSidebar } from "@/features/watchlist";
+import { NewsFeed, SentimentGauge } from "@/features/news";
+
+import { useTerminalWebSocket } from "@/hooks/useTerminalWebSocket";
+import { useMarketStore } from "@/stores/marketStore";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { TerminalFooter } from "@/components/TerminalFooter";
 
 export default function TerminalPage() {
   const { data: symbolsData } = useSymbolsQuery();
@@ -24,7 +27,6 @@ export default function TerminalPage() {
   useTerminalWebSocket(symbolIds);
 
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
-  const status = useMarketStore((s) => s.providerStatus);
 
   return (
     <main className="min-h-screen flex flex-col bg-[#070a12] text-slate-200">
@@ -95,15 +97,7 @@ export default function TerminalPage() {
       </div>
 
       {/* 3. Minimal Footer */}
-      <footer className="border-t border-slate-800 bg-[#060810] px-4 py-2 text-[11px] font-mono text-slate-400 flex items-center justify-between gap-3 select-none">
-        <span className="text-slate-500">Gorengan Terminal</span>
-        <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1.5">
-            <span className={status === "LIVE" ? "w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" : "w-1.5 h-1.5 rounded-full bg-slate-500 inline-block"} />
-            <span className="text-slate-400">{status}</span>
-          </span>
-        </div>
-      </footer>
+      <TerminalFooter />
     </main>
   );
 }

@@ -1,15 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
-import { ENV } from "../config/env";
-import { useMarketStore } from "../stores/marketStore";
-import type {
-  WebSocketClientMessage,
-  MarketTicker,
-  Candle,
-  Timeframe,
-  ProviderStatusLevel,
-} from "@gorengan/shared";
+import { ENV } from "@/config/env";
+import { useMarketStore } from "@/stores/marketStore";
+import {
+  parseTicker,
+  parseFxQuote,
+  parseCandle,
+  parseStatus,
+  type WsServerMessage,
+} from "@/services/wsMessageParser";
+import type { WebSocketClientMessage, MarketTicker, Candle } from "@gorengan/shared";
 import { formatTickerChannel, formatCandleChannel } from "@gorengan/shared";
 
 export function useTerminalWebSocket(subscribedSymbols: string[] = []) {
@@ -61,7 +62,10 @@ export function useTerminalWebSocket(subscribedSymbols: string[] = []) {
           const channels: string[] = [];
           for (const sym of currentSymbols) {
             channels.push(formatTickerChannel(sym));
-            channels.push(formatCandleChannel(sym, "1s"));
+            // Only subscribe to 1s for crypto; for FX, 1m is the base timeframe
+            if (sym.endsWith("USDT")) {
+              channels.push(formatCandleChannel(sym, "1s"));
+            }
             channels.push(formatCandleChannel(sym, "1m"));
           }
           if (currentSelected && !currentSymbols.includes(currentSelected)) {
@@ -84,76 +88,36 @@ export function useTerminalWebSocket(subscribedSymbols: string[] = []) {
 
         ws.onmessage = (event) => {
           try {
-            const raw = JSON.parse(event.data) as Record<string, unknown>;
+            const raw = JSON.parse(event.data) as WsServerMessage;
+            const store = useMarketStore.getState();
 
             switch (raw.type) {
               case "ticker": {
-                const t = (raw.ticker ?? {}) as Record<string, unknown>;
-                const symbol = String(t.instrument ?? t.symbol ?? "");
-                const ticker: MarketTicker = {
-                  symbol,
-                  price: Number(t.price ?? 0),
-                  change24h: Number(t.change_24h ?? t.change24h ?? 0),
-                  changePercent24h: Number(t.change_percent_24h ?? t.changePercent24h ?? 0),
-                  high24h: Number(t.high_24h ?? t.high24h ?? t.price ?? 0),
-                  low24h: Number(t.low_24h ?? t.low24h ?? t.price ?? 0),
-                  volume24h: Number(t.volume_24h ?? t.volume24h ?? 0),
-                  quoteVolume24h: Number(t.quote_volume_24h ?? t.quoteVolume24h ?? 0),
-                  timestamp: t.updated_at_ns
-                    ? Math.floor(Number(t.updated_at_ns) / 1_000_000)
-                    : Number(t.timestamp ?? Date.now()),
-                  provider: String(t.provider ?? "binance"),
-                };
-                useMarketStore.getState().setTicker(ticker);
+                const ticker = parseTicker((raw.ticker ?? {}) as Record<string, unknown>);
+                store.setTicker(ticker);
+                break;
+              }
+              case "fx_quote": {
+                const quote = parseFxQuote((raw.quote ?? {}) as Record<string, unknown>);
+                store.setFxQuote(quote);
                 break;
               }
               case "candle": {
-                const c = (raw.candle ?? {}) as Record<string, unknown>;
-                const symbol = String(c.instrument ?? c.symbol ?? "");
-                const timeframe = (c.interval ?? c.timeframe ?? "1s") as Timeframe;
-                const openTime = c.open_time_ns
-                  ? Math.floor(Number(c.open_time_ns) / 1_000_000)
-                  : Number(c.openTime ?? Date.now());
-                const closeTime = c.close_time_ns
-                  ? Math.floor(Number(c.close_time_ns) / 1_000_000)
-                  : Number(c.closeTime ?? Date.now());
-
-                const candle: Candle = {
-                  symbol,
-                  timeframe,
-                  openTime,
-                  closeTime,
-                  open: Number(c.open ?? 0),
-                  high: Number(c.high ?? 0),
-                  low: Number(c.low ?? 0),
-                  close: Number(c.close ?? 0),
-                  volume: Number(c.volume ?? 0),
-                  trades: Number(c.trade_count ?? c.trades ?? 0),
-                  finalized: Boolean(c.finalized),
-                  provider: String(c.provider ?? "binance"),
-                };
-                useMarketStore.getState().setCandle(candle);
+                const candle = parseCandle((raw.candle ?? {}) as Record<string, unknown>);
+                store.setCandle(candle);
                 break;
               }
               case "status": {
-                const s = raw.status as Record<string, unknown> | undefined;
-                if (typeof s === "object" && s !== null) {
-                  const statusStr = String(s.status ?? "LIVE") as ProviderStatusLevel;
-                  const lastEventAt = s.last_event_at_ns
-                    ? Math.floor(Number(s.last_event_at_ns) / 1_000_000)
-                    : Date.now();
-                  useMarketStore.getState().setProviderStatus(statusStr, lastEventAt);
-                } else if (typeof raw.status === "string") {
-                  useMarketStore
-                    .getState()
-                    .setProviderStatus(raw.status as ProviderStatusLevel, Number(raw.lastEventAt));
+                const parsed = parseStatus(raw);
+                if (parsed) {
+                  store.setProviderStatus(parsed.status, parsed.lastEventAt);
                 }
                 break;
               }
               case "snapshot": {
                 const tickers = (raw.tickers ?? {}) as Record<string, MarketTicker>;
                 const candles = (raw.candles ?? {}) as Record<string, Candle>;
-                useMarketStore.getState().setSnapshot(tickers, candles);
+                store.setSnapshot(tickers, candles);
                 break;
               }
               case "pong":
@@ -208,7 +172,9 @@ export function useTerminalWebSocket(subscribedSymbols: string[] = []) {
       const channels: string[] = [];
       for (const sym of subscribedSymbols) {
         channels.push(formatTickerChannel(sym));
-        channels.push(formatCandleChannel(sym, "1s"));
+        if (sym.endsWith("USDT")) {
+          channels.push(formatCandleChannel(sym, "1s"));
+        }
         channels.push(formatCandleChannel(sym, "1m"));
       }
       wsRef.current.send(JSON.stringify({ op: "subscribe", channels }));

@@ -4,7 +4,7 @@ import React from "react";
 import { Gauge } from "lucide-react";
 import { clsx } from "clsx";
 import { useSentimentQuery } from "../api/useSentimentQuery";
-import { SentimentSkeleton } from "../../../components/ui/skeleton";
+import { SentimentSkeleton } from "./NewsSkeletons";
 
 export function SentimentGauge({ compact = false }: { compact?: boolean }) {
   const { data: sentiment, isLoading } = useSentimentQuery();

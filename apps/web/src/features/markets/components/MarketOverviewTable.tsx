@@ -5,10 +5,11 @@ import { Star } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { clsx } from "clsx";
 import type { MarketSymbol } from "@gorengan/shared";
-import { useMarketStore } from "../../../stores/marketStore";
-import { useWatchlistStore } from "../../../stores/watchlistStore";
-import { formatPrice, formatPercent, formatVolume } from "../../../utils/formatters";
-import { Badge } from "../../../components/ui/badge";
+import { useMarketStore } from "@/stores/marketStore";
+import { useWatchlistStore } from "@/stores/watchlistStore";
+import { formatPrice, formatPercent, formatVolume } from "@/utils/formatters";
+import { formatFxPrice, isFxSymbol } from "@/features/forex";
+import { Badge } from "@/components/ui/badge";
 
 interface MarketOverviewTableProps {
   symbols: MarketSymbol[];
@@ -19,17 +20,29 @@ export function MarketOverviewTable({ symbols }: MarketOverviewTableProps) {
   const priceDirections = useMarketStore((s) => s.priceDirections);
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
   const setSelectedSymbol = useMarketStore((s) => s.setSelectedSymbol);
+  const selectedAssetClass = useMarketStore((s) => s.selectedAssetClass);
 
   const watchlist = useWatchlistStore((s) => s.watchlist);
   const toggleWatchlist = useWatchlistStore((s) => s.toggleWatchlist);
 
+  // Filter symbols based on selectedAssetClass or show all if needed
+  const displaySymbols = useMemo(() => {
+    return symbols.filter((sym) => {
+      if (selectedAssetClass === "fx") {
+        return sym.assetClass === "fx" || isFxSymbol(sym.id);
+      }
+      return sym.assetClass !== "fx" && !isFxSymbol(sym.id);
+    });
+  }, [symbols, selectedAssetClass]);
+
   // Compute table rows during render (no useEffect)
   const rows = useMemo(() => {
-    return symbols.map((sym) => {
+    return displaySymbols.map((sym) => {
       const ticker = tickers[sym.id];
       const direction = priceDirections[sym.id] || "neutral";
       const isStarred = watchlist.includes(sym.id);
       const isSelected = selectedSymbol === sym.id;
+      const isFx = sym.assetClass === "fx" || isFxSymbol(sym.id);
 
       const price = ticker?.price ?? 0;
       const high = ticker?.high24h ?? price;
@@ -44,9 +57,10 @@ export function MarketOverviewTable({ symbols }: MarketOverviewTableProps) {
         isStarred,
         isSelected,
         rangePercent,
+        isFx,
       };
     });
-  }, [symbols, tickers, priceDirections, watchlist, selectedSymbol]);
+  }, [displaySymbols, tickers, priceDirections, watchlist, selectedSymbol]);
 
   return (
     <div className="w-full overflow-x-auto no-scrollbar">
@@ -61,14 +75,28 @@ export function MarketOverviewTable({ symbols }: MarketOverviewTableProps) {
             <th className="py-2.5 px-3 text-center hidden md:table-cell">24h Range</th>
             <th className="py-2.5 px-3 text-right hidden sm:table-cell">24h High</th>
             <th className="py-2.5 px-3 text-right hidden sm:table-cell">24h Low</th>
-            <th className="py-2.5 px-3 text-right">24h Volume</th>
+            <th className="py-2.5 px-3 text-right">
+              {selectedAssetClass === "fx" ? "Spread (Pips)" : "24h Volume"}
+            </th>
             <th className="py-2.5 px-3 text-center">Source</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-800/40">
           <AnimatePresence initial={false}>
-            {rows.map(({ symbol, ticker, direction, isStarred, isSelected, rangePercent }) => {
+            {rows.map(({ symbol, ticker, direction, isStarred, isSelected, rangePercent, isFx }) => {
               const isPositive = (ticker?.changePercent24h ?? 0) >= 0;
+
+              const formattedPrice = isFx
+                ? formatFxPrice(ticker?.price, symbol.id, symbol.displayDecimals)
+                : `$${formatPrice(ticker?.price)}`;
+
+              const highFormatted = isFx
+                ? formatFxPrice(ticker?.high24h, symbol.id, symbol.displayDecimals)
+                : `$${formatPrice(ticker?.high24h)}`;
+
+              const lowFormatted = isFx
+                ? formatFxPrice(ticker?.low24h, symbol.id, symbol.displayDecimals)
+                : `$${formatPrice(ticker?.low24h)}`;
 
               return (
                 <motion.tr
@@ -78,7 +106,9 @@ export function MarketOverviewTable({ symbols }: MarketOverviewTableProps) {
                   className={clsx(
                     "transition-colors duration-150 cursor-pointer group select-none",
                     isSelected
-                      ? "bg-emerald-950/25 border-l-2 border-emerald-400"
+                      ? isFx
+                        ? "bg-blue-950/25 border-l-2 border-blue-400"
+                        : "bg-emerald-950/25 border-l-2 border-emerald-400"
                       : "hover:bg-slate-800/30"
                   )}
                 >
@@ -109,7 +139,9 @@ export function MarketOverviewTable({ symbols }: MarketOverviewTableProps) {
                         className={clsx(
                           "font-semibold text-xs sm:text-sm tracking-tight",
                           isSelected
-                            ? "text-emerald-400"
+                            ? isFx
+                              ? "text-blue-400"
+                              : "text-emerald-400"
                             : "text-slate-100 group-hover:text-white"
                         )}
                       >
@@ -127,9 +159,13 @@ export function MarketOverviewTable({ symbols }: MarketOverviewTableProps) {
                       <Badge variant="gold" className="text-[10px] py-0 px-1.5 font-mono">
                         Tokenized Gold
                       </Badge>
+                    ) : isFx ? (
+                      <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-mono text-blue-400 border-blue-800/50 bg-blue-950/40">
+                        FOREX
+                      </Badge>
                     ) : (
-                      <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-mono">
-                        {symbol.assetClass}
+                      <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-mono text-emerald-400 border-emerald-800/50 bg-emerald-950/40">
+                        CRYPTO
                       </Badge>
                     )}
                   </td>
@@ -148,7 +184,7 @@ export function MarketOverviewTable({ symbols }: MarketOverviewTableProps) {
                         direction === "neutral" && "text-slate-100"
                       )}
                     >
-                      ${formatPrice(ticker?.price)}
+                      {formattedPrice}
                     </motion.span>
                   </td>
 
@@ -174,25 +210,31 @@ export function MarketOverviewTable({ symbols }: MarketOverviewTableProps) {
                         />
                       </div>
                       <div className="flex justify-between text-[9px] text-slate-500 font-mono">
-                        <span>L: ${formatPrice(ticker?.low24h, 0, 1)}</span>
-                        <span>H: ${formatPrice(ticker?.high24h, 0, 1)}</span>
+                        <span>L: {lowFormatted}</span>
+                        <span>H: {highFormatted}</span>
                       </div>
                     </div>
                   </td>
 
                   {/* 24h High */}
                   <td className="py-3 px-3 text-right text-slate-400 tabular-nums hidden sm:table-cell">
-                    ${formatPrice(ticker?.high24h)}
+                    {highFormatted}
                   </td>
 
                   {/* 24h Low */}
                   <td className="py-3 px-3 text-right text-slate-400 tabular-nums hidden sm:table-cell">
-                    ${formatPrice(ticker?.low24h)}
+                    {lowFormatted}
                   </td>
 
-                  {/* Volume */}
+                  {/* Volume / Spread for FX */}
                   <td className="py-3 px-3 text-right text-slate-300 tabular-nums">
-                    {formatVolume(ticker?.volume24h)} {symbol.base}
+                    {isFx ? (
+                      <span className="text-amber-400 font-semibold">
+                        {ticker?.spreadPips ? `${ticker.spreadPips} pip` : "0.8 pip"}
+                      </span>
+                    ) : (
+                      `${formatVolume(ticker?.volume24h)} ${symbol.base}`
+                    )}
                   </td>
 
                   {/* Provider Source */}

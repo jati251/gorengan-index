@@ -1,3 +1,5 @@
+import type { CandlePriceBasis } from "./quote.js";
+
 export type Timeframe =
   | "1s"
   | "5s"
@@ -25,6 +27,10 @@ export interface Candle {
   trades?: number;
   finalized: boolean;
   provider?: string;
+  spreadClose?: number;
+  priceBasis?: CandlePriceBasis;
+  tickCount?: number;
+  synthetic?: boolean;
 }
 
 export const TIMEFRAME_MS: Record<Timeframe, number> = {

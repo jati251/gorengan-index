@@ -5,9 +5,10 @@ import { Search, Star, TrendingUp, TrendingDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { clsx } from "clsx";
 import type { MarketSymbol } from "@gorengan/shared";
-import { useMarketStore } from "../../../stores/marketStore";
-import { useWatchlistStore } from "../../../stores/watchlistStore";
-import { formatPrice, formatPercent } from "../../../utils/formatters";
+import { useMarketStore } from "@/stores/marketStore";
+import { useWatchlistStore } from "@/stores/watchlistStore";
+import { formatPrice, formatPercent } from "@/utils/formatters";
+import { formatFxPrice, isFxSymbol } from "@/features/forex";
 
 interface WatchlistSidebarProps {
   symbols: MarketSymbol[];
@@ -21,41 +22,99 @@ export function WatchlistSidebar({ symbols }: WatchlistSidebarProps) {
   const priceDirections = useMarketStore((s) => s.priceDirections);
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
   const setSelectedSymbol = useMarketStore((s) => s.setSelectedSymbol);
+  const selectedAssetClass = useMarketStore((s) => s.selectedAssetClass);
+  const setSelectedAssetClass = useMarketStore((s) => s.setSelectedAssetClass);
 
   const watchlist = useWatchlistStore((s) => s.watchlist);
   const toggleWatchlist = useWatchlistStore((s) => s.toggleWatchlist);
 
-  // Compute filtered items directly during render (no useEffect)
+  // Filter symbols by selectedAssetClass, tab, and search query
   const filteredSymbols = useMemo(() => {
     return symbols.filter((sym) => {
+      // 1. Asset class filter
+      const matchesAssetClass =
+        selectedAssetClass === "fx"
+          ? sym.assetClass === "fx" || isFxSymbol(sym.id)
+          : sym.assetClass !== "fx" && !isFxSymbol(sym.id);
+
+      if (!matchesAssetClass) return false;
+
+      // 2. Search query filter
       const matchesSearch =
         sym.id.toLowerCase().includes(search.toLowerCase()) ||
         sym.name.toLowerCase().includes(search.toLowerCase());
 
       if (!matchesSearch) return false;
+
+      // 3. Tab filter
       if (tab === "favorites") {
         return watchlist.includes(sym.id);
       }
       return true;
     });
-  }, [symbols, search, tab, watchlist]);
+  }, [symbols, search, tab, watchlist, selectedAssetClass]);
 
   return (
     <div className="flex flex-col h-full bg-[#080c16] border-r border-slate-800/90 font-mono select-none">
-      {/* Search & Tabs */}
+      {/* 1. Asset Class Switcher (CRYPTO | FOREX) */}
       <div className="p-3 border-b border-slate-800/80 space-y-2.5">
+        <div className="grid grid-cols-2 gap-1 bg-[#04060b] p-0.5 rounded-lg border border-slate-800 text-xs">
+          <button
+            onClick={() => setSelectedAssetClass("crypto")}
+            className={clsx(
+              "relative py-1.5 rounded-md transition-colors cursor-pointer flex items-center justify-center gap-1.5 font-bold tracking-wider",
+              selectedAssetClass === "crypto"
+                ? "text-emerald-400"
+                : "text-slate-500 hover:text-slate-300"
+            )}
+          >
+            {selectedAssetClass === "crypto" && (
+              <motion.div
+                layoutId="activeAssetClassPill"
+                className="absolute inset-0 bg-emerald-950/40 rounded-md border border-emerald-500/50 shadow-xs"
+                transition={{ type: "spring", stiffness: 450, damping: 35 }}
+              />
+            )}
+            <span className="relative z-10 flex items-center gap-1">
+              ⚡ CRYPTO
+            </span>
+          </button>
+
+          <button
+            onClick={() => setSelectedAssetClass("fx")}
+            className={clsx(
+              "relative py-1.5 rounded-md transition-colors cursor-pointer flex items-center justify-center gap-1.5 font-bold tracking-wider",
+              selectedAssetClass === "fx"
+                ? "text-blue-400"
+                : "text-slate-500 hover:text-slate-300"
+            )}
+          >
+            {selectedAssetClass === "fx" && (
+              <motion.div
+                layoutId="activeAssetClassPill"
+                className="absolute inset-0 bg-blue-950/40 rounded-md border border-blue-500/50 shadow-xs"
+                transition={{ type: "spring", stiffness: 450, damping: 35 }}
+              />
+            )}
+            <span className="relative z-10 flex items-center gap-1">
+              💱 FOREX
+            </span>
+          </button>
+        </div>
+
+        {/* Search Input */}
         <div className="relative">
           <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-500" />
           <input
             type="text"
-            placeholder="Search pair or asset..."
+            placeholder={selectedAssetClass === "fx" ? "Search FX pair (e.g. EUR-USD)..." : "Search crypto pair..."}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full bg-[#04060b] border border-slate-800 rounded px-2.5 py-1.5 pl-8 text-xs text-slate-200 placeholder-slate-500 focus:outline-hidden focus:border-emerald-500/50 transition-colors"
           />
         </div>
 
-        {/* Animated Sliding Tabs */}
+        {/* Watchlist & All Tabs */}
         <div className="grid grid-cols-2 gap-1 bg-[#04060b] p-0.5 rounded-md border border-slate-800/80 text-[11px]">
           <button
             onClick={() => setTab("favorites")}
@@ -73,7 +132,7 @@ export function WatchlistSidebar({ symbols }: WatchlistSidebarProps) {
             )}
             <span className="relative z-10 flex items-center gap-1.5">
               <Star className="w-3 h-3 fill-current text-yellow-400" />
-              Watchlist ({watchlist.length})
+              Watchlist
             </span>
           </button>
 
@@ -91,7 +150,7 @@ export function WatchlistSidebar({ symbols }: WatchlistSidebarProps) {
                 transition={{ type: "spring", stiffness: 450, damping: 35 }}
               />
             )}
-            <span className="relative z-10">All Pairs ({symbols.length})</span>
+            <span className="relative z-10">All Pairs ({filteredSymbols.length})</span>
           </button>
         </div>
       </div>
@@ -100,7 +159,7 @@ export function WatchlistSidebar({ symbols }: WatchlistSidebarProps) {
       <div className="flex-1 overflow-y-auto divide-y divide-slate-800/40 no-scrollbar">
         {filteredSymbols.length === 0 ? (
           <div className="p-8 text-center text-xs text-slate-500 italic">
-            No instruments found.
+            No {selectedAssetClass === "fx" ? "Forex pairs" : "Crypto pairs"} found.
           </div>
         ) : (
           <AnimatePresence initial={false}>
@@ -110,6 +169,11 @@ export function WatchlistSidebar({ symbols }: WatchlistSidebarProps) {
               const isSelected = selectedSymbol === sym.id;
               const isStarred = watchlist.includes(sym.id);
               const isPositive = (ticker?.changePercent24h ?? 0) >= 0;
+              const isFx = sym.assetClass === "fx" || isFxSymbol(sym.id);
+
+              const formattedPrice = isFx
+                ? formatFxPrice(ticker?.price, sym.id, sym.displayDecimals)
+                : `$${formatPrice(ticker?.price)}`;
 
               return (
                 <motion.div
@@ -122,7 +186,9 @@ export function WatchlistSidebar({ symbols }: WatchlistSidebarProps) {
                   className={clsx(
                     "p-3 flex items-center justify-between cursor-pointer transition-colors duration-150 group",
                     isSelected
-                      ? "bg-emerald-950/25 border-l-2 border-emerald-400"
+                      ? isFx
+                        ? "bg-blue-950/25 border-l-2 border-blue-400"
+                        : "bg-emerald-950/25 border-l-2 border-emerald-400"
                       : "hover:bg-slate-800/35 border-l-2 border-transparent"
                   )}
                 >
@@ -151,7 +217,9 @@ export function WatchlistSidebar({ symbols }: WatchlistSidebarProps) {
                           className={clsx(
                             "font-semibold text-xs",
                             isSelected
-                              ? "text-emerald-400"
+                              ? isFx
+                                ? "text-blue-400"
+                                : "text-emerald-400"
                               : "text-slate-200 group-hover:text-white"
                           )}
                         >
@@ -160,6 +228,11 @@ export function WatchlistSidebar({ symbols }: WatchlistSidebarProps) {
                         {sym.isTokenizedMetal && (
                           <span className="text-[9px] px-1 py-0.2 rounded bg-yellow-950/70 text-yellow-400 border border-yellow-800/40">
                             GOLD
+                          </span>
+                        )}
+                        {isFx && (
+                          <span className="text-[9px] px-1 py-0.2 rounded bg-blue-950/60 text-blue-400 border border-blue-800/40">
+                            FX
                           </span>
                         )}
                       </div>
@@ -182,7 +255,7 @@ export function WatchlistSidebar({ symbols }: WatchlistSidebarProps) {
                         direction === "neutral" && "text-slate-200"
                       )}
                     >
-                      ${formatPrice(ticker?.price)}
+                      {formattedPrice}
                     </motion.div>
 
                     <div

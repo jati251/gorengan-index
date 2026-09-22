@@ -1,18 +1,24 @@
+import type { CandlePriceBasis, MarketSessionState } from "./quote.js";
+
 export type AssetClass = "crypto" | "metal" | "fx";
 
 export interface MarketSymbol {
-  id: string; // Canonical identifier e.g. "BTC-USDT"
-  base: string; // "BTC"
-  quote: string; // "USDT"
+  id: string; // Canonical identifier e.g. "BTC-USDT", "EUR-USD"
+  base: string; // "BTC", "EUR"
+  quote: string; // "USDT", "USD"
   assetClass: AssetClass;
-  provider: string; // "binance"
-  providerSymbol: string; // "BTCUSDT"
-  name: string; // "Bitcoin"
+  provider: string; // "binance", "yahoo", "mt5"
+  providerSymbol: string; // "BTCUSDT", "EURUSD=X"
+  name: string; // "Bitcoin", "Euro / US Dollar"
   enabled: boolean;
   isTokenizedMetal?: boolean; // True for PAXG/XAUT (tokenized gold per architecture specification)
+  pipSize?: number; // e.g. 0.0001 for EUR/USD, 0.01 for USD/JPY
+  displayDecimals?: number; // e.g. 5 for EUR/USD, 3 for USD/JPY, 2 for USD/IDR
+  candlePriceBasis?: CandlePriceBasis; // "mid" for FX, "trade" for crypto
+  sessionState?: MarketSessionState;
 }
 
-export const DEFAULT_SYMBOLS: MarketSymbol[] = [
+export const DEFAULT_CRYPTO_SYMBOLS: MarketSymbol[] = [
   {
     id: "BTC-USDT",
     base: "BTC",
@@ -22,6 +28,8 @@ export const DEFAULT_SYMBOLS: MarketSymbol[] = [
     providerSymbol: "BTCUSDT",
     name: "Bitcoin",
     enabled: true,
+    displayDecimals: 2,
+    candlePriceBasis: "trade",
   },
   {
     id: "ETH-USDT",
@@ -32,6 +40,8 @@ export const DEFAULT_SYMBOLS: MarketSymbol[] = [
     providerSymbol: "ETHUSDT",
     name: "Ethereum",
     enabled: true,
+    displayDecimals: 2,
+    candlePriceBasis: "trade",
   },
   {
     id: "SOL-USDT",
@@ -42,6 +52,8 @@ export const DEFAULT_SYMBOLS: MarketSymbol[] = [
     providerSymbol: "SOLUSDT",
     name: "Solana",
     enabled: true,
+    displayDecimals: 2,
+    candlePriceBasis: "trade",
   },
   {
     id: "BNB-USDT",
@@ -52,6 +64,8 @@ export const DEFAULT_SYMBOLS: MarketSymbol[] = [
     providerSymbol: "BNBUSDT",
     name: "BNB",
     enabled: true,
+    displayDecimals: 2,
+    candlePriceBasis: "trade",
   },
   {
     id: "XRP-USDT",
@@ -62,6 +76,8 @@ export const DEFAULT_SYMBOLS: MarketSymbol[] = [
     providerSymbol: "XRPUSDT",
     name: "XRP",
     enabled: true,
+    displayDecimals: 4,
+    candlePriceBasis: "trade",
   },
   {
     id: "PAXG-USDT",
@@ -73,5 +89,145 @@ export const DEFAULT_SYMBOLS: MarketSymbol[] = [
     name: "Paxos Gold (Tokenized Gold)",
     enabled: true,
     isTokenizedMetal: true,
+    displayDecimals: 2,
+    candlePriceBasis: "trade",
   },
+];
+
+export const DEFAULT_FX_SYMBOLS: MarketSymbol[] = [
+  {
+    id: "EUR-USD",
+    base: "EUR",
+    quote: "USD",
+    assetClass: "fx",
+    provider: "interbank",
+    providerSymbol: "EURUSD=X",
+    name: "Euro / US Dollar",
+    enabled: true,
+    pipSize: 0.0001,
+    displayDecimals: 5,
+    candlePriceBasis: "mid",
+  },
+  {
+    id: "GBP-USD",
+    base: "GBP",
+    quote: "USD",
+    assetClass: "fx",
+    provider: "interbank",
+    providerSymbol: "GBPUSD=X",
+    name: "British Pound / US Dollar",
+    enabled: true,
+    pipSize: 0.0001,
+    displayDecimals: 5,
+    candlePriceBasis: "mid",
+  },
+  {
+    id: "USD-JPY",
+    base: "USD",
+    quote: "JPY",
+    assetClass: "fx",
+    provider: "interbank",
+    providerSymbol: "USDJPY=X",
+    name: "US Dollar / Japanese Yen",
+    enabled: true,
+    pipSize: 0.01,
+    displayDecimals: 3,
+    candlePriceBasis: "mid",
+  },
+  {
+    id: "AUD-USD",
+    base: "AUD",
+    quote: "USD",
+    assetClass: "fx",
+    provider: "interbank",
+    providerSymbol: "AUDUSD=X",
+    name: "Australian Dollar / US Dollar",
+    enabled: true,
+    pipSize: 0.0001,
+    displayDecimals: 5,
+    candlePriceBasis: "mid",
+  },
+  {
+    id: "USD-CAD",
+    base: "USD",
+    quote: "CAD",
+    assetClass: "fx",
+    provider: "interbank",
+    providerSymbol: "USDCAD=X",
+    name: "US Dollar / Canadian Dollar",
+    enabled: true,
+    pipSize: 0.0001,
+    displayDecimals: 5,
+    candlePriceBasis: "mid",
+  },
+  {
+    id: "USD-CHF",
+    base: "USD",
+    quote: "CHF",
+    assetClass: "fx",
+    provider: "interbank",
+    providerSymbol: "USDCHF=X",
+    name: "US Dollar / Swiss Franc",
+    enabled: true,
+    pipSize: 0.0001,
+    displayDecimals: 5,
+    candlePriceBasis: "mid",
+  },
+  {
+    id: "NZD-USD",
+    base: "NZD",
+    quote: "USD",
+    assetClass: "fx",
+    provider: "interbank",
+    providerSymbol: "NZDUSD=X",
+    name: "New Zealand Dollar / US Dollar",
+    enabled: true,
+    pipSize: 0.0001,
+    displayDecimals: 5,
+    candlePriceBasis: "mid",
+  },
+  {
+    id: "EUR-JPY",
+    base: "EUR",
+    quote: "JPY",
+    assetClass: "fx",
+    provider: "interbank",
+    providerSymbol: "EURJPY=X",
+    name: "Euro / Japanese Yen",
+    enabled: true,
+    pipSize: 0.01,
+    displayDecimals: 3,
+    candlePriceBasis: "mid",
+  },
+  {
+    id: "GBP-JPY",
+    base: "GBP",
+    quote: "JPY",
+    assetClass: "fx",
+    provider: "interbank",
+    providerSymbol: "GBPJPY=X",
+    name: "British Pound / Japanese Yen",
+    enabled: true,
+    pipSize: 0.01,
+    displayDecimals: 3,
+    candlePriceBasis: "mid",
+  },
+  {
+    id: "USD-IDR",
+    base: "USD",
+    quote: "IDR",
+    assetClass: "fx",
+    provider: "interbank",
+    providerSymbol: "USDIDR=X",
+    name: "US Dollar / Indonesian Rupiah",
+    enabled: true,
+    pipSize: 1.0,
+    displayDecimals: 2,
+    candlePriceBasis: "mid",
+  },
+];
+
+export const DEFAULT_SYMBOLS: MarketSymbol[] = [
+  ...DEFAULT_CRYPTO_SYMBOLS,
+  ...DEFAULT_FX_SYMBOLS,
 ];

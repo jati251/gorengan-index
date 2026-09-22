@@ -1,4 +1,4 @@
-use market_domain::{Candle, ProviderId, TickerState, TradeEvent};
+use market_domain::{Candle, ProviderId, QuoteTick, TickerState, TradeEvent};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -14,6 +14,7 @@ pub struct ProviderStatusEvent {
 #[serde(tag = "type", content = "payload", rename_all = "snake_case")]
 pub enum MarketMessage {
     Trade(TradeEvent),
+    Quote(QuoteTick),
     Ticker(TickerState),
     Candle(Candle),
     Status(ProviderStatusEvent),
@@ -31,6 +32,7 @@ pub enum ClientWsCommand {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ServerWsEvent {
     Ticker { ticker: TickerState },
+    FxQuote { quote: QuoteTick },
     Candle { candle: Candle },
     Status { status: ProviderStatusEvent },
     Pong { ts: i64 },

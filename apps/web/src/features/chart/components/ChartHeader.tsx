@@ -1,40 +1,70 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import { motion } from "framer-motion";
 import { clsx } from "clsx";
-import { useMarketStore } from "../../../stores/marketStore";
+import { useMarketStore } from "@/stores/marketStore";
 import {
   formatPrice,
   formatPercent,
   formatVolume,
   getDeviceTimezoneOffset,
-} from "../../../utils/formatters";
+} from "@/utils/formatters";
+import { formatFxPrice, formatPips, isFxSymbol, getFxMetadata } from "@/features/forex";
 import { TimeframeSelector } from "./TimeframeSelector";
 
 export function ChartHeader() {
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
   const ticker = useMarketStore((s) => s.tickers[s.selectedSymbol]);
   const direction = useMarketStore((s) => s.priceDirections[s.selectedSymbol]);
+  const selectedAssetClass = useMarketStore((s) => s.selectedAssetClass);
 
   const showEma20 = useMarketStore((s) => s.showEma20);
   const showEma50 = useMarketStore((s) => s.showEma50);
   const toggleEma20 = useMarketStore((s) => s.toggleEma20);
   const toggleEma50 = useMarketStore((s) => s.toggleEma50);
 
+  const isFx = selectedAssetClass === "fx" || isFxSymbol(selectedSymbol);
+  const fxMeta = useMemo(() => getFxMetadata(selectedSymbol), [selectedSymbol]);
+
   const isPositive = (ticker?.changePercent24h ?? 0) >= 0;
+
+  // Format price appropriately depending on asset class
+  const formattedPrice = isFx
+    ? formatFxPrice(ticker?.price, selectedSymbol, fxMeta?.displayDecimals)
+    : `$${formatPrice(ticker?.price)}`;
+
+  const pipSize = fxMeta?.pipSize ?? 0.0001;
+  const spreadDisplay = ticker?.spreadPips != null
+    ? `${ticker.spreadPips} pip`
+    : formatPips(ticker?.spread, pipSize);
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-[#080c16] border-b border-slate-800/90 font-mono select-none">
       <div className="flex flex-wrap items-center gap-4">
-        {/* Symbol badge */}
-        <div className="flex items-center gap-2">
+        {/* Symbol badge & provenance */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
           <span className="text-base font-bold text-slate-100 tracking-tight">
             {selectedSymbol}
           </span>
-          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-800/80 text-emerald-400 border border-slate-700/50">
-            SPOT
-          </span>
+
+          {isFx ? (
+            <>
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-950/70 text-blue-400 border border-blue-800/50">
+                FOREX
+              </span>
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-800/80 text-cyan-400 border border-slate-700/50">
+                MID
+              </span>
+              <span className="hidden sm:inline-flex text-[9px] font-medium px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800">
+                {fxMeta?.venueLabel ?? ticker?.provider ?? "Interbank"}
+              </span>
+            </>
+          ) : (
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-800/80 text-emerald-400 border border-slate-700/50">
+              SPOT
+            </span>
+          )}
         </div>
 
         {/* Animated Live Price */}
@@ -51,7 +81,7 @@ export function ChartHeader() {
               (!direction || direction === "neutral") && "text-slate-100"
             )}
           >
-            ${formatPrice(ticker?.price)}
+            {formattedPrice}
           </motion.span>
 
           <span
@@ -66,27 +96,56 @@ export function ChartHeader() {
           </span>
         </div>
 
-        {/* 24h Stats */}
-        <div className="hidden xl:flex items-center gap-4 text-xs text-slate-400 border-l border-slate-800/80 pl-4">
-          <div>
-            <span className="text-slate-500">24h High: </span>
-            <span className="text-slate-200 font-medium tabular-nums">
-              ${formatPrice(ticker?.high24h)}
-            </span>
+        {/* Dynamic Asset-Specific Stats Header */}
+        {isFx ? (
+          <div className="hidden xl:flex items-center gap-4 text-xs text-slate-400 border-l border-slate-800/80 pl-4">
+            <div>
+              <span className="text-slate-500">BID: </span>
+              <span className="text-slate-200 font-medium tabular-nums">
+                {formatFxPrice(ticker?.bid, selectedSymbol, fxMeta?.displayDecimals)}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500">ASK: </span>
+              <span className="text-slate-200 font-medium tabular-nums">
+                {formatFxPrice(ticker?.ask, selectedSymbol, fxMeta?.displayDecimals)}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500">SPREAD: </span>
+              <span className="text-amber-400 font-semibold tabular-nums">
+                {spreadDisplay}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 pl-1">
+              <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-[10px] text-emerald-400 uppercase font-bold tracking-wider">
+                {ticker?.sessionState ?? "LIVE"}
+              </span>
+            </div>
           </div>
-          <div>
-            <span className="text-slate-500">24h Low: </span>
-            <span className="text-slate-200 font-medium tabular-nums">
-              ${formatPrice(ticker?.low24h)}
-            </span>
+        ) : (
+          <div className="hidden xl:flex items-center gap-4 text-xs text-slate-400 border-l border-slate-800/80 pl-4">
+            <div>
+              <span className="text-slate-500">24h High: </span>
+              <span className="text-slate-200 font-medium tabular-nums">
+                ${formatPrice(ticker?.high24h)}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500">24h Low: </span>
+              <span className="text-slate-200 font-medium tabular-nums">
+                ${formatPrice(ticker?.low24h)}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500">24h Vol: </span>
+              <span className="text-slate-200 font-medium tabular-nums">
+                {formatVolume(ticker?.volume24h)}
+              </span>
+            </div>
           </div>
-          <div>
-            <span className="text-slate-500">24h Vol: </span>
-            <span className="text-slate-200 font-medium tabular-nums">
-              {formatVolume(ticker?.volume24h)}
-            </span>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Controls: Indicators + Resolution Selector + Timezone Pill */}

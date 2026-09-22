@@ -28,6 +28,16 @@ impl NatsSubjects {
         "market.ticker.*.*"
     }
 
+    /// e.g. "market.fx.quote.interbank.EUR-USD"
+    pub fn fx_quote(provider: &ProviderId, instrument: &InstrumentId) -> String {
+        format!("market.fx.quote.{}.{}", provider.as_str(), instrument.as_str())
+    }
+
+    /// Pattern to subscribe to all FX quotes: "market.fx.quote.*.*"
+    pub fn all_fx_quotes() -> &'static str {
+        "market.fx.quote.*.*"
+    }
+
     /// e.g. "market.candle.1s.BTC-USDT"
     pub fn candle(interval: Interval, instrument: &InstrumentId) -> String {
         format!("market.candle.{}.{}", interval.as_str(), instrument.as_str())

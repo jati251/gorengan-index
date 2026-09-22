@@ -1,10 +1,10 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import { motion } from "framer-motion";
 import { clsx } from "clsx";
 import type { Timeframe } from "@gorengan/shared";
-import { useMarketStore } from "../../../stores/marketStore";
+import { useMarketStore } from "@/stores/marketStore";
 
 const TIMEFRAMES: { label: string; value: Timeframe }[] = [
   { label: "1s", value: "1s" },
@@ -21,10 +21,22 @@ const TIMEFRAMES: { label: string; value: Timeframe }[] = [
 export function TimeframeSelector() {
   const selectedTimeframe = useMarketStore((s) => s.selectedTimeframe);
   const setSelectedTimeframe = useMarketStore((s) => s.setSelectedTimeframe);
+  const selectedAssetClass = useMarketStore((s) => s.selectedAssetClass);
+  const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
+
+  const isFx = selectedAssetClass === "fx" || !selectedSymbol.endsWith("USDT");
+
+  const availableTimeframes = useMemo(() => {
+    if (isFx) {
+      // Per user instruction: 1m is enough for Forex, hide sub-minute resolutions
+      return TIMEFRAMES.filter((tf) => !["1s", "5s", "15s"].includes(tf.value));
+    }
+    return TIMEFRAMES;
+  }, [isFx]);
 
   return (
     <div className="flex items-center gap-0.5 bg-[#060910] p-1 rounded-md border border-slate-800/80 shadow-inner">
-      {TIMEFRAMES.map((tf) => {
+      {availableTimeframes.map((tf) => {
         const isSelected = selectedTimeframe === tf.value;
         const isSubMinute = ["1s", "5s", "15s"].includes(tf.value);
 

@@ -1,3 +1,5 @@
+use rust_decimal::Decimal;
+use rust_decimal_macros::dec;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -72,10 +74,22 @@ pub struct Instrument {
     pub enabled: bool,
     #[serde(default)]
     pub is_tokenized_metal: bool,
+    #[serde(default)]
+    pub pip_size: Option<Decimal>,
+    #[serde(default)]
+    pub display_decimals: Option<u32>,
+    #[serde(default)]
+    pub candle_price_basis: Option<String>,
 }
 
 impl Instrument {
     pub fn default_universe() -> Vec<Self> {
+        let mut universe = Self::default_crypto_universe();
+        universe.extend(Self::default_fx_universe());
+        universe
+    }
+
+    pub fn default_crypto_universe() -> Vec<Self> {
         vec![
             Self {
                 id: InstrumentId::new("BTC-USDT"),
@@ -88,6 +102,9 @@ impl Instrument {
                 quantity_scale: 5,
                 enabled: true,
                 is_tokenized_metal: false,
+                pip_size: None,
+                display_decimals: Some(2),
+                candle_price_basis: Some("trade".into()),
             },
             Self {
                 id: InstrumentId::new("ETH-USDT"),
@@ -100,6 +117,9 @@ impl Instrument {
                 quantity_scale: 4,
                 enabled: true,
                 is_tokenized_metal: false,
+                pip_size: None,
+                display_decimals: Some(2),
+                candle_price_basis: Some("trade".into()),
             },
             Self {
                 id: InstrumentId::new("SOL-USDT"),
@@ -112,6 +132,9 @@ impl Instrument {
                 quantity_scale: 3,
                 enabled: true,
                 is_tokenized_metal: false,
+                pip_size: None,
+                display_decimals: Some(2),
+                candle_price_basis: Some("trade".into()),
             },
             Self {
                 id: InstrumentId::new("BNB-USDT"),
@@ -124,6 +147,9 @@ impl Instrument {
                 quantity_scale: 3,
                 enabled: true,
                 is_tokenized_metal: false,
+                pip_size: None,
+                display_decimals: Some(2),
+                candle_price_basis: Some("trade".into()),
             },
             Self {
                 id: InstrumentId::new("XRP-USDT"),
@@ -136,6 +162,9 @@ impl Instrument {
                 quantity_scale: 1,
                 enabled: true,
                 is_tokenized_metal: false,
+                pip_size: None,
+                display_decimals: Some(4),
+                candle_price_basis: Some("trade".into()),
             },
             Self {
                 id: InstrumentId::new("PAXG-USDT"),
@@ -148,6 +177,164 @@ impl Instrument {
                 quantity_scale: 4,
                 enabled: true,
                 is_tokenized_metal: true,
+                pip_size: None,
+                display_decimals: Some(2),
+                candle_price_basis: Some("trade".into()),
+            },
+        ]
+    }
+
+    pub fn default_fx_universe() -> Vec<Self> {
+        vec![
+            Self {
+                id: InstrumentId::new("EUR-USD"),
+                base: "EUR".into(),
+                quote: "USD".into(),
+                asset_class: AssetClass::Fx,
+                provider: ProviderId::new("interbank"),
+                provider_symbol: "EURUSD=X".into(),
+                price_scale: 5,
+                quantity_scale: 2,
+                enabled: true,
+                is_tokenized_metal: false,
+                pip_size: Some(dec!(0.0001)),
+                display_decimals: Some(5),
+                candle_price_basis: Some("mid".into()),
+            },
+            Self {
+                id: InstrumentId::new("GBP-USD"),
+                base: "GBP".into(),
+                quote: "USD".into(),
+                asset_class: AssetClass::Fx,
+                provider: ProviderId::new("interbank"),
+                provider_symbol: "GBPUSD=X".into(),
+                price_scale: 5,
+                quantity_scale: 2,
+                enabled: true,
+                is_tokenized_metal: false,
+                pip_size: Some(dec!(0.0001)),
+                display_decimals: Some(5),
+                candle_price_basis: Some("mid".into()),
+            },
+            Self {
+                id: InstrumentId::new("USD-JPY"),
+                base: "USD".into(),
+                quote: "JPY".into(),
+                asset_class: AssetClass::Fx,
+                provider: ProviderId::new("interbank"),
+                provider_symbol: "USDJPY=X".into(),
+                price_scale: 3,
+                quantity_scale: 2,
+                enabled: true,
+                is_tokenized_metal: false,
+                pip_size: Some(dec!(0.01)),
+                display_decimals: Some(3),
+                candle_price_basis: Some("mid".into()),
+            },
+            Self {
+                id: InstrumentId::new("AUD-USD"),
+                base: "AUD".into(),
+                quote: "USD".into(),
+                asset_class: AssetClass::Fx,
+                provider: ProviderId::new("interbank"),
+                provider_symbol: "AUDUSD=X".into(),
+                price_scale: 5,
+                quantity_scale: 2,
+                enabled: true,
+                is_tokenized_metal: false,
+                pip_size: Some(dec!(0.0001)),
+                display_decimals: Some(5),
+                candle_price_basis: Some("mid".into()),
+            },
+            Self {
+                id: InstrumentId::new("USD-CAD"),
+                base: "USD".into(),
+                quote: "CAD".into(),
+                asset_class: AssetClass::Fx,
+                provider: ProviderId::new("interbank"),
+                provider_symbol: "USDCAD=X".into(),
+                price_scale: 5,
+                quantity_scale: 2,
+                enabled: true,
+                is_tokenized_metal: false,
+                pip_size: Some(dec!(0.0001)),
+                display_decimals: Some(5),
+                candle_price_basis: Some("mid".into()),
+            },
+            Self {
+                id: InstrumentId::new("USD-CHF"),
+                base: "USD".into(),
+                quote: "CHF".into(),
+                asset_class: AssetClass::Fx,
+                provider: ProviderId::new("interbank"),
+                provider_symbol: "USDCHF=X".into(),
+                price_scale: 5,
+                quantity_scale: 2,
+                enabled: true,
+                is_tokenized_metal: false,
+                pip_size: Some(dec!(0.0001)),
+                display_decimals: Some(5),
+                candle_price_basis: Some("mid".into()),
+            },
+            Self {
+                id: InstrumentId::new("NZD-USD"),
+                base: "NZD".into(),
+                quote: "USD".into(),
+                asset_class: AssetClass::Fx,
+                provider: ProviderId::new("interbank"),
+                provider_symbol: "NZDUSD=X".into(),
+                price_scale: 5,
+                quantity_scale: 2,
+                enabled: true,
+                is_tokenized_metal: false,
+                pip_size: Some(dec!(0.0001)),
+                display_decimals: Some(5),
+                candle_price_basis: Some("mid".into()),
+            },
+            Self {
+                id: InstrumentId::new("EUR-JPY"),
+                base: "EUR".into(),
+                quote: "JPY".into(),
+                asset_class: AssetClass::Fx,
+                provider: ProviderId::new("interbank"),
+                provider_symbol: "EURJPY=X".into(),
+                price_scale: 3,
+                quantity_scale: 2,
+                enabled: true,
+                is_tokenized_metal: false,
+                pip_size: Some(dec!(0.01)),
+                display_decimals: Some(3),
+                candle_price_basis: Some("mid".into()),
+            },
+            Self {
+                id: InstrumentId::new("GBP-JPY"),
+                base: "GBP".into(),
+                quote: "JPY".into(),
+                asset_class: AssetClass::Fx,
+                provider: ProviderId::new("interbank"),
+                provider_symbol: "GBPJPY=X".into(),
+                price_scale: 3,
+                quantity_scale: 2,
+                enabled: true,
+                is_tokenized_metal: false,
+                pip_size: Some(dec!(0.01)),
+                display_decimals: Some(3),
+                candle_price_basis: Some("mid".into()),
+            },
+            Self {
+                id: InstrumentId::new("USD-IDR"),
+                base: "USD".into(),
+                quote: "IDR".into(),
+                asset_class: AssetClass::Fx,
+                provider: ProviderId::new("interbank"),
+                provider_symbol: "USDIDR=X".into(),
+                price_scale: 2,
+                quantity_scale: 0,
+                enabled: true,
+                is_tokenized_metal: false,
+                pip_size: Some(dec!(1.0)),
+                display_decimals: Some(2),
+                candle_price_basis: Some("mid".into()),
             },
         ]
     }

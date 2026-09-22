@@ -1,11 +1,12 @@
 import type { Candle, Timeframe } from "../domain/candle.js";
+import type { FxQuoteTick } from "../domain/quote.js";
 import type { MarketTicker } from "../domain/ticker.js";
 
 export type ClientOp = "subscribe" | "unsubscribe" | "ping";
 
 export interface SubscribeMessage {
   op: "subscribe";
-  channels: string[]; // e.g. ["ticker:BTC-USDT", "candle:BTC-USDT:1m"]
+  channels: string[]; // e.g. ["ticker:BTC-USDT", "candle:BTC-USDT:1m", "ticker:EUR-USD"]
 }
 
 export interface UnsubscribeMessage {
@@ -29,6 +30,19 @@ export interface TickerEventMessage {
   symbol: string;
   ts: number;
   ticker: MarketTicker;
+}
+
+export interface FxQuoteEventMessage {
+  type: "fx_quote";
+  symbol: string;
+  instrument?: string;
+  provider: string;
+  bid: number;
+  ask: number;
+  mid: number;
+  spread: number;
+  ts: number;
+  quote?: FxQuoteTick;
 }
 
 export interface CandleEventMessage {
@@ -66,6 +80,7 @@ export interface ErrorMessage {
 
 export type WebSocketServerMessage =
   | TickerEventMessage
+  | FxQuoteEventMessage
   | CandleEventMessage
   | StatusEventMessage
   | SnapshotMessage

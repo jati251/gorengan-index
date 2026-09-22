@@ -1,4 +1,4 @@
-# Realtime Market Terminal — Serious Self-Hosted Architecture
+# Realtime Market Terminal — Serious Self-Hosted Architecture (Crypto + Forex)
 
 > Goal: build a production-style personal market terminal that behaves like a compact CoinMarketCap + TradingView: realtime price/ticker, live candlestick charts down to **1 second**, historical OHLCV, multi-provider support, and no dependency on metered SaaS market-data products such as CoinGecko, CoinMarketCap, TwelveData, Polygon, Alpha Vantage, or Metals-API.
 
@@ -15,8 +15,8 @@
 - First-class **1-second OHLCV candles**.
 - 1m / 5m / 15m / 30m / 1h / 4h / 1d / 1w chart intervals.
 - Historical chart queries.
-- Crypto first.
-- Architecture ready for FX and metals/gold later.
+- Crypto + **realtime FX currencies**.
+- Architecture remains ready for metals/gold later.
 - Multi-exchange/provider normalization.
 - Reconnect and gap recovery automatically.
 - Can run continuously on one dedicated server.
@@ -157,7 +157,10 @@ market-terminal/
 │   │       │   ├── kraken/
 │   │       │   ├── coinbase/
 │   │       │   ├── okx/
-│   │       │   └── bybit/
+│   │       │   ├── bybit/
+│   │       │   ├── fx_mt5_bridge/
+│   │       │   ├── fx_dukascopy/
+│   │       │   └── fx_oanda_optional/
 │   │       ├── reconnect/
 │   │       ├── subscriptions/
 │   │       └── main.rs
@@ -219,6 +222,12 @@ pub enum AssetClass {
     Crypto,
     Fx,
     Metal,
+}
+
+pub enum MarketDataKind {
+    Trade,      // crypto/exchange trade print
+    Quote,      // FX bid/ask update
+    Reference,  // slow official/reference rate
 }
 
 pub struct Instrument {
@@ -2186,3 +2195,1509 @@ Reference documentation:
 - QuestDB docs: https://questdb.com/docs
 - NATS docs: https://docs.nats.io
 
+
+
+---
+
+# 48. Forex / Currency Realtime Extension
+
+This section upgrades the 128 GB architecture from a crypto-first terminal into a **multi-asset realtime market terminal with native FX support**.
+
+The implementation goal is:
+
+```text
+EUR/USD
+GBP/USD
+USD/JPY
+AUD/USD
+USD/CAD
+USD/CHF
+NZD/USD
+EUR/JPY
+EUR/GBP
+GBP/JPY
+USD/SGD
+USD/IDR (reference/fallback when no streaming broker venue is configured)
+```
+
+with:
+
+- sub-second live quote updates when the upstream venue provides them;
+- 1-second historical candles for configured hot FX pairs;
+- bid / ask / mid visibility;
+- spread tracking;
+- 1m / 5m / 15m / 30m / 1h / 4h / 1d charting;
+- automatic reconnect and session-state handling;
+- no dependency on metered SaaS market-data products;
+- no fake assumption that FX has a single universal exchange price.
+
+## 48.1 Important FX model difference
+
+Crypto exchange feeds commonly emit **trades**:
+
+```text
+price + quantity + aggressor side
+```
+
+Retail/interbank FX feeds commonly emit **quotes**:
+
+```text
+bid + ask + timestamp
+```
+
+Therefore DO NOT reuse the crypto trade event as the canonical FX event.
+
+Add a dedicated normalized quote event.
+
+```rust
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct QuoteTick {
+    pub instrument_id: InstrumentId,    // EUR-USD
+    pub provider: ProviderId,
+    pub provider_symbol: String,        // EURUSD / EUR_USD
+
+    pub bid: Decimal,
+    pub ask: Decimal,
+    pub mid: Decimal,
+
+    pub provider_ts_ns: i64,
+    pub ingest_ts_ns: i64,
+
+    pub sequence: Option<u64>,
+    pub tradeable: Option<bool>,
+
+    pub bid_size: Option<Decimal>,
+    pub ask_size: Option<Decimal>,
+}
+```
+
+Calculate:
+
+```text
+mid = (bid + ask) / 2
+spread = ask - bid
+spread_bps = ((ask - bid) / mid) * 10,000
+```
+
+Never manufacture a last-trade price if the provider only gives bid/ask.
+
+---
+
+# 49. FX Upstream Strategy — No Freemium Market-Data Dependency
+
+There is no single Binance-like universal public exchange for spot FX. Realtime FX must come from a **broker / venue / trading terminal feed**.
+
+The system therefore uses provider adapters and clearly records provenance.
+
+## 49.1 Provider priority
+
+### Tier A — preferred: broker-native MetaTrader 5 feed via local bridge
+
+Use when a broker account or demo terminal provides the desired FX symbols.
+
+```text
+Broker FX Server
+      ↓
+MetaTrader 5 Terminal
+      ↓
+MQL5 Tick Bridge
+      ↓ TCP localhost/private LAN
+Rust FX Bridge Receiver
+      ↓
+Normalized QuoteTick
+      ↓
+NATS → Aggregator → QuestDB → Gateway
+```
+
+This is not a SaaS market-data free tier. The market data is the broker's native terminal feed.
+
+Constraints:
+
+- requires MetaTrader 5 + a broker connection;
+- data quality and symbol names depend on the broker;
+- the broker may have its own account / market-data terms;
+- the broker quote is a **venue/broker price**, not a universal consolidated FX price.
+
+### Tier B — Dukascopy JForex adapter
+
+Use a small Java sidecar using the JForex SDK.
+
+```text
+Dukascopy trade servers
+       ↓
+JForex SDK sidecar
+       ↓
+NATS / local TCP
+       ↓
+Rust normalizer
+```
+
+Use this as an alternate FX source and for historical tick/bar repair where permitted by the account/session.
+
+### Tier C — OANDA v20 adapter (optional fallback)
+
+OANDA is acceptable as an account-backed direct pricing stream, but it is **not the preferred high-frequency source** for this project.
+
+Important implementation behavior:
+
+```text
+OANDA stream
+→ at most 4 price updates/sec/instrument
+→ not every raw underlying price is delivered
+```
+
+Use it for:
+
+- backup realtime pricing;
+- pair coverage;
+- gap validation;
+- slower personal charting.
+
+Do not label it as raw-tick-complete.
+
+### Tier D — official reference rates
+
+ECB/reference rates are validation/reference sources only.
+
+```text
+EUR reference rates
+→ daily / working-day reference
+→ NOT realtime trading data
+```
+
+They may be used for:
+
+- sanity checking;
+- previous-day reference;
+- slow currency converter views;
+- detecting a broken broker feed.
+
+They MUST NOT drive the live FX chart.
+
+---
+
+# 50. Forex Provider Trait
+
+Extend `provider-core` with a quote-oriented trait.
+
+```rust
+#[async_trait]
+pub trait FxQuoteProvider: Send + Sync {
+    fn id(&self) -> ProviderId;
+
+    async fn discover_instruments(&self) -> Result<Vec<Instrument>>;
+
+    async fn run_quotes(
+        &self,
+        instruments: &[InstrumentId],
+        out: QuoteSender,
+        shutdown: CancellationToken,
+    ) -> Result<()>;
+
+    async fn historical_bars(
+        &self,
+        instrument: &InstrumentId,
+        timeframe: Timeframe,
+        from_ns: i64,
+        to_ns: i64,
+    ) -> Result<Vec<Candle>>;
+
+    async fn health(&self) -> ProviderHealth;
+}
+```
+
+Provider-specific details remain inside adapters.
+
+```text
+MT5 symbol:      EURUSD.a
+OANDA symbol:    EUR_USD
+Dukascopy:       EUR/USD
+Canonical:       EUR-USD
+```
+
+Never expose provider symbol naming to the frontend.
+
+---
+
+# 51. Instrument Registry Changes
+
+Extend `Instrument`:
+
+```rust
+pub struct Instrument {
+    pub id: InstrumentId,
+    pub base: String,
+    pub quote: String,
+    pub asset_class: AssetClass,
+
+    pub provider: ProviderId,
+    pub provider_symbol: String,
+
+    pub price_scale: u32,
+    pub quantity_scale: u32,
+
+    pub market_data_kind: MarketDataKind,
+    pub session_kind: SessionKind,
+    pub candle_price_basis: CandlePriceBasis,
+    pub enabled: bool,
+}
+```
+
+Add:
+
+```rust
+pub enum CandlePriceBasis {
+    Trade,
+    Mid,
+    Bid,
+    Ask,
+}
+
+pub enum VolumeKind {
+    RealTradeVolume,
+    ProviderVolume,
+    TickCount,
+    None,
+}
+
+pub enum SessionKind {
+    TwentyFourSeven,
+    FxTwentyFourFive,
+    ProviderControlled,
+}
+```
+
+Defaults:
+
+```text
+Crypto spot:
+price basis = Trade
+volume      = RealTradeVolume
+session     = TwentyFourSeven
+
+FX:
+price basis = Mid
+volume      = TickCount
+session     = ProviderControlled
+```
+
+---
+
+# 52. MT5 Realtime Bridge — Recommended Primary Personal FX Adapter
+
+The MT5 bridge consists of two parts.
+
+```text
+apps/
+├── mt5-bridge-ea/
+│   └── MarketBridge.mq5
+│
+└── fx-bridge-receiver/
+    └── Rust
+```
+
+## 52.1 MQL5 bridge responsibilities
+
+The EA runs in MetaTrader 5 and forwards quote changes to a local TCP receiver.
+
+Use the terminal's native socket API:
+
+```text
+SocketCreate
+SocketConnect
+SocketSend
+SocketIsConnected
+SocketClose
+```
+
+The receiver address must be explicitly allowed/configured in the terminal.
+
+Do NOT send HTTP requests per tick.
+
+Use one persistent TCP connection.
+
+### Wire payload
+
+Prefer compact NDJSON initially:
+
+```json
+{"v":1,"type":"quote","symbol":"EURUSD","bid":"1.18123","ask":"1.18131","ts_ms":1780000000123}
+```
+
+Future optimization:
+
+```text
+NDJSON
+  ↓ if profiling proves necessary
+MessagePack / custom binary framing
+```
+
+Do not optimize the transport prematurely.
+
+## 52.2 Multiple FX symbols
+
+An MQL5 `OnTick()` event applies to the symbol of the chart where the EA is attached. Do not assume one chart's `OnTick()` gives events for every FX symbol.
+
+Implementation options:
+
+1. attach one bridge EA instance per watched symbol; or
+2. implement a controlled polling/timer bridge using `SymbolInfoTick()` for a configured symbol list; or
+3. use broker/platform events available for the required market-depth path.
+
+For this personal deployment, preferred rollout:
+
+```text
+Phase 1:
+10–20 hot FX pairs
+one EA instance per chart/symbol
+
+Phase 2:
+benchmark centralized timer polling if maintaining many chart instances becomes annoying
+```
+
+The Rust receiver deduplicates unchanged ticks.
+
+## 52.3 Rust bridge receiver
+
+Create:
+
+```text
+apps/fx-bridge-receiver/
+```
+
+Responsibilities:
+
+```text
+accept TCP
+→ authenticate local bridge
+→ frame NDJSON
+→ validate timestamp
+→ map provider symbol
+→ Decimal parse
+→ reject invalid crossed quote
+→ calculate mid/spread
+→ publish QuoteTick
+```
+
+Reject:
+
+```text
+bid <= 0
+ask <= 0
+ask < bid
+unknown symbol
+stale timestamp beyond configured tolerance
+malformed decimals
+```
+
+Allow duplicate bid/ask values but deduplicate before publication when timestamp/value are identical.
+
+---
+
+# 53. NATS Subject Layout for FX
+
+Add:
+
+```text
+market.fx.quote.<provider>.<instrument>
+market.fx.status.<provider>.<instrument>
+market.fx.session.<provider>.<instrument>
+market.fx.spread.<provider>.<instrument>
+```
+
+Examples:
+
+```text
+market.fx.quote.mt5.EUR-USD
+market.fx.quote.dukascopy.EUR-USD
+market.fx.quote.oanda.GBP-USD
+```
+
+Normalized message:
+
+```json
+{
+  "type": "quote",
+  "instrument": "EUR-USD",
+  "assetClass": "fx",
+  "provider": "mt5",
+  "bid": "1.18123",
+  "ask": "1.18131",
+  "mid": "1.18127",
+  "spread": "0.00008",
+  "providerTsNs": 1780000000123000000,
+  "ingestTsNs": 1780000000125000000
+}
+```
+
+JetStream remains short-lived under the 128 GB profile:
+
+```text
+FX quote replay target: 10 minutes
+shared JetStream hard cap: 2 GB
+```
+
+Do not persist full FX ticks in QuestDB by default.
+
+---
+
+# 54. FX Candle Engine
+
+The existing candle engine must support `QuoteTick` in addition to `TradeTick`.
+
+## 54.1 Default price basis
+
+Use mid-price:
+
+```text
+mid = (bid + ask) / 2
+```
+
+For each quote:
+
+```text
+open   = first mid in bucket
+high   = max(mid)
+low    = min(mid)
+close  = last mid in bucket
+volume = quote/tick count
+```
+
+Store the volume semantics explicitly.
+
+```text
+volume_kind = tick_count
+```
+
+Do NOT display FX tick count as if it were centralized traded notional volume.
+
+## 54.2 1-second candles
+
+Bucket by event time:
+
+```text
+bucket_start = floor(provider_ts / 1 second)
+```
+
+Each hot pair gets:
+
+```text
+1s mid OHLC
+spread_open
+spread_high
+spread_low
+spread_close
+tick_count
+```
+
+Recommended extended model:
+
+```rust
+pub struct FxCandle {
+    pub instrument_id: InstrumentId,
+    pub provider: ProviderId,
+    pub ts: i64,
+    pub timeframe: Timeframe,
+
+    pub open: Decimal,
+    pub high: Decimal,
+    pub low: Decimal,
+    pub close: Decimal,
+
+    pub tick_count: u32,
+
+    pub spread_open: Decimal,
+    pub spread_high: Decimal,
+    pub spread_low: Decimal,
+    pub spread_close: Decimal,
+
+    pub price_basis: CandlePriceBasis,
+}
+```
+
+## 54.3 Missing seconds
+
+Do not blindly fill every missing second.
+
+Rules:
+
+```text
+market open + connection healthy + no quote:
+→ optionally carry-forward close only for chart continuity
+→ mark candle synthetic=true
+
+provider disconnected:
+→ DO NOT fabricate candle
+
+market closed:
+→ DO NOT fabricate candle
+```
+
+Synthetic candles must be distinguishable from observed candles.
+
+---
+
+# 55. FX Session Handling
+
+FX is not 24/7.
+
+Do not hard-code one universal weekend-open/weekend-close timestamp because provider/broker sessions and DST may differ.
+
+Priority:
+
+```text
+1. provider's tradeable/session status
+2. provider instrument metadata
+3. configured fallback calendar
+```
+
+Maintain:
+
+```rust
+pub enum MarketSessionState {
+    Open,
+    Closed,
+    PreOpen,
+    Halted,
+    Unknown,
+}
+```
+
+Gateway response:
+
+```json
+{
+  "instrument": "EUR-USD",
+  "session": "open",
+  "provider": "mt5",
+  "lastQuoteAt": 1780000000123
+}
+```
+
+Frontend must visually distinguish:
+
+```text
+LIVE
+MARKET CLOSED
+FEED STALE
+RECONNECTING
+```
+
+---
+
+# 56. Stale Feed Detection
+
+FX providers can stop sending quotes because:
+
+```text
+market quiet
+market closed
+network failure
+terminal disconnected
+broker disconnected
+provider failure
+```
+
+Track independently:
+
+```text
+last_network_message
+last_quote_change
+last_provider_heartbeat
+provider_session_state
+```
+
+Suggested thresholds while market is expected open:
+
+```text
+warning stale:   5 seconds
+hard stale:     15 seconds
+reconnect:      provider-specific
+```
+
+These are configuration values, not hardcoded constants.
+
+Never reconnect aggressively solely because the price did not change.
+
+---
+
+# 57. Provider Failover
+
+Multiple providers can quote different prices. Do not silently stitch them into one candle without recording source changes.
+
+Recommended strategy:
+
+```text
+EUR-USD
+primary:   mt5-broker-A
+secondary: dukascopy
+tertiary:  oanda
+```
+
+Failover rules:
+
+```text
+primary healthy
+→ use primary
+
+primary stale
+→ mark source degraded
+→ switch to secondary
+→ emit provider_switch event
+
+primary recovers
+→ require stable grace window
+→ switch back only after validation
+```
+
+Before switching, sanity-check:
+
+```text
+abs(new_mid - old_mid) / old_mid < configurable threshold
+```
+
+Persist provider ID with every candle.
+
+Never pretend data from multiple venues is one continuous authoritative tape.
+
+---
+
+# 58. Synthetic Cross Rates
+
+The engine MAY calculate cross rates when direct pairs are unavailable.
+
+Examples:
+
+```text
+EUR-USD × USD-JPY = EUR-JPY
+GBP-USD / EUR-USD = GBP-EUR
+```
+
+Represent synthetic instruments explicitly:
+
+```rust
+pub enum InstrumentOrigin {
+    Direct,
+    Synthetic,
+    Reference,
+}
+```
+
+For bid/ask cross calculations, use direction-aware math, not simply mid × mid.
+
+Example for `EUR/JPY` from `EUR/USD` and `USD/JPY`:
+
+```text
+EURJPY bid = EURUSD bid × USDJPY bid
+EURJPY ask = EURUSD ask × USDJPY ask
+```
+
+Only publish synthetic rates if both legs are fresh.
+
+Default maximum leg age:
+
+```text
+<= 2 seconds
+```
+
+Frontend must label synthetic rates.
+
+Prefer direct venue pair when available.
+
+---
+
+# 59. QuestDB FX Schema
+
+Do NOT store every normalized quote indefinitely.
+
+Persist primarily candles.
+
+## 59.1 1-second FX table
+
+Conceptual schema:
+
+```sql
+CREATE TABLE fx_candles_1s (
+    ts TIMESTAMP,
+    instrument SYMBOL,
+    provider SYMBOL,
+
+    open DOUBLE,
+    high DOUBLE,
+    low DOUBLE,
+    close DOUBLE,
+
+    spread_open DOUBLE,
+    spread_high DOUBLE,
+    spread_low DOUBLE,
+    spread_close DOUBLE,
+
+    tick_count INT,
+    synthetic BOOLEAN,
+    price_basis SYMBOL
+) TIMESTAMP(ts) PARTITION BY DAY WAL;
+```
+
+## 59.2 lower resolution
+
+```text
+fx_candles_1m
+fx_candles_1h
+fx_candles_1d
+```
+
+Do not create physical 5m / 15m / 30m / 4h / 1w tables initially.
+
+Generate:
+
+```text
+5m/15m/30m ← 1m
+4h          ← 1h
+1w          ← 1d
+```
+
+---
+
+# 60. FX Storage Policy for the 128 GB Server
+
+The existing global disk budget remains unchanged.
+
+Recommended FX profile:
+
+```text
+hot FX pairs:             10–20
+1s FX retention:          14 days default
+1s max target:            21 days
+1m FX retention:          365 days
+1h FX retention:          permanent
+1d FX retention:          permanent
+raw quotes in QuestDB:    disabled
+NATS quote replay:        10 minutes
+```
+
+Approximate effect is intentionally bounded by the same disk guard used for crypto.
+
+When filesystem usage rises:
+
+```text
+>=70% warn
+>=75% prune oldest 1s FX + crypto candles
+>=80% reduce 1s retention target to 7–14d
+>=85% stop non-essential high-resolution persistence
+```
+
+Realtime quote delivery continues even when high-resolution persistence is degraded.
+
+---
+
+# 61. FX Backfill Strategy
+
+Realtime and history are separate concerns.
+
+On startup:
+
+```text
+1. load last stored candle
+2. inspect provider availability
+3. request historical bars for the gap when provider supports it
+4. normalize historical bars
+5. store missing 1m/1h/1d
+6. begin realtime quote stream
+7. start new 1s candles from live data
+```
+
+Do not attempt to recreate historical 1-second candles from 1-minute bars.
+
+Historical 1-second data is best-effort unless the configured provider exposes historical ticks.
+
+If tick history exists:
+
+```text
+historical ticks
+→ replay through same candle engine
+→ deterministic 1s reconstruction
+```
+
+This is preferred to writing provider-specific candle conversion code.
+
+---
+
+# 62. FX REST API
+
+Add endpoints:
+
+```text
+GET /api/v1/fx/instruments
+GET /api/v1/fx/markets
+GET /api/v1/fx/ticker/EUR-USD
+GET /api/v1/fx/candles/EUR-USD?tf=1s&from=...&to=...
+GET /api/v1/fx/candles/EUR-USD?tf=1m&from=...&to=...
+GET /api/v1/fx/providers/EUR-USD
+GET /api/v1/fx/session/EUR-USD
+```
+
+Example ticker:
+
+```json
+{
+  "instrument": "EUR-USD",
+  "assetClass": "fx",
+  "provider": "mt5",
+  "bid": 1.18123,
+  "ask": 1.18131,
+  "mid": 1.18127,
+  "spread": 0.00008,
+  "spreadBps": 0.6772,
+  "change24hPct": -0.12,
+  "session": "open",
+  "timestamp": 1780000000123
+}
+```
+
+---
+
+# 63. Browser WebSocket Protocol
+
+Reuse the existing gateway.
+
+Subscribe:
+
+```json
+{
+  "op": "subscribe",
+  "channels": [
+    "ticker:EUR-USD",
+    "candle:EUR-USD:1s"
+  ]
+}
+```
+
+Quote message:
+
+```json
+{
+  "type": "fx_quote",
+  "instrument": "EUR-USD",
+  "provider": "mt5",
+  "bid": 1.18123,
+  "ask": 1.18131,
+  "mid": 1.18127,
+  "ts": 1780000000123
+}
+```
+
+Candle update:
+
+```json
+{
+  "type": "candle_update",
+  "instrument": "EUR-USD",
+  "tf": "1s",
+  "priceBasis": "mid",
+  "t": 1780000000000,
+  "o": 1.18125,
+  "h": 1.18128,
+  "l": 1.18124,
+  "c": 1.18127,
+  "ticks": 7,
+  "spreadClose": 0.00008
+}
+```
+
+---
+
+# 64. Frontend FX UX
+
+Instrument switcher:
+
+```text
+CRYPTO
+BTC/USDT
+ETH/USDT
+SOL/USDT
+
+FOREX
+EUR/USD
+GBP/USD
+USD/JPY
+EUR/JPY
+GBP/JPY
+```
+
+FX header:
+
+```text
+EUR / USD
+1.18127
+-0.12%
+
+BID 1.18123
+ASK 1.18131
+SPREAD 0.8 pip
+
+Provider: Broker A / MT5
+● LIVE
+```
+
+The UI must show source/provider because FX quotes are venue-specific.
+
+For FX chart:
+
+```text
+price basis: MID
+```
+
+Optionally allow:
+
+```text
+MID | BID | ASK
+```
+
+Do not show fake centralized volume bars.
+
+Instead show one of:
+
+```text
+Tick activity
+Tick count
+Spread
+```
+
+---
+
+# 65. Pip / Precision Handling
+
+Never calculate display precision using JS floating-point assumptions alone.
+
+Metadata per pair:
+
+```rust
+pub struct FxMetadata {
+    pub pip_size: Decimal,
+    pub display_decimals: u8,
+    pub contract_size: Option<Decimal>,
+}
+```
+
+Typical examples:
+
+```text
+EUR/USD pip: 0.0001
+GBP/USD pip: 0.0001
+USD/JPY pip: 0.01
+```
+
+But use provider instrument metadata where available.
+
+Spread pips:
+
+```text
+spread_pips = spread / pip_size
+```
+
+Use Rust decimal/fixed-point handling internally where practical.
+
+---
+
+# 66. 24h Change Semantics for FX
+
+Crypto uses continuous 24/7 time naturally.
+
+FX has weekends and session boundaries.
+
+Expose both:
+
+```text
+rolling24hChangePct
+sessionChangePct
+```
+
+Do not calculate weekend 24h change using fabricated candles.
+
+If no quote existed exactly 24h ago:
+
+```text
+find last valid observed candle <= target timestamp
+```
+
+and label metric semantics internally.
+
+---
+
+# 67. Observability Additions
+
+Prometheus metrics:
+
+```text
+fx_quotes_total{provider,instrument}
+fx_quote_lag_ms{provider,instrument}
+fx_spread{provider,instrument}
+fx_provider_connected{provider}
+fx_provider_reconnects_total{provider}
+fx_stale_feed{provider,instrument}
+fx_provider_switch_total{instrument,from,to}
+fx_candles_created_total{timeframe}
+fx_synthetic_candles_total{instrument}
+fx_bridge_parse_errors_total{provider}
+```
+
+Grafana dashboard:
+
+```text
+FX Provider Health
+├── connected providers
+├── quote rate/sec
+├── event latency
+├── stale symbols
+├── reconnects
+└── source switches
+
+FX Market Quality
+├── spread by pair
+├── tick rate
+├── provider divergence
+└── synthetic/direct status
+```
+
+Prometheus storage remains under the existing 3 GB cap.
+
+---
+
+# 68. Secrets and Security
+
+Do not expose broker credentials to:
+
+```text
+browser
+Next.js client bundle
+NATS public interface
+logs
+Grafana labels
+```
+
+Secrets:
+
+```text
+MT5 login → terminal secret storage / deployment secret
+OANDA token → server environment secret
+Dukascopy credentials → sidecar secret
+```
+
+The MT5 TCP bridge should bind to:
+
+```text
+127.0.0.1
+```
+
+when terminal and receiver are on the same host.
+
+If bridging across LAN/VM boundaries:
+
+```text
+private VLAN only
++ firewall allowlist
++ application token/HMAC
++ optional TLS
+```
+
+Never expose the raw bridge listener to the public Internet.
+
+---
+
+# 69. Docker / Runtime Topology
+
+Linux market server:
+
+```text
+market-server
+│
+├── collector-crypto (Rust)
+├── fx-bridge-receiver (Rust)
+├── aggregator (Rust)
+├── gateway (Rust)
+├── backfill (Rust)
+├── nats
+├── valkey
+├── questdb
+├── prometheus
+├── grafana
+└── web
+```
+
+MT5 may run:
+
+```text
+Option A
+Windows machine/VM
+→ TCP bridge to market-server private IP
+
+Option B
+same Windows host as receiver
+
+Option C
+Wine environment
+→ only after stability testing
+```
+
+Do not make Wine a mandatory core dependency.
+
+JForex can run as a Java sidecar directly on Linux if selected as the FX source.
+
+---
+
+# 70. Configuration
+
+Example:
+
+```yaml
+fx:
+  enabled: true
+
+  hot_symbols:
+    - EUR-USD
+    - GBP-USD
+    - USD-JPY
+    - EUR-JPY
+    - GBP-JPY
+    - AUD-USD
+    - USD-CAD
+    - USD-CHF
+
+  candle_price_basis: mid
+
+  retention:
+    candle_1s_days: 14
+    candle_1m_days: 365
+    candle_1h_days: 0   # 0 = permanent
+    candle_1d_days: 0
+
+  stale:
+    warning_seconds: 5
+    hard_seconds: 15
+
+  providers:
+    mt5:
+      enabled: true
+      priority: 10
+      listen: "127.0.0.1:9101"
+
+    dukascopy:
+      enabled: false
+      priority: 20
+
+    oanda:
+      enabled: false
+      priority: 30
+
+  synthetic_crosses:
+    enabled: true
+    max_leg_age_ms: 2000
+```
+
+Provider credentials are not stored in this YAML file when committed to git.
+
+---
+
+# 71. Implementation Phases — Forex
+
+## Phase FX-0 — domain changes
+
+- [ ] Add `QuoteTick`.
+- [ ] Add `MarketDataKind::Quote`.
+- [ ] Add `CandlePriceBasis`.
+- [ ] Add `VolumeKind`.
+- [ ] Add FX instrument metadata.
+- [ ] Add provider provenance to candle rows.
+- [ ] Add session-state model.
+- [ ] Unit tests for spread / pips / midpoint.
+
+Acceptance:
+
+```text
+crypto TradeTick path remains unchanged
+FX QuoteTick compiles through shared domain
+```
+
+## Phase FX-1 — MT5 local bridge
+
+- [ ] Implement `MarketBridge.mq5`.
+- [ ] Persistent TCP connection.
+- [ ] Reconnect to local Rust receiver.
+- [ ] Send bid/ask + broker timestamp.
+- [ ] Implement receiver framing.
+- [ ] Map broker symbols to canonical instruments.
+- [ ] Reject malformed/crossed quotes.
+- [ ] Publish normalized quote events.
+- [ ] Add bridge health metrics.
+
+Acceptance:
+
+```text
+EUR/USD changes in MT5
+→ normalized QuoteTick visible in Rust within sub-second latency
+```
+
+## Phase FX-2 — candle integration
+
+- [ ] Feed QuoteTick into aggregator.
+- [ ] Build 1s MID OHLC.
+- [ ] Track spread OHLC.
+- [ ] Persist tick_count.
+- [ ] Persist provider ID.
+- [ ] Add 1m rollup.
+- [ ] Add 1h / 1d rollup.
+- [ ] Implement synthetic flag for gap-filled continuity candles.
+
+Acceptance:
+
+```text
+live 1s EUR/USD candle matches incoming quote sequence
+```
+
+## Phase FX-3 — QuestDB and retention
+
+- [ ] Create FX 1s table.
+- [ ] Create FX 1m table.
+- [ ] Create FX 1h table.
+- [ ] Create FX 1d table.
+- [ ] Add 14-day 1s cleanup job.
+- [ ] Integrate global disk-pressure guard.
+- [ ] Validate QuestDB stays under global 60 GB target.
+
+## Phase FX-4 — gateway
+
+- [ ] `/fx/instruments`.
+- [ ] `/fx/ticker/:instrument`.
+- [ ] `/fx/candles/:instrument`.
+- [ ] WebSocket FX quote subscriptions.
+- [ ] WebSocket FX candle subscriptions.
+- [ ] session/provider metadata.
+- [ ] stale status.
+
+## Phase FX-5 — frontend
+
+- [ ] Add FOREX category.
+- [ ] Bid/ask/mid header.
+- [ ] Spread in pips.
+- [ ] Provider/source badge.
+- [ ] Market session state.
+- [ ] 1s timeframe.
+- [ ] Tick activity instead of fake volume.
+- [ ] Handle source switching without chart reset.
+
+## Phase FX-6 — provider redundancy
+
+- [ ] Dukascopy adapter.
+- [ ] Provider health scoring.
+- [ ] Controlled failover.
+- [ ] Provider divergence checks.
+- [ ] Provider switch events.
+
+## Phase FX-7 — optional OANDA
+
+- [ ] account-backed connector.
+- [ ] pricing stream parser.
+- [ ] heartbeat handling.
+- [ ] 4-updates/sec semantics documented in metadata.
+- [ ] use as fallback, not raw-tick truth source.
+
+## Phase FX-8 — historical repair
+
+- [ ] historical bar backfill.
+- [ ] optional historical tick replay when provider permits.
+- [ ] startup gap detector.
+- [ ] deterministic candle replay tests.
+
+## Phase FX-9 — synthetic crosses
+
+- [ ] cross-rate graph.
+- [ ] bid/ask correct arithmetic.
+- [ ] freshness validation.
+- [ ] direct pair precedence.
+- [ ] synthetic labeling.
+
+## Phase FX-10 — soak test
+
+Run for at least one full weekday session window.
+
+Verify:
+
+- [ ] no unbounded queues;
+- [ ] reconnects recover automatically;
+- [ ] candle boundaries remain UTC-correct;
+- [ ] weekend close does not fabricate data;
+- [ ] provider reconnect does not duplicate candles;
+- [ ] browser resumes after gateway restart;
+- [ ] disk retention works;
+- [ ] sub-second ticker stays responsive;
+- [ ] 1s candles remain consistent;
+- [ ] provider source is always visible.
+
+---
+
+# 72. Forex Testing Matrix
+
+Unit tests:
+
+```text
+mid calculation
+spread calculation
+pip conversion
+quote validation
+canonical symbol mapping
+1s bucket boundaries
+late quote handling
+synthetic candle marking
+cross-rate bid/ask math
+session state transitions
+```
+
+Integration tests:
+
+```text
+fake FX provider
+→ QuoteTick
+→ NATS
+→ aggregator
+→ QuestDB
+→ gateway
+→ WebSocket client
+```
+
+Fault injection:
+
+```text
+kill MT5 bridge connection
+freeze quote stream
+send malformed quote
+send timestamp backward
+send crossed market ask < bid
+restart NATS
+restart aggregator
+restart gateway
+fill disk to warning threshold
+```
+
+Expected behavior:
+
+```text
+no process crash
+no corrupted candle
+no silent provider switch
+no fake quote persistence
+```
+
+---
+
+# 73. Initial Pair Set
+
+Start with majors and high-liquidity crosses.
+
+```text
+EUR-USD
+GBP-USD
+USD-JPY
+USD-CHF
+USD-CAD
+AUD-USD
+NZD-USD
+EUR-JPY
+EUR-GBP
+GBP-JPY
+AUD-JPY
+EUR-CHF
+```
+
+Keep 1-second persistence limited to the pairs actually watched frequently.
+
+A reasonable 128 GB default:
+
+```text
+12 FX pairs @ 1s / 14d
+20–30 crypto hot symbols @ 1s / 21d
+broader market universe @ 1m
+```
+
+This remains compatible with the existing global QuestDB storage target.
+
+---
+
+# 74. Source Quality Rules
+
+Every live FX value must carry:
+
+```text
+provider
+provider timestamp
+ingest timestamp
+quote type
+session state
+stale state
+synthetic/direct state
+```
+
+The frontend must never represent:
+
+```text
+MT5 broker quote
+Dukascopy quote
+OANDA quote
+ECB reference rate
+```
+
+as though they were identical datasets.
+
+This is a core correctness requirement.
+
+---
+
+# 75. FX Architecture Decision
+
+Final recommended personal-serious topology:
+
+```text
+                            FX PROVIDERS
+
+          Broker / MT5        Dukascopy        OANDA(optional)
+               │                  │                   │
+               ▼                  ▼                   ▼
+          MQL5 Bridge        JForex Sidecar       Rust Adapter
+               │                  │                   │
+               └──────────────┬───┴───────────────────┘
+                              ▼
+                       Normalized QuoteTick
+                              │
+                              ▼
+                       NATS / JetStream
+                              │
+                  ┌───────────┴───────────┐
+                  ▼                       ▼
+            Rust Aggregator          Rust Gateway
+                  │                       │
+             1s MID OHLC             realtime WS
+             spread OHLC                  │
+                  │                       ▼
+             QuestDB                 Next.js Chart
+```
+
+Primary implementation recommendation:
+
+> **Use a broker-native MetaTrader 5 feed through a self-hosted local bridge for the first true realtime FX source; keep Dukascopy as the next provider adapter; keep OANDA optional because its streaming endpoint is intentionally sampled rather than a complete raw price stream.**
+
+This preserves the main project rule: the application does not depend on metered market-data SaaS/free-tier credits, while still acknowledging that FX prices originate from a broker or venue rather than from a universal public exchange.
+
+---
+
+# 76. Official Documentation References for FX Integration
+
+- MetaTrader 5 Python integration / symbol tick access: https://www.mql5.com/en/docs/python_metatrader5/mt5symbolinfotick_py
+- MQL5 `OnTick`: https://www.mql5.com/en/docs/event_handlers/ontick
+- MQL5 socket networking: https://www.mql5.com/en/docs/network
+- MQL5 `SocketCreate`: https://www.mql5.com/en/docs/network/socketcreate
+- MQL5 `SocketConnect`: https://www.mql5.com/en/docs/network/socketconnect
+- MQL5 `SocketSend`: https://www.mql5.com/en/docs/network/socketsend
+- Dukascopy JForex API: https://www.dukascopy.com/swiss/english/forex/api/jforex-api/
+- Dukascopy JForex tick history: https://www.dukascopy.com/wiki/en/development/strategy-api/historical-data/history-ticks/
+- OANDA v20 pricing stream: https://developer.oanda.com/rest-live-v20/pricing-ep/
+- OANDA v20 development guide / connection limits: https://developer.oanda.com/rest-live-v20/development-guide/
+- ECB reference rates: https://www.ecb.europa.eu/stats/exchange_rates/html/index.en.html

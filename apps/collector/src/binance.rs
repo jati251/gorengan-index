@@ -122,12 +122,25 @@ impl BinanceNormalizer {
 
         let updated_at_ns = payload.event_time_ms * 1_000_000;
 
+        let (mid, spread, spread_bps) = match (bid, ask) {
+            (Some(b), Some(a)) => {
+                let m = (b + a) / Decimal::from(2);
+                let s = a - b;
+                let bps = if m.is_zero() { Decimal::ZERO } else { (s / m) * Decimal::from(10_000) };
+                (Some(m), Some(s), Some(bps))
+            }
+            _ => (None, None, None),
+        };
+
         Some(TickerState {
             instrument,
             provider: self.provider_id.clone(),
             price,
             bid,
             ask,
+            mid,
+            spread,
+            spread_bps,
             open_24h,
             high_24h,
             low_24h,
@@ -136,6 +149,7 @@ impl BinanceNormalizer {
             change_24h,
             change_percent_24h,
             updated_at_ns,
+            session_state: Some("open".to_string()),
         })
     }
 

@@ -1,4 +1,4 @@
-import { ENV } from "../config/env";
+import { ENV } from "@/config/env";
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
