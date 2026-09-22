@@ -3,7 +3,12 @@
 import React from "react";
 import { clsx } from "clsx";
 import { useMarketStore } from "../../../stores/marketStore";
-import { formatPrice, formatPercent, formatVolume } from "../../../utils/formatters";
+import {
+  formatPrice,
+  formatPercent,
+  formatVolume,
+  getDeviceTimezoneOffset,
+} from "../../../utils/formatters";
 import { TimeframeSelector } from "./TimeframeSelector";
 
 export function ChartHeader() {
@@ -74,8 +79,16 @@ export function ChartHeader() {
         </div>
       </div>
 
-      {/* Resolution Selector */}
-      <TimeframeSelector />
+      {/* Resolution Selector & Device Timezone Pill */}
+      <div className="flex items-center gap-2 sm:gap-3">
+        <TimeframeSelector />
+        <span
+          suppressHydrationWarning
+          className="hidden sm:inline-flex items-center text-[10px] text-slate-400 bg-slate-900/80 px-2 py-1 rounded border border-slate-800/80 font-mono"
+        >
+          {getDeviceTimezoneOffset()}
+        </span>
+      </div>
     </div>
   );
 }

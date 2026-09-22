@@ -5,6 +5,7 @@ import { Activity, ShieldCheck } from "lucide-react";
 import { useMarketStore } from "../../../stores/marketStore";
 import { formatPrice, formatPercent, formatTime } from "../../../utils/formatters";
 import { MarketStatusBadge } from "./MarketStatusBadge";
+import { DeviceClock } from "./DeviceClock";
 
 export function MarketHeaderTicker() {
   const tickers = useMarketStore((s) => s.tickers);
@@ -31,10 +32,11 @@ export function MarketHeaderTicker() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 sm:gap-4">
+          <DeviceClock />
           <MarketStatusBadge status={status} />
           {lastEventAt > 0 && (
-            <span className="text-[11px] text-slate-400 hidden sm:inline">
+            <span className="text-[11px] text-slate-400 hidden lg:inline">
               LAST TICK: {formatTime(lastEventAt)}
             </span>
           )}

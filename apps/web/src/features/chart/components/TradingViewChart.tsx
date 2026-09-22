@@ -14,6 +14,7 @@ import {
 } from "lightweight-charts";
 import { useCandlesQuery } from "../api/useCandlesQuery";
 import { useMarketStore } from "../../../stores/marketStore";
+import { toLocalChartTime } from "../../../utils/formatters";
 
 interface TradingViewChartProps {
   symbol: string;
@@ -122,7 +123,7 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
     const uniqueVolumes = new Map<number, HistogramData<Time>>();
 
     for (const c of sorted) {
-      const time = Math.floor(c.openTime / 1000);
+      const time = toLocalChartTime(c.openTime);
       uniqueCandles.set(time, {
         time: time as Time,
         open: c.open,
@@ -174,7 +175,7 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
 
       if (!liveCandle) return;
 
-      const time = Math.floor(liveCandle.openTime / 1000) as Time;
+      const time = toLocalChartTime(liveCandle.openTime) as Time;
       try {
         candleSeriesRef.current.update({
           time,

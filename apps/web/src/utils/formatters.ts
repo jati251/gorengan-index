@@ -38,11 +38,39 @@ export function formatVolume(volume: number | undefined | null): string {
 }
 
 export function formatTime(ts: number): string {
+  if (!ts || isNaN(ts)) return "--:--:--";
   const d = new Date(ts);
-  return d.toLocaleTimeString("en-US", {
+  return d.toLocaleTimeString([], {
     hour12: false,
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
   });
+}
+
+/**
+ * Convert UTC timestamp (milliseconds) to shifted seconds
+ * matching the user's device local timezone for Lightweight Charts.
+ * Lightweight Charts operates in UTC internally; shifting by the device's timezone
+ * offset makes the chart's bottom axis and crosshair tooltips display the user's exact local time.
+ */
+export function toLocalChartTime(utcTimestampMs: number): number {
+  const d = new Date(utcTimestampMs);
+  const offsetSeconds = -d.getTimezoneOffset() * 60;
+  return Math.floor(utcTimestampMs / 1000) + offsetSeconds;
+}
+
+/**
+ * Formats user's local timezone offset (e.g. UTC+7)
+ */
+export function getDeviceTimezoneOffset(): string {
+  try {
+    const offsetMin = -new Date().getTimezoneOffset();
+    const sign = offsetMin >= 0 ? "+" : "-";
+    const hours = Math.floor(Math.abs(offsetMin) / 60);
+    const mins = Math.abs(offsetMin) % 60;
+    return mins > 0 ? `UTC${sign}${hours}:${mins}` : `UTC${sign}${hours}`;
+  } catch {
+    return "UTC";
+  }
 }
