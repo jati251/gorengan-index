@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { Zap } from "lucide-react";
 import { useMarketStore } from "@/stores/marketStore";
 import { formatPrice, formatPercent } from "@/utils/formatters";
 import { formatFxPrice, isFxSymbol } from "@/features/forex";
@@ -26,18 +25,8 @@ export function BottomStickyTickerTape() {
       aria-label="Real-time Market Ticker Tape"
       className="fixed bottom-[52px] lg:bottom-0 left-0 right-0 z-40 h-9 bg-[#050814]/90 backdrop-blur-xl border-t border-white/[0.08] flex items-center font-mono select-none overflow-hidden shadow-[0_-4px_20px_rgba(0,0,0,0.5)]"
     >
-      {/* Static Left Badge */}
-      <div className="shrink-0 flex items-center gap-1.5 px-3 py-1 bg-white/[0.03] border-r border-white/[0.08] text-[10px] text-slate-300 font-bold z-20 h-full">
-        <span className="relative flex h-2 w-2">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-        </span>
-        <Zap className="w-3 h-3 text-emerald-400" />
-        <span className="hidden sm:inline tracking-wider uppercase text-slate-300">Live Tape</span>
-      </div>
-
       {/* Marquee Track Container with Edge Fades */}
-      <div className="relative flex-1 overflow-hidden h-full flex items-center">
+      <div className="relative flex-1 w-full overflow-hidden h-full flex items-center">
         {/* Left fade gradient */}
         <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-[#050814] to-transparent z-10" />
 
