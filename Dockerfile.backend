@@ -1,5 +1,5 @@
 # Multi-stage Dockerfile for Rust Market Pipeline (Collector, Aggregator, Gateway)
-FROM rust:1.85-bookworm AS builder
+FROM rust:latest AS builder
 WORKDIR /app
 
 # Copy dependency manifests and source trees
