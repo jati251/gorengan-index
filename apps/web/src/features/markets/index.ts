@@ -4,6 +4,7 @@ export { MarketHeaderTicker } from "./components/MarketHeaderTicker";
 export { MarketStatusBadge } from "./components/MarketStatusBadge";
 export { DeviceClock } from "./components/DeviceClock";
 export { MarketStats } from "./components/MarketStats";
+export { IntelligenceSidebar } from "./components/IntelligenceSidebar";
 export { TableSkeleton, MarketStatsSkeleton } from "./components/MarketSkeletons";
 
 // API Hooks

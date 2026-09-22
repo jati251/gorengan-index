@@ -5,11 +5,10 @@ import { DEFAULT_SYMBOLS } from "@gorengan/shared";
 import { Zap, BarChart3 } from "lucide-react";
 import { clsx } from "clsx";
 
-import { MarketHeaderTicker, MarketOverviewTable, MarketStats } from "@/features/markets";
+import { MarketHeaderTicker, MarketOverviewTable, MarketStats, IntelligenceSidebar } from "@/features/markets";
 import { useSymbolsQuery, useMarketsQuery } from "@/features/markets";
 import { TradingViewChart, ChartHeader } from "@/features/chart";
 import { WatchlistSidebar } from "@/features/watchlist";
-import { NewsFeed, SentimentGauge } from "@/features/news";
 
 import { useTerminalWebSocket } from "@/hooks/useTerminalWebSocket";
 import { useMarketStore } from "@/stores/marketStore";
@@ -117,33 +116,14 @@ export default function TerminalPage() {
           </Card>
         </section>
 
-        {/* RIGHT: Intelligence Sidebar (Sticky on desktop) */}
+        {/* RIGHT: Intelligence Sidebar with Tabs (Sticky on desktop) */}
         <aside
           className={clsx(
-            "w-full lg:w-80 xl:w-[340px] shrink-0 border-t lg:border-t-0 lg:border-l border-white/[0.08] bg-[#080d1b]/70 backdrop-blur-xl flex-col h-auto lg:h-[calc(100vh-74px)] lg:sticky lg:top-[74px] lg:self-start overflow-hidden min-h-0 pb-24 lg:pb-0 z-20",
+            "w-full lg:w-80 xl:w-[340px] shrink-0 border-t lg:border-t-0 lg:border-l border-white/[0.08] bg-[#080d1b]/70 backdrop-blur-xl flex-col h-[540px] lg:h-[calc(100vh-74px)] lg:sticky lg:top-[74px] lg:self-start overflow-hidden min-h-0 pb-16 lg:pb-0 z-20",
             mobileTab === "intel" ? "flex" : "hidden lg:flex"
           )}
         >
-          {/* Market Stats Panel */}
-          <div className="p-3 border-b border-white/[0.06] shrink-0">
-            <div className="flex items-center gap-2 mb-2.5">
-              <BarChart3 className="w-3.5 h-3.5 text-amber-400" />
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300 font-mono">
-                Market Pulse
-              </span>
-            </div>
-            <MarketStats />
-          </div>
-
-          {/* Sentiment Gauge */}
-          <div className="p-3 border-b border-white/[0.06] shrink-0">
-            <SentimentGauge />
-          </div>
-
-          {/* News Feed — scrollable */}
-          <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-            <NewsFeed />
-          </div>
+          <IntelligenceSidebar />
         </aside>
       </div>
 
