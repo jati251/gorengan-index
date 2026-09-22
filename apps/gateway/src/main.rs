@@ -1275,7 +1275,7 @@ async fn handle_candles(
 
     // Query QuestDB HTTP SQL endpoint:
     let sql = format!(
-        "SELECT open_time_ns, open, high, low, close, volume, trade_count FROM {} WHERE instrument = '{}' ORDER BY open_time_ns DESC LIMIT {}",
+        "SELECT cast(timestamp as long) * 1000, open, high, low, close, volume, trade_count FROM {} WHERE instrument = '{}' ORDER BY timestamp DESC LIMIT {}",
         table, instrument, limit
     );
 

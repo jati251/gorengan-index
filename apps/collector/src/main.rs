@@ -36,12 +36,12 @@ async fn main() -> Result<()> {
     info!(binance_ws = %cfg.binance_ws_url, "Binance WebSocket gateway");
     info!("===============================================");
 
-    // Filter universe instruments to those enabled and configured
+    // Filter universe instruments to those enabled, configured, and handled by Binance
     let all_instruments = Instrument::default_universe();
     let universe_symbols: Vec<InstrumentId> = cfg.universe.iter().map(|s| InstrumentId::new(s.clone())).collect();
     let active_instruments: Vec<Instrument> = all_instruments
         .into_iter()
-        .filter(|inst| universe_symbols.contains(&inst.id))
+        .filter(|inst| universe_symbols.contains(&inst.id) && inst.provider == provider)
         .collect();
 
     info!(
