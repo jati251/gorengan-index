@@ -36,7 +36,7 @@ export default function TerminalPage() {
       {/* 2. Main Terminal Content — 3-Column Grid */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* LEFT: Watchlist Sidebar */}
-        <aside className="w-full lg:w-72 xl:w-80 shrink-0 border-b lg:border-b-0 lg:border-r border-slate-800/80 bg-[#0a0e17]">
+        <aside className="w-full lg:w-72 xl:w-80 shrink-0 border-b lg:border-b-0 lg:border-r border-slate-800/80 bg-[#0a0e17] flex flex-col h-[480px] lg:h-full overflow-hidden min-h-0">
           <WatchlistSidebar symbols={symbols} />
         </aside>
 

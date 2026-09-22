@@ -2,7 +2,7 @@
 
 import React, { useMemo } from "react";
 import { Star } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { clsx } from "clsx";
 import type { MarketSymbol } from "@gorengan/shared";
 import { useMarketStore } from "@/stores/marketStore";
@@ -27,26 +27,27 @@ export function MarketOverviewTable({ symbols }: MarketOverviewTableProps) {
   const priceDirections = useMarketStore((s) => s.priceDirections);
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
   const setSelectedSymbol = useMarketStore((s) => s.setSelectedSymbol);
-  const selectedAssetClass = useMarketStore((s) => s.selectedAssetClass);
+  const selectedCategory = useMarketStore((s) => s.selectedCategory);
 
   const watchlist = useWatchlistStore((s) => s.watchlist);
   const toggleWatchlist = useWatchlistStore((s) => s.toggleWatchlist);
 
-  // Filter symbols based on selectedAssetClass or show all if needed
+  // Filter symbols based on selectedCategory or show all if in 'all'
   const displaySymbols = useMemo(() => {
     return symbols.filter((sym) => {
-      if (selectedAssetClass === "us_stocks") {
+      if (selectedCategory === "all") return true;
+      if (selectedCategory === "us_stocks") {
         return sym.assetClass === "us_stocks" || isUsEquitySymbol(sym.id);
       }
-      if (selectedAssetClass === "idx_stocks") {
+      if (selectedCategory === "idx_stocks") {
         return sym.assetClass === "idx_stocks" || isIdxEquitySymbol(sym.id);
       }
-      if (selectedAssetClass === "fx") {
+      if (selectedCategory === "fx") {
         return sym.assetClass === "fx" || isFxSymbol(sym.id);
       }
       return sym.assetClass === "crypto" || (!isFxSymbol(sym.id) && !isEquitySymbol(sym.id));
     });
-  }, [symbols, selectedAssetClass]);
+  }, [symbols, selectedCategory]);
 
   // Compute table rows during render (no useEffect)
   const rows = useMemo(() => {
@@ -93,14 +94,13 @@ export function MarketOverviewTable({ symbols }: MarketOverviewTableProps) {
             <th className="py-2.5 px-3 text-right hidden sm:table-cell">24h High</th>
             <th className="py-2.5 px-3 text-right hidden sm:table-cell">24h Low</th>
             <th className="py-2.5 px-3 text-right">
-              {selectedAssetClass === "fx" ? "Spread (Pips)" : "24h Volume"}
+              {selectedCategory === "fx" ? "Spread (Pips)" : "24h Volume"}
             </th>
             <th className="py-2.5 px-3 text-center">Source</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-800/40">
-          <AnimatePresence initial={false}>
-            {rows.map(({ symbol, ticker, direction, isStarred, isSelected, rangePercent, isFx, isUs, isId }) => {
+          {rows.map(({ symbol, ticker, direction, isStarred, isSelected, rangePercent, isFx, isUs, isId }) => {
               const isPositive = (ticker?.changePercent24h ?? 0) >= 0;
 
               let formattedPrice = `$${formatPrice(ticker?.price)}`;
@@ -297,7 +297,6 @@ export function MarketOverviewTable({ symbols }: MarketOverviewTableProps) {
                 </motion.tr>
               );
             })}
-          </AnimatePresence>
         </tbody>
       </table>
     </div>

@@ -12,6 +12,8 @@ import type { PriceDirection } from "../types";
 // Re-export for backward compatibility
 export type { PriceDirection } from "../types";
 
+export type MarketCategory = "all" | "crypto" | "fx" | "us_stocks" | "idx_stocks";
+
 /* ─── State (data only) ───────────────────────────────────────────── */
 
 export interface MarketStoreState {
@@ -24,6 +26,7 @@ export interface MarketStoreState {
   selectedSymbol: string;
   selectedTimeframe: Timeframe;
   selectedAssetClass: AssetClass;
+  selectedCategory: MarketCategory;
   fxQuotes: Record<string, FxQuoteTick>;
   sessions: Record<string, { market: string; state: string; segment?: string; nextTransitionAt?: number; ts: number }>;
 
@@ -45,6 +48,7 @@ export interface MarketStoreActions {
   setSelectedSymbol: (symbol: string) => void;
   setSelectedTimeframe: (timeframe: Timeframe) => void;
   setSelectedAssetClass: (assetClass: AssetClass) => void;
+  setSelectedCategory: (category: MarketCategory) => void;
   toggleEma20: () => void;
   toggleEma50: () => void;
   toggleVolume: () => void;
@@ -59,7 +63,7 @@ export type MarketStore = MarketStoreState & MarketStoreActions;
 
 /* ─── Store Implementation ────────────────────────────────────────── */
 
-export const useMarketStore = create<MarketStore>((set) => ({
+export const useMarketStore = create<MarketStore>((set, get) => ({
   tickers: {},
   priceDirections: {},
   candles: {},
@@ -68,6 +72,7 @@ export const useMarketStore = create<MarketStore>((set) => ({
   selectedSymbol: "BTC-USDT",
   selectedTimeframe: "1m",
   selectedAssetClass: "crypto",
+  selectedCategory: "all",
   fxQuotes: {},
   sessions: {},
   showEma20: true,
@@ -83,44 +88,58 @@ export const useMarketStore = create<MarketStore>((set) => ({
       sessions: { ...state.sessions, [session.market.toUpperCase()]: session },
     })),
 
-  setSelectedAssetClass: (assetClass) =>
+  setSelectedCategory: (category) =>
     set((state) => {
+      if (category === "all") {
+        return { selectedCategory: "all" };
+      }
+
       let nextSymbol = state.selectedSymbol;
       let nextTimeframe = state.selectedTimeframe;
+      let nextAssetClass: AssetClass = state.selectedAssetClass;
 
-      if (assetClass === "us_stocks") {
+      if (category === "us_stocks") {
+        nextAssetClass = "us_stocks";
         if (!nextSymbol.startsWith("US:")) {
           nextSymbol = "US:AAPL";
         }
         if (nextTimeframe === "1s" || nextTimeframe === "5s" || nextTimeframe === "15s") {
           nextTimeframe = "1m";
         }
-      } else if (assetClass === "idx_stocks") {
+      } else if (category === "idx_stocks") {
+        nextAssetClass = "idx_stocks";
         if (!nextSymbol.startsWith("ID:")) {
           nextSymbol = "ID:BBCA";
         }
         if (nextTimeframe === "1s" || nextTimeframe === "5s" || nextTimeframe === "15s") {
           nextTimeframe = "1m";
         }
-      } else if (assetClass === "fx") {
+      } else if (category === "fx") {
+        nextAssetClass = "fx";
         if (!nextSymbol.includes("-") || nextSymbol.endsWith("USDT") || nextSymbol.startsWith("US:") || nextSymbol.startsWith("ID:")) {
           nextSymbol = "EUR-USD";
         }
         if (nextTimeframe === "1s" || nextTimeframe === "5s" || nextTimeframe === "15s") {
           nextTimeframe = "1m";
         }
-      } else if (assetClass === "crypto") {
+      } else if (category === "crypto") {
+        nextAssetClass = "crypto";
         if (!nextSymbol.endsWith("USDT")) {
           nextSymbol = "BTC-USDT";
         }
       }
 
       return {
-        selectedAssetClass: assetClass,
+        selectedCategory: category,
+        selectedAssetClass: nextAssetClass,
         selectedSymbol: nextSymbol,
         selectedTimeframe: nextTimeframe,
       };
     }),
+
+  setSelectedAssetClass: (assetClass) => {
+    get().setSelectedCategory(assetClass as MarketCategory);
+  },
 
   setTicker: (ticker) =>
     set((state) => {

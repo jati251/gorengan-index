@@ -14,6 +14,7 @@ import { clsx } from "clsx";
 import { useMarketStore } from "@/stores/marketStore";
 import { formatPrice, formatVolume } from "@/utils/formatters";
 import { formatFxPrice, isFxSymbol, getFxMetadata, formatPips } from "@/features/forex";
+import { formatEquityPrice, isUsEquitySymbol, isIdxEquitySymbol } from "@/features/equities";
 import type { StatCardProps } from "../types";
 
 function StatCard({ label, value, icon, accent = "slate", subtext }: StatCardProps) {
@@ -55,6 +56,8 @@ export function MarketStats() {
 
   const isFx = isFxSymbol(selectedSymbol);
   const fxMeta = getFxMetadata(selectedSymbol);
+  const isUs = isUsEquitySymbol(selectedSymbol);
+  const isId = isIdxEquitySymbol(selectedSymbol);
 
   const allTickers = Object.values(tickers);
   const gainersCount = allTickers.filter((t) => (t.changePercent24h ?? 0) > 0).length;
@@ -63,15 +66,27 @@ export function MarketStats() {
 
   const priceFormatted = isFx
     ? formatFxPrice(ticker?.price, selectedSymbol, fxMeta?.displayDecimals)
-    : `$${formatPrice(ticker?.price)}`;
+    : isId
+      ? formatEquityPrice(ticker?.price, selectedSymbol, "IDR")
+      : isUs
+        ? formatEquityPrice(ticker?.price, selectedSymbol, "USD")
+        : `$${formatPrice(ticker?.price)}`;
 
   const highFormatted = isFx
     ? formatFxPrice(ticker?.high24h, selectedSymbol, fxMeta?.displayDecimals)
-    : `$${formatPrice(ticker?.high24h)}`;
+    : isId
+      ? formatEquityPrice(ticker?.high24h, selectedSymbol, "IDR")
+      : isUs
+        ? formatEquityPrice(ticker?.high24h, selectedSymbol, "USD")
+        : `$${formatPrice(ticker?.high24h)}`;
 
   const lowFormatted = isFx
     ? formatFxPrice(ticker?.low24h, selectedSymbol, fxMeta?.displayDecimals)
-    : `$${formatPrice(ticker?.low24h)}`;
+    : isId
+      ? formatEquityPrice(ticker?.low24h, selectedSymbol, "IDR")
+      : isUs
+        ? formatEquityPrice(ticker?.low24h, selectedSymbol, "USD")
+        : `$${formatPrice(ticker?.low24h)}`;
 
   const spreadVal = isFx
     ? ticker?.spreadPips != null
