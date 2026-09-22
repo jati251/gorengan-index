@@ -33,7 +33,12 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
   useEffect(() => {
     if (!containerRef.current) return;
 
+    const width = containerRef.current.clientWidth || 600;
+    const height = containerRef.current.clientHeight || 420;
+
     const chart = createChart(containerRef.current, {
+      width,
+      height,
       layout: {
         background: { type: ColorType.Solid, color: "#090d16" },
         textColor: "#64748b",
@@ -83,8 +88,10 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
     // Handle container resize
     const resizeObserver = new ResizeObserver((entries) => {
       if (entries.length === 0 || !entries[0].contentRect) return;
-      const { width, height } = entries[0].contentRect;
-      chart.applyOptions({ width, height });
+      const { width: rw, height: rh } = entries[0].contentRect;
+      if (rw > 0 && rh > 0) {
+        chart.applyOptions({ width: rw, height: rh });
+      }
     });
 
     resizeObserver.observe(containerRef.current);
@@ -107,32 +114,44 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
     const candles = candlesData.candles;
     if (candles.length === 0) return;
 
-    const formattedCandles: CandlestickData<Time>[] = [];
-    const formattedVolumes: HistogramData<Time>[] = [];
-
     // Ensure sorted by time ascending
     const sorted = [...candles].sort((a, b) => a.openTime - b.openTime);
 
+    // Deduplicate by second timestamp to satisfy Lightweight Charts strict monotonic ordering
+    const uniqueCandles = new Map<number, CandlestickData<Time>>();
+    const uniqueVolumes = new Map<number, HistogramData<Time>>();
+
     for (const c of sorted) {
-      const time = Math.floor(c.openTime / 1000) as Time;
-      formattedCandles.push({
-        time,
+      const time = Math.floor(c.openTime / 1000);
+      uniqueCandles.set(time, {
+        time: time as Time,
         open: c.open,
         high: c.high,
         low: c.low,
         close: c.close,
       });
 
-      formattedVolumes.push({
-        time,
+      uniqueVolumes.set(time, {
+        time: time as Time,
         value: c.volume,
         color: c.close >= c.open ? "rgba(16, 185, 129, 0.4)" : "rgba(244, 63, 94, 0.4)",
       });
     }
 
-    candleSeriesRef.current.setData(formattedCandles);
-    volumeSeriesRef.current.setData(formattedVolumes);
-    chartRef.current?.timeScale().fitContent();
+    const formattedCandles = Array.from(uniqueCandles.values()).sort(
+      (a, b) => Number(a.time) - Number(b.time)
+    );
+    const formattedVolumes = Array.from(uniqueVolumes.values()).sort(
+      (a, b) => Number(a.time) - Number(b.time)
+    );
+
+    try {
+      candleSeriesRef.current.setData(formattedCandles);
+      volumeSeriesRef.current.setData(formattedVolumes);
+      chartRef.current?.timeScale().fitContent();
+    } catch (err) {
+      console.warn("Error setting candle data:", err);
+    }
   }, [candlesData]);
 
   // Dynamically toggle secondsVisible when switching to 1s/5s/15s timeframes
@@ -156,22 +175,26 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
       if (!liveCandle) return;
 
       const time = Math.floor(liveCandle.openTime / 1000) as Time;
-      candleSeriesRef.current.update({
-        time,
-        open: liveCandle.open,
-        high: liveCandle.high,
-        low: liveCandle.low,
-        close: liveCandle.close,
-      });
+      try {
+        candleSeriesRef.current.update({
+          time,
+          open: liveCandle.open,
+          high: liveCandle.high,
+          low: liveCandle.low,
+          close: liveCandle.close,
+        });
 
-      volumeSeriesRef.current.update({
-        time,
-        value: liveCandle.volume,
-        color:
-          liveCandle.close >= liveCandle.open
-            ? "rgba(16, 185, 129, 0.4)"
-            : "rgba(244, 63, 94, 0.4)",
-      });
+        volumeSeriesRef.current.update({
+          time,
+          value: liveCandle.volume,
+          color:
+            liveCandle.close >= liveCandle.open
+              ? "rgba(16, 185, 129, 0.4)"
+              : "rgba(244, 63, 94, 0.4)",
+        });
+      } catch {
+        // Ignore duplicate or out-of-order live tick updates
+      }
     });
 
     return () => {

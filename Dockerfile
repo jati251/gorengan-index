@@ -6,6 +6,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/shared ./packages/shared
 COPY apps/web ./apps/web
 RUN pnpm install --frozen-lockfile
+ENV NEXT_PUBLIC_API_URL="/v1"
 RUN pnpm --filter @gorengan/shared build
 RUN pnpm --filter web build
 
