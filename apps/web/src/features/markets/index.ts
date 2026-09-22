@@ -5,6 +5,7 @@ export { MarketStatusBadge } from "./components/MarketStatusBadge";
 export { DeviceClock } from "./components/DeviceClock";
 export { MarketStats } from "./components/MarketStats";
 export { IntelligenceSidebar } from "./components/IntelligenceSidebar";
+export { BottomStickyTickerTape } from "./components/BottomStickyTickerTape";
 export { TableSkeleton, MarketStatsSkeleton } from "./components/MarketSkeletons";
 
 // API Hooks

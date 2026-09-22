@@ -5,7 +5,13 @@ import { DEFAULT_SYMBOLS } from "@gorengan/shared";
 import { Zap, BarChart3 } from "lucide-react";
 import { clsx } from "clsx";
 
-import { MarketHeaderTicker, MarketOverviewTable, MarketStats, IntelligenceSidebar } from "@/features/markets";
+import {
+  MarketHeaderTicker,
+  MarketOverviewTable,
+  MarketStats,
+  IntelligenceSidebar,
+  BottomStickyTickerTape,
+} from "@/features/markets";
 import { useSymbolsQuery, useMarketsQuery } from "@/features/markets";
 import { TradingViewChart, ChartHeader } from "@/features/chart";
 import { WatchlistSidebar } from "@/features/watchlist";
@@ -13,7 +19,6 @@ import { WatchlistSidebar } from "@/features/watchlist";
 import { useTerminalWebSocket } from "@/hooks/useTerminalWebSocket";
 import { useMarketStore } from "@/stores/marketStore";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { TerminalFooter } from "@/components/TerminalFooter";
 import { MobileNavigationBar, type MobileTab } from "@/components/MobileNavigationBar";
 
 export default function TerminalPage() {
@@ -46,7 +51,7 @@ export default function TerminalPage() {
         {/* LEFT: Watchlist Sidebar (Sticky on desktop, full height) */}
         <aside
           className={clsx(
-            "w-full lg:w-72 xl:w-80 shrink-0 border-b lg:border-b-0 lg:border-r border-white/[0.08] bg-[#080d1b]/70 backdrop-blur-xl flex-col h-[520px] lg:h-[calc(100vh-74px)] lg:sticky lg:top-[74px] lg:self-start overflow-hidden min-h-0 pb-16 lg:pb-0 z-20",
+            "w-full lg:w-72 xl:w-80 shrink-0 border-b lg:border-b-0 lg:border-r border-white/[0.08] bg-[#080d1b]/70 backdrop-blur-xl flex-col h-[520px] lg:h-[calc(100vh-78px)] lg:sticky lg:top-[42px] lg:self-start overflow-hidden min-h-0 pb-16 lg:pb-0 z-20",
             mobileTab === "markets" ? "flex" : "hidden lg:flex"
           )}
         >
@@ -59,7 +64,7 @@ export default function TerminalPage() {
         {/* CENTER: Interactive Chart & Market Table (Natural vertical scroll) */}
         <section
           className={clsx(
-            "flex-1 flex-col p-2.5 sm:p-3 lg:p-4 gap-3 sm:gap-4 min-w-0 pb-24 lg:pb-8",
+            "flex-1 flex-col p-2.5 sm:p-3 lg:p-4 gap-3 sm:gap-4 min-w-0 pb-36 lg:pb-16",
             mobileTab === "chart"
               ? "flex"
               : mobileTab === "markets"
@@ -119,7 +124,7 @@ export default function TerminalPage() {
         {/* RIGHT: Intelligence Sidebar with Tabs (Sticky on desktop) */}
         <aside
           className={clsx(
-            "w-full lg:w-80 xl:w-[340px] shrink-0 border-t lg:border-t-0 lg:border-l border-white/[0.08] bg-[#080d1b]/70 backdrop-blur-xl flex-col h-[540px] lg:h-[calc(100vh-74px)] lg:sticky lg:top-[74px] lg:self-start overflow-hidden min-h-0 pb-16 lg:pb-0 z-20",
+            "w-full lg:w-80 xl:w-[340px] shrink-0 border-t lg:border-t-0 lg:border-l border-white/[0.08] bg-[#080d1b]/70 backdrop-blur-xl flex-col h-[540px] lg:h-[calc(100vh-78px)] lg:sticky lg:top-[42px] lg:self-start overflow-hidden min-h-0 pb-16 lg:pb-0 z-20",
             mobileTab === "intel" ? "flex" : "hidden lg:flex"
           )}
         >
@@ -127,17 +132,15 @@ export default function TerminalPage() {
         </aside>
       </div>
 
-      {/* 3. Mobile Navigation Bottom Bar */}
+      {/* 3. Continuous Running Sticky Bottom Ticker Tape */}
+      <BottomStickyTickerTape />
+
+      {/* 4. Mobile Navigation Bottom Bar */}
       <MobileNavigationBar
         activeTab={mobileTab}
         onChangeTab={setMobileTab}
         selectedSymbol={selectedSymbol}
       />
-
-      {/* 4. Minimal Footer (Hidden on mobile to yield space to MobileNavigationBar) */}
-      <div className="hidden lg:block">
-        <TerminalFooter />
-      </div>
     </main>
   );
 }
