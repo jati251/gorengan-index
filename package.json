@@ -3,35 +3,33 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
+    "dev": "concurrently -k -p \"[{name}]\" -n \"SERVER,WEB\" -c \"cyan,magenta\" \"pnpm --filter @gorengan/market-server dev\" \"pnpm --filter web dev\"",
+    "dev:server": "pnpm --filter @gorengan/market-server dev",
+    "dev:web": "pnpm --filter web dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint .",
+    "prepare": "husky"
   },
-  "dependencies": {
-    "@prisma/client": "^6.19.3",
-    "dotenv": "^17.4.2",
-    "lightweight-charts": "^5.2.0",
-    "lucide-react": "^1.21.0",
-    "next": "16.2.9",
-    "pg": "^8.22.0",
-    "react": "19.2.4",
-    "react-dom": "19.2.4"
+  "lint-staged": {
+    "*.{ts,tsx,js,mjs}": [
+      "eslint --fix"
+    ]
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp",
+      "unrs-resolver"
+    ]
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
+    "concurrently": "^9.1.2",
+    "eslint": "^9.20.0",
     "eslint-config-next": "16.2.9",
-    "prisma": "^6.19.3",
-    "tailwindcss": "^4",
-    "ts-node": "^10.9.2",
-    "typescript": "^5"
-  },
-  "prisma": {
-    "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
+    "husky": "^9.1.7",
+    "lint-staged": "^15.4.3",
+    "typescript": "^5.7.3"
   },
   "packageManager": "pnpm@11.1.1"
 }

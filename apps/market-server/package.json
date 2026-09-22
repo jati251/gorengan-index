@@ -1,0 +1,27 @@
+{
+  "name": "@gorengan/market-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@gorengan/shared": "workspace:*",
+    "dotenv": "^17.4.2",
+    "pino": "^9.6.0",
+    "pino-pretty": "^13.0.0",
+    "undici": "^7.10.0",
+    "ws": "^8.18.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/ws": "^8.5.14",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3"
+  }
+}

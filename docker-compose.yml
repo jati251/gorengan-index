@@ -1,0 +1,32 @@
+services:
+  market-server:
+    build:
+      context: .
+      dockerfile: apps/market-server/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    environment:
+      - PORT=9000
+      - HOST=0.0.0.0
+      - SQLITE_PATH=/data/market.sqlite
+      - LOG_LEVEL=info
+    volumes:
+      - market-data:/data
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - MARKET_SERVER_INTERNAL_URL=http://market-server:9000/api
+      - NEXT_PUBLIC_WS_URL=ws://localhost:9000/ws
+    depends_on:
+      - market-server
+
+volumes:
+  market-data:
