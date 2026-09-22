@@ -40,7 +40,7 @@ export function ChartSkeleton() {
       {/* Main chart body — stacked bars to mimic candlesticks */}
       <div className="flex-1 flex items-end gap-[3px] px-2">
         {Array.from({ length: 48 }).map((_, i) => {
-          const h = 25 + Math.sin(i * 0.4) * 18 + Math.cos(i * 0.7) * 15;
+          const h = Math.round(25 + Math.sin(i * 0.4) * 18 + Math.cos(i * 0.7) * 15);
           return (
             <Skeleton
               key={i}
