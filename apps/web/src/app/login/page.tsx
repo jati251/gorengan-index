@@ -1,6 +1,7 @@
 "use client";
 
 import React, { Suspense, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { motion } from "framer-motion";
@@ -10,6 +11,7 @@ import {
   Lock,
   Globe2,
   ArrowRight,
+  ArrowLeft,
 } from "lucide-react";
 
 function GoogleIcon({ className }: { className?: string }) {
@@ -37,7 +39,7 @@ function GoogleIcon({ className }: { className?: string }) {
 
 function LoginForm() {
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") || "/";
+  const callbackUrl = searchParams.get("callbackUrl") || "/terminal";
   const [isLoading, setIsLoading] = useState(false);
 
   const handleGoogleSignIn = async () => {
@@ -55,6 +57,17 @@ function LoginForm() {
       {/* Subtle background glow highlights */}
       <div className="absolute -top-24 -left-24 w-48 h-48 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-cyan-500/15 rounded-full blur-3xl pointer-events-none" />
+
+      {/* Back to Home Link */}
+      <div className="relative z-10 mb-4">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-1.5 text-xs font-mono text-slate-400 hover:text-emerald-400 transition-colors"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          <span>Back to Landing Page</span>
+        </Link>
+      </div>
 
       {/* Brand Header */}
       <div className="text-center space-y-3 relative z-10 mb-8">

@@ -13,16 +13,22 @@ export default auth((req) => {
     return NextResponse.next();
   }
 
-  // If already logged in and visiting login page, redirect to terminal home
+  // If already logged in and visiting login page, redirect to full terminal
   if (isAuthPage) {
     if (isLoggedIn) {
-      return NextResponse.redirect(new URL("/", req.url));
+      return NextResponse.redirect(new URL("/terminal", req.url));
     }
     return NextResponse.next();
   }
 
-  // If not logged in and visiting any other page, redirect to login with callbackUrl
-  if (!isLoggedIn) {
+  // Public Landing Page (/) is accessible to everyone
+  if (pathname === "/") {
+    return NextResponse.next();
+  }
+
+  // Protected routes (e.g. /terminal and sub-routes) require authentication
+  const isProtectedRoute = pathname.startsWith("/terminal");
+  if (isProtectedRoute && !isLoggedIn) {
     const callbackUrl = encodeURIComponent(pathname);
     return NextResponse.redirect(
       new URL(`/login?callbackUrl=${callbackUrl}`, req.url)

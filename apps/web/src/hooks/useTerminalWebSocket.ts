@@ -10,13 +10,35 @@ import {
   parseStatus,
   type WsServerMessage,
 } from "@/services/wsMessageParser";
-import type { WebSocketClientMessage, MarketTicker, Candle } from "@gorengan/shared";
+import type { WebSocketClientMessage, MarketTicker, Candle, FxQuoteTick } from "@gorengan/shared";
 import { formatTickerChannel, formatCandleChannel } from "@gorengan/shared";
 
-export function useTerminalWebSocket(subscribedSymbols: string[] = []) {
+export interface UseTerminalWebSocketOptions {
+  /** If true, buffers incoming high-frequency ticks and flushes them every `throttleMs` */
+  isThrottled?: boolean;
+  /** Buffer interval in milliseconds (default: 5000ms / 5s) */
+  throttleMs?: number;
+}
+
+export function useTerminalWebSocket(
+  subscribedSymbols: string[] = [],
+  options: UseTerminalWebSocketOptions = {}
+) {
+  const { isThrottled = false, throttleMs = 5000 } = options;
+  const isThrottledRef = useRef(isThrottled);
+  useEffect(() => {
+    isThrottledRef.current = isThrottled;
+  }, [isThrottled]);
+
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Throttled buffers for preview / guest mode
+  const pendingTickersRef = useRef<Map<string, MarketTicker>>(new Map());
+  const pendingQuotesRef = useRef<Map<string, FxQuoteTick>>(new Map());
+  const pendingCandlesRef = useRef<Map<string, Candle>>(new Map());
+  const throttleIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
   const selectedTimeframe = useMarketStore((s) => s.selectedTimeframe);
@@ -25,6 +47,43 @@ export function useTerminalWebSocket(subscribedSymbols: string[] = []) {
   useEffect(() => {
     symbolsRef.current = subscribedSymbols;
   }, [subscribedSymbols]);
+
+  // Periodic flush for throttled / guest preview mode
+  useEffect(() => {
+    if (isThrottled) {
+      throttleIntervalRef.current = setInterval(() => {
+        const store = useMarketStore.getState();
+
+        if (pendingTickersRef.current.size > 0) {
+          for (const ticker of pendingTickersRef.current.values()) {
+            store.setTicker(ticker);
+          }
+          pendingTickersRef.current.clear();
+        }
+
+        if (pendingQuotesRef.current.size > 0) {
+          for (const quote of pendingQuotesRef.current.values()) {
+            store.setFxQuote(quote);
+          }
+          pendingQuotesRef.current.clear();
+        }
+
+        if (pendingCandlesRef.current.size > 0) {
+          for (const candle of pendingCandlesRef.current.values()) {
+            store.setCandle(candle);
+          }
+          pendingCandlesRef.current.clear();
+        }
+      }, throttleMs);
+
+      return () => {
+        if (throttleIntervalRef.current) {
+          clearInterval(throttleIntervalRef.current);
+          throttleIntervalRef.current = null;
+        }
+      };
+    }
+  }, [isThrottled, throttleMs]);
 
   const sendMessage = useCallback((msg: WebSocketClientMessage) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -62,8 +121,8 @@ export function useTerminalWebSocket(subscribedSymbols: string[] = []) {
           const channels: string[] = [];
           for (const sym of currentSymbols) {
             channels.push(formatTickerChannel(sym));
-            // Only subscribe to 1s for crypto; for FX, 1m is the base timeframe
-            if (sym.endsWith("USDT")) {
+            // Only subscribe to 1s for crypto in unthrottled pro mode; for preview or FX, 1m is base
+            if (!isThrottledRef.current && sym.endsWith("USDT")) {
               channels.push(formatCandleChannel(sym, "1s"));
             }
             channels.push(formatCandleChannel(sym, "1m"));
@@ -96,17 +155,30 @@ export function useTerminalWebSocket(subscribedSymbols: string[] = []) {
             switch (raw.type) {
               case "ticker": {
                 const ticker = parseTicker((raw.ticker ?? {}) as Record<string, unknown>);
-                store.setTicker(ticker);
+                if (isThrottledRef.current) {
+                  pendingTickersRef.current.set(ticker.symbol, ticker);
+                } else {
+                  store.setTicker(ticker);
+                }
                 break;
               }
               case "fx_quote": {
                 const quote = parseFxQuote((raw.quote ?? {}) as Record<string, unknown>);
-                store.setFxQuote(quote);
+                if (isThrottledRef.current) {
+                  pendingQuotesRef.current.set(quote.instrument, quote);
+                } else {
+                  store.setFxQuote(quote);
+                }
                 break;
               }
               case "candle": {
                 const candle = parseCandle((raw.candle ?? {}) as Record<string, unknown>);
-                store.setCandle(candle);
+                if (isThrottledRef.current) {
+                  const key = `${candle.symbol}:${candle.timeframe}`;
+                  pendingCandlesRef.current.set(key, candle);
+                } else {
+                  store.setCandle(candle);
+                }
                 break;
               }
               case "session": {
@@ -193,7 +265,7 @@ export function useTerminalWebSocket(subscribedSymbols: string[] = []) {
       const channels: string[] = [];
       for (const sym of subscribedSymbols) {
         channels.push(formatTickerChannel(sym));
-        if (sym.endsWith("USDT")) {
+        if (!isThrottledRef.current && sym.endsWith("USDT")) {
           channels.push(formatCandleChannel(sym, "1s"));
         }
         channels.push(formatCandleChannel(sym, "1m"));
