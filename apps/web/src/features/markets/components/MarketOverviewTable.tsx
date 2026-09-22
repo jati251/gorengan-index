@@ -9,6 +9,13 @@ import { useMarketStore } from "@/stores/marketStore";
 import { useWatchlistStore } from "@/stores/watchlistStore";
 import { formatPrice, formatPercent, formatVolume } from "@/utils/formatters";
 import { formatFxPrice, isFxSymbol } from "@/features/forex";
+import {
+  formatEquityPrice,
+  getSessionBadgeInfo,
+  isEquitySymbol,
+  isUsEquitySymbol,
+  isIdxEquitySymbol,
+} from "@/features/equities";
 import { Badge } from "@/components/ui/badge";
 
 interface MarketOverviewTableProps {
@@ -28,10 +35,16 @@ export function MarketOverviewTable({ symbols }: MarketOverviewTableProps) {
   // Filter symbols based on selectedAssetClass or show all if needed
   const displaySymbols = useMemo(() => {
     return symbols.filter((sym) => {
+      if (selectedAssetClass === "us_stocks") {
+        return sym.assetClass === "us_stocks" || isUsEquitySymbol(sym.id);
+      }
+      if (selectedAssetClass === "idx_stocks") {
+        return sym.assetClass === "idx_stocks" || isIdxEquitySymbol(sym.id);
+      }
       if (selectedAssetClass === "fx") {
         return sym.assetClass === "fx" || isFxSymbol(sym.id);
       }
-      return sym.assetClass !== "fx" && !isFxSymbol(sym.id);
+      return sym.assetClass === "crypto" || (!isFxSymbol(sym.id) && !isEquitySymbol(sym.id));
     });
   }, [symbols, selectedAssetClass]);
 
@@ -42,7 +55,9 @@ export function MarketOverviewTable({ symbols }: MarketOverviewTableProps) {
       const direction = priceDirections[sym.id] || "neutral";
       const isStarred = watchlist.includes(sym.id);
       const isSelected = selectedSymbol === sym.id;
-      const isFx = sym.assetClass === "fx" || isFxSymbol(sym.id);
+      const isUs = sym.assetClass === "us_stocks" || isUsEquitySymbol(sym.id);
+      const isId = sym.assetClass === "idx_stocks" || isIdxEquitySymbol(sym.id);
+      const isFx = !isUs && !isId && (sym.assetClass === "fx" || isFxSymbol(sym.id));
 
       const price = ticker?.price ?? 0;
       const high = ticker?.high24h ?? price;
@@ -58,6 +73,8 @@ export function MarketOverviewTable({ symbols }: MarketOverviewTableProps) {
         isSelected,
         rangePercent,
         isFx,
+        isUs,
+        isId,
       };
     });
   }, [displaySymbols, tickers, priceDirections, watchlist, selectedSymbol]);
@@ -83,20 +100,30 @@ export function MarketOverviewTable({ symbols }: MarketOverviewTableProps) {
         </thead>
         <tbody className="divide-y divide-slate-800/40">
           <AnimatePresence initial={false}>
-            {rows.map(({ symbol, ticker, direction, isStarred, isSelected, rangePercent, isFx }) => {
+            {rows.map(({ symbol, ticker, direction, isStarred, isSelected, rangePercent, isFx, isUs, isId }) => {
               const isPositive = (ticker?.changePercent24h ?? 0) >= 0;
 
-              const formattedPrice = isFx
-                ? formatFxPrice(ticker?.price, symbol.id, symbol.displayDecimals)
-                : `$${formatPrice(ticker?.price)}`;
+              let formattedPrice = `$${formatPrice(ticker?.price)}`;
+              let highFormatted = `$${formatPrice(ticker?.high24h)}`;
+              let lowFormatted = `$${formatPrice(ticker?.low24h)}`;
 
-              const highFormatted = isFx
-                ? formatFxPrice(ticker?.high24h, symbol.id, symbol.displayDecimals)
-                : `$${formatPrice(ticker?.high24h)}`;
+              if (isFx) {
+                formattedPrice = formatFxPrice(ticker?.price, symbol.id, symbol.displayDecimals);
+                highFormatted = formatFxPrice(ticker?.high24h, symbol.id, symbol.displayDecimals);
+                lowFormatted = formatFxPrice(ticker?.low24h, symbol.id, symbol.displayDecimals);
+              } else if (isId) {
+                formattedPrice = formatEquityPrice(ticker?.price, symbol.id, "IDR");
+                highFormatted = formatEquityPrice(ticker?.high24h, symbol.id, "IDR");
+                lowFormatted = formatEquityPrice(ticker?.low24h, symbol.id, "IDR");
+              } else if (isUs) {
+                formattedPrice = formatEquityPrice(ticker?.price, symbol.id, "USD");
+                highFormatted = formatEquityPrice(ticker?.high24h, symbol.id, "USD");
+                lowFormatted = formatEquityPrice(ticker?.low24h, symbol.id, "USD");
+              }
 
-              const lowFormatted = isFx
-                ? formatFxPrice(ticker?.low24h, symbol.id, symbol.displayDecimals)
-                : `$${formatPrice(ticker?.low24h)}`;
+              const badgeInfo = isUs || isId
+                ? getSessionBadgeInfo(ticker?.sessionState, ticker?.dataQuality, isUs)
+                : null;
 
               return (
                 <motion.tr
@@ -106,9 +133,13 @@ export function MarketOverviewTable({ symbols }: MarketOverviewTableProps) {
                   className={clsx(
                     "transition-colors duration-150 cursor-pointer group select-none",
                     isSelected
-                      ? isFx
-                        ? "bg-blue-950/25 border-l-2 border-blue-400"
-                        : "bg-emerald-950/25 border-l-2 border-emerald-400"
+                      ? isUs
+                        ? "bg-cyan-950/25 border-l-2 border-cyan-400"
+                        : isId
+                          ? "bg-amber-950/25 border-l-2 border-amber-400"
+                          : isFx
+                            ? "bg-blue-950/25 border-l-2 border-blue-400"
+                            : "bg-emerald-950/25 border-l-2 border-emerald-400"
                       : "hover:bg-slate-800/30"
                   )}
                 >
@@ -139,9 +170,13 @@ export function MarketOverviewTable({ symbols }: MarketOverviewTableProps) {
                         className={clsx(
                           "font-semibold text-xs sm:text-sm tracking-tight",
                           isSelected
-                            ? isFx
-                              ? "text-blue-400"
-                              : "text-emerald-400"
+                            ? isUs
+                              ? "text-cyan-400"
+                              : isId
+                                ? "text-amber-400"
+                                : isFx
+                                  ? "text-blue-400"
+                                  : "text-emerald-400"
                             : "text-slate-100 group-hover:text-white"
                         )}
                       >
@@ -158,6 +193,14 @@ export function MarketOverviewTable({ symbols }: MarketOverviewTableProps) {
                     {symbol.isTokenizedMetal ? (
                       <Badge variant="gold" className="text-[10px] py-0 px-1.5 font-mono">
                         Tokenized Gold
+                      </Badge>
+                    ) : isUs ? (
+                      <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-mono text-cyan-400 border-cyan-800/50 bg-cyan-950/40">
+                        US EQUITIES
+                      </Badge>
+                    ) : isId ? (
+                      <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-mono text-amber-400 border-amber-800/50 bg-amber-950/40">
+                        IDX EQUITIES
                       </Badge>
                     ) : isFx ? (
                       <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-mono text-blue-400 border-blue-800/50 bg-blue-950/40">
@@ -232,16 +275,24 @@ export function MarketOverviewTable({ symbols }: MarketOverviewTableProps) {
                       <span className="text-amber-400 font-semibold">
                         {ticker?.spreadPips ? `${ticker.spreadPips} pip` : "0.8 pip"}
                       </span>
+                    ) : isUs || isId ? (
+                      `${formatVolume(ticker?.volume24h)} vol`
                     ) : (
                       `${formatVolume(ticker?.volume24h)} ${symbol.base}`
                     )}
                   </td>
 
-                  {/* Provider Source */}
+                  {/* Provider Source & Session Badge */}
                   <td className="py-3 px-3 text-center">
-                    <span className="text-[10px] text-slate-400 uppercase tracking-wider font-mono px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800">
-                      {symbol.provider}
-                    </span>
+                    {badgeInfo ? (
+                      <span className={clsx("text-[10px] uppercase tracking-wider font-mono px-1.5 py-0.5 rounded border font-bold", badgeInfo.colorClass)}>
+                        {badgeInfo.label}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 uppercase tracking-wider font-mono px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800">
+                        {symbol.provider}
+                      </span>
+                    )}
                   </td>
                 </motion.tr>
               );

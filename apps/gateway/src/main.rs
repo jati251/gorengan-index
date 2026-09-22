@@ -22,9 +22,13 @@ use tracing::{debug, info, warn, Level};
 use tracing_subscriber::FmtSubscriber;
 
 use market_config::AppConfig;
-use market_domain::{AssetClass, Candle, Instrument, InstrumentId, Interval, ProviderId, QuoteTick, TickerState};
+use market_domain::{
+    AssetClass, Candle, IdxMarketCalendar, Instrument, InstrumentId, Interval, MarketCalendar,
+    MarketSessionState, ProviderId, QuoteTick, TickerState, UsMarketCalendar,
+};
 use market_protocol::{
     ClientWsCommand, MarketMessage, NatsSubjects, ProviderStatusEvent, ServerWsEvent,
+    SessionStateUpdate,
 };
 
 static ACTIVE_WS_CLIENTS: AtomicU64 = AtomicU64::new(0);
@@ -93,6 +97,12 @@ async fn main() -> Result<()> {
         run_fx_poller(fx_state).await;
     });
 
+    // Background 24/7 Equity Session Supervisor & Poller (US & IDX)
+    let equity_state = state.clone();
+    tokio::spawn(async move {
+        run_equity_supervisor_and_poller(equity_state).await;
+    });
+
     // Axum Router with CORS
     let app = Router::new()
         .route("/v1/health", get(handle_health))
@@ -105,6 +115,11 @@ async fn main() -> Result<()> {
         .route("/v1/fx/markets", get(handle_fx_markets))
         .route("/v1/fx/candles", get(handle_candles))
         .route("/v1/fx/candles/{instrument}", get(handle_candles_path))
+        // Equities & Market Session routes per STK patch spec
+        .route("/v1/equities", get(handle_equity_symbols))
+        .route("/v1/equities/{instrument}", get(handle_candles_path))
+        .route("/v1/markets/us/session", get(handle_us_session))
+        .route("/v1/markets/id/session", get(handle_id_session))
         .route("/v1/news", get(handle_news))
         .route("/v1/sentiment", get(handle_sentiment))
         .route("/v1/stream", get(handle_ws_upgrade))
@@ -201,6 +216,11 @@ async fn run_nats_consumer(state: AppState) {
                             change_percent_24h: None,
                             updated_at_ns: quote.provider_ts_ns,
                             session_state: Some("open".into()),
+                            session_segment: Some("REGULAR".into()),
+                            data_quality: Some("realtime_consolidated".into()),
+                            market: Some("FX".into()),
+                            currency: Some("USD".into()),
+                            previous_close: None,
                         };
                         {
                             let mut lock = state.latest_tickers.write().await;
@@ -336,6 +356,11 @@ async fn run_fx_poller(state: AppState) {
                                     change_percent_24h: change_pct.and_then(Decimal::from_f64_retain),
                                     updated_at_ns: regular_time * 1_000_000_000,
                                     session_state: Some("open".into()),
+                                    session_segment: Some("REGULAR".into()),
+                                    data_quality: Some("realtime_venue".into()),
+                                    market: Some("FX".into()),
+                                    currency: Some(inst.quote.clone()),
+                                    previous_close: prev_close.and_then(Decimal::from_f64_retain),
                                 };
 
                                 {
@@ -398,6 +423,274 @@ async fn run_fx_poller(state: AppState) {
     }
 }
 
+/// Real background supervisor & poller for US & IDX Equities (24/7 session-aware)
+async fn run_equity_supervisor_and_poller(state: AppState) {
+    let equity_instruments: Vec<Instrument> = state
+        .instruments
+        .iter()
+        .filter(|i| {
+            matches!(
+                i.asset_class,
+                AssetClass::UsStocks | AssetClass::IdxStocks | AssetClass::Equity | AssetClass::Etf
+            ) || i.id.as_str().starts_with("US:")
+                || i.id.as_str().starts_with("ID:")
+        })
+        .cloned()
+        .collect();
+
+    if equity_instruments.is_empty() {
+        return;
+    }
+
+    info!(count = equity_instruments.len(), "Starting 24/7 Equity Session Supervisor & Poller");
+
+    let us_cal = UsMarketCalendar::new();
+    let id_cal = IdxMarketCalendar::new();
+
+    let mut last_us_state = MarketSessionState::Unknown;
+    let mut last_id_state = MarketSessionState::Unknown;
+    let mut is_initial_run = true;
+
+    loop {
+        let now = Utc::now();
+        let us_state = us_cal.state_at(now);
+        let id_state = id_cal.state_at(now);
+
+        let us_state_str = match us_state {
+            MarketSessionState::Regular => "REGULAR",
+            MarketSessionState::PreMarket => "PRE_MARKET",
+            MarketSessionState::AfterHours => "AFTER_HOURS",
+            MarketSessionState::Break => "BREAK",
+            MarketSessionState::Holiday => "HOLIDAY",
+            MarketSessionState::Closed => "CLOSED",
+            _ => "CLOSED",
+        };
+        let id_state_str = match id_state {
+            MarketSessionState::Regular => "REGULAR",
+            MarketSessionState::PreMarket => "PRE_MARKET",
+            MarketSessionState::AfterHours => "AFTER_HOURS",
+            MarketSessionState::Break => "BREAK",
+            MarketSessionState::Holiday => "HOLIDAY",
+            MarketSessionState::Closed => "CLOSED",
+            _ => "CLOSED",
+        };
+
+        if us_state != last_us_state || is_initial_run {
+            last_us_state = us_state;
+            let evt = ServerWsEvent::Session {
+                session: SessionStateUpdate {
+                    market: "US".to_string(),
+                    state: us_state_str.to_string(),
+                    segment: us_cal.session_segment(now),
+                    next_transition_at: us_cal.next_transition(now).map(|dt| dt.timestamp_millis()),
+                    ts: now.timestamp_millis(),
+                },
+            };
+            let _ = state.broadcast_tx.send(evt);
+        }
+
+        if id_state != last_id_state || is_initial_run {
+            last_id_state = id_state;
+            let evt = ServerWsEvent::Session {
+                session: SessionStateUpdate {
+                    market: "ID".to_string(),
+                    state: id_state_str.to_string(),
+                    segment: id_cal.session_segment(now),
+                    next_transition_at: id_cal.next_transition(now).map(|dt| dt.timestamp_millis()),
+                    ts: now.timestamp_millis(),
+                },
+            };
+            let _ = state.broadcast_tx.send(evt);
+        }
+
+        for inst in &equity_instruments {
+            let is_us = inst.asset_class == AssetClass::UsStocks || inst.id.as_str().starts_with("US:");
+            let _is_id = inst.asset_class == AssetClass::IdxStocks || inst.id.as_str().starts_with("ID:");
+            let active_state = if is_us { us_state } else { id_state };
+
+            let should_poll = is_initial_run
+                || active_state == MarketSessionState::Regular
+                || active_state == MarketSessionState::PreMarket
+                || active_state == MarketSessionState::AfterHours;
+
+            if should_poll {
+                let url = format!(
+                    "https://query1.finance.yahoo.com/v8/finance/chart/{}?interval=1m&range=1d",
+                    inst.provider_symbol
+                );
+
+                if let Ok(res) = state.http_client.get(&url).send().await {
+                    if res.status().is_success() {
+                        if let Ok(json) = res.json::<serde_json::Value>().await {
+                            if let Some(result) = json.pointer("/chart/result/0") {
+                                let meta = result.get("meta");
+                                let regular_price = meta
+                                    .and_then(|m| m.get("regularMarketPrice"))
+                                    .and_then(|v| v.as_f64());
+                                let regular_time = meta
+                                    .and_then(|m| m.get("regularMarketTime"))
+                                    .and_then(|v| v.as_i64())
+                                    .unwrap_or_else(|| Utc::now().timestamp());
+                                let day_high = meta
+                                    .and_then(|m| m.get("regularMarketDayHigh"))
+                                    .and_then(|v| v.as_f64());
+                                let day_low = meta
+                                    .and_then(|m| m.get("regularMarketDayLow"))
+                                    .and_then(|v| v.as_f64());
+                                let prev_close = meta
+                                    .and_then(|m| m.get("chartPreviousClose").or_else(|| m.get("previousClose")))
+                                    .and_then(|v| v.as_f64());
+                                let day_volume = meta
+                                    .and_then(|m| m.get("regularMarketVolume"))
+                                    .and_then(|v| v.as_f64())
+                                    .unwrap_or(0.0);
+
+                                if let Some(price_f64) = regular_price {
+                                    let change_24h = prev_close.map(|pc| price_f64 - pc);
+                                    let change_pct = prev_close.map(|pc| ((price_f64 - pc) / pc) * 100.0);
+
+                                    let price_dec = Decimal::from_f64_retain(price_f64).unwrap_or(Decimal::ZERO);
+                                    let market_name = if is_us { "US" } else { "ID" };
+                                    let currency_name = if is_us { "USD" } else { "IDR" };
+                                    let data_quality_str = if is_us {
+                                        if active_state == MarketSessionState::Regular {
+                                            "realtime_venue"
+                                        } else {
+                                            "last_known"
+                                        }
+                                    } else {
+                                        if active_state == MarketSessionState::Regular {
+                                            "delayed"
+                                        } else {
+                                            "last_known"
+                                        }
+                                    };
+
+                                    let session_state_str = match active_state {
+                                        MarketSessionState::Regular => "regular",
+                                        MarketSessionState::PreMarket => "pre_market",
+                                        MarketSessionState::AfterHours => "after_hours",
+                                        MarketSessionState::Break => "break",
+                                        MarketSessionState::Holiday => "holiday",
+                                        _ => "closed",
+                                    };
+
+                                    let session_segment = if is_us {
+                                        us_cal.session_segment(now)
+                                    } else {
+                                        id_cal.session_segment(now)
+                                    };
+
+                                    let ticker = TickerState {
+                                        instrument: inst.id.clone(),
+                                        provider: inst.provider.clone(),
+                                        price: price_dec,
+                                        bid: Some(price_dec),
+                                        ask: Some(price_dec),
+                                        mid: Some(price_dec),
+                                        spread: None,
+                                        spread_bps: None,
+                                        open_24h: prev_close.and_then(Decimal::from_f64_retain),
+                                        high_24h: day_high.and_then(Decimal::from_f64_retain),
+                                        low_24h: day_low.and_then(Decimal::from_f64_retain),
+                                        volume_24h: Some(Decimal::from_f64_retain(day_volume).unwrap_or(Decimal::ZERO)),
+                                        quote_volume_24h: Some(Decimal::ZERO),
+                                        change_24h: change_24h.and_then(Decimal::from_f64_retain),
+                                        change_percent_24h: change_pct.and_then(Decimal::from_f64_retain),
+                                        updated_at_ns: regular_time * 1_000_000_000,
+                                        session_state: Some(session_state_str.into()),
+                                        session_segment,
+                                        data_quality: Some(data_quality_str.into()),
+                                        market: Some(market_name.into()),
+                                        currency: Some(currency_name.into()),
+                                        previous_close: prev_close.and_then(Decimal::from_f64_retain),
+                                    };
+
+                                    {
+                                        let mut lock = state.latest_tickers.write().await;
+                                        lock.insert(inst.id.clone(), ticker.clone());
+                                    }
+
+                                    let _ = state.broadcast_tx.send(ServerWsEvent::Ticker { ticker });
+
+                                    // Parse latest candle
+                                    let timestamps = result.get("timestamp").and_then(|t| t.as_array());
+                                    let quote_obj = result.pointer("/indicators/quote/0");
+                                    if let (Some(ts_arr), Some(q)) = (timestamps, quote_obj) {
+                                        let opens = q.get("open").and_then(|v| v.as_array());
+                                        let highs = q.get("high").and_then(|v| v.as_array());
+                                        let lows = q.get("low").and_then(|v| v.as_array());
+                                        let closes = q.get("close").and_then(|v| v.as_array());
+                                        let volumes = q.get("volume").and_then(|v| v.as_array());
+
+                                        if let (Some(ts_last), Some(o_arr), Some(h_arr), Some(l_arr), Some(c_arr)) =
+                                            (ts_arr.last().and_then(|v| v.as_i64()), opens, highs, lows, closes)
+                                        {
+                                            let o = o_arr.last().and_then(|v| v.as_f64());
+                                            let h = h_arr.last().and_then(|v| v.as_f64());
+                                            let l = l_arr.last().and_then(|v| v.as_f64());
+                                            let c = c_arr.last().and_then(|v| v.as_f64());
+                                            let v = volumes.and_then(|v_arr| v_arr.last().and_then(|x| x.as_f64())).unwrap_or(0.0);
+
+                                            if let (Some(ov), Some(hv), Some(lv), Some(cv)) = (o, h, l, c) {
+                                                let mut candle = Candle::new(
+                                                    inst.id.clone(),
+                                                    Interval::Min1,
+                                                    ts_last * 1_000_000_000,
+                                                    Decimal::from_f64_retain(ov).unwrap_or(price_dec),
+                                                    Decimal::from_f64_retain(v).unwrap_or(Decimal::ZERO),
+                                                    inst.provider.clone(),
+                                                );
+                                                candle.high = Decimal::from_f64_retain(hv).unwrap_or(price_dec);
+                                                candle.low = Decimal::from_f64_retain(lv).unwrap_or(price_dec);
+                                                candle.close = Decimal::from_f64_retain(cv).unwrap_or(price_dec);
+
+                                                let key = format!("1m:{}", inst.id.as_str());
+                                                {
+                                                    let mut lock = state.latest_candles.write().await;
+                                                    lock.insert(key, candle.clone());
+                                                }
+                                                let _ = state.broadcast_tx.send(ServerWsEvent::Candle { candle });
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                sleep(Duration::from_millis(250)).await;
+            } else {
+                let mut lock = state.latest_tickers.write().await;
+                if let Some(t) = lock.get_mut(&inst.id) {
+                    let session_state_str = match active_state {
+                        MarketSessionState::Break => "break",
+                        MarketSessionState::Holiday => "holiday",
+                        _ => "closed",
+                    };
+                    t.session_state = Some(session_state_str.into());
+                    t.session_segment = if is_us { us_cal.session_segment(now) } else { id_cal.session_segment(now) };
+                    t.data_quality = Some("last_known".into());
+                }
+            }
+        }
+
+        is_initial_run = false;
+
+        let any_active = us_state == MarketSessionState::Regular
+            || us_state == MarketSessionState::PreMarket
+            || us_state == MarketSessionState::AfterHours
+            || id_state == MarketSessionState::Regular;
+
+        if any_active {
+            sleep(Duration::from_secs(5)).await;
+        } else {
+            sleep(Duration::from_secs(30)).await;
+        }
+    }
+}
+
+
 // REST Handlers
 
 #[derive(Serialize)]
@@ -443,6 +736,12 @@ struct MarketSymbolDto {
     display_decimals: Option<u32>,
     #[serde(rename = "candlePriceBasis", skip_serializing_if = "Option::is_none")]
     candle_price_basis: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    exchange: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    country: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    timezone: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -460,8 +759,19 @@ async fn handle_symbols(
                 AssetClass::Crypto => "crypto",
                 AssetClass::Fx => "fx",
                 AssetClass::Metal => "metal",
+                AssetClass::UsStocks | AssetClass::Equity | AssetClass::Etf => "us_stocks",
+                AssetClass::IdxStocks => "idx_stocks",
             };
-            class_str.eq_ignore_ascii_case(ac)
+
+            if ac.eq_ignore_ascii_case("stocks") || ac.eq_ignore_ascii_case("equity") || ac.eq_ignore_ascii_case("equities") {
+                class_str == "us_stocks" || class_str == "idx_stocks"
+            } else if ac.eq_ignore_ascii_case("us") {
+                class_str == "us_stocks"
+            } else if ac.eq_ignore_ascii_case("id") || ac.eq_ignore_ascii_case("idx") {
+                class_str == "idx_stocks"
+            } else {
+                class_str.eq_ignore_ascii_case(ac)
+            }
         } else {
             true
         }
@@ -473,25 +783,45 @@ async fn handle_symbols(
                 AssetClass::Crypto => "crypto",
                 AssetClass::Fx => "fx",
                 AssetClass::Metal => "metal",
+                AssetClass::UsStocks | AssetClass::Equity | AssetClass::Etf => "us_stocks",
+                AssetClass::IdxStocks => "idx_stocks",
             };
-            let name = match inst.id.as_str() {
-                "BTC-USDT" => "Bitcoin",
-                "ETH-USDT" => "Ethereum",
-                "SOL-USDT" => "Solana",
-                "BNB-USDT" => "BNB",
-                "XRP-USDT" => "XRP",
-                "PAXG-USDT" => "Paxos Gold (Tokenized Gold)",
-                "EUR-USD" => "Euro / US Dollar",
-                "GBP-USD" => "British Pound / US Dollar",
-                "USD-JPY" => "US Dollar / Japanese Yen",
-                "AUD-USD" => "Australian Dollar / US Dollar",
-                "USD-CAD" => "US Dollar / Canadian Dollar",
-                "USD-CHF" => "US Dollar / Swiss Franc",
-                "NZD-USD" => "New Zealand Dollar / US Dollar",
-                "EUR-JPY" => "Euro / Japanese Yen",
-                "GBP-JPY" => "British Pound / Japanese Yen",
-                "USD-IDR" => "US Dollar / Indonesian Rupiah",
-                other => other,
+            let (name, exchange, country, timezone) = match inst.id.as_str() {
+                "BTC-USDT" => ("Bitcoin", None, None, None),
+                "ETH-USDT" => ("Ethereum", None, None, None),
+                "SOL-USDT" => ("Solana", None, None, None),
+                "BNB-USDT" => ("BNB", None, None, None),
+                "XRP-USDT" => ("XRP", None, None, None),
+                "PAXG-USDT" => ("Paxos Gold (Tokenized Gold)", None, None, None),
+                "EUR-USD" => ("Euro / US Dollar", None, None, None),
+                "GBP-USD" => ("British Pound / US Dollar", None, None, None),
+                "USD-JPY" => ("US Dollar / Japanese Yen", None, None, None),
+                "AUD-USD" => ("Australian Dollar / US Dollar", None, None, None),
+                "USD-CAD" => ("US Dollar / Canadian Dollar", None, None, None),
+                "USD-CHF" => ("US Dollar / Swiss Franc", None, None, None),
+                "NZD-USD" => ("New Zealand Dollar / US Dollar", None, None, None),
+                "EUR-JPY" => ("Euro / Japanese Yen", None, None, None),
+                "GBP-JPY" => ("British Pound / Japanese Yen", None, None, None),
+                "USD-IDR" => ("US Dollar / Indonesian Rupiah", None, None, None),
+                "US:AAPL" => ("Apple Inc.", Some("NASDAQ"), Some("US"), Some("America/New_York")),
+                "US:MSFT" => ("Microsoft Corp.", Some("NASDAQ"), Some("US"), Some("America/New_York")),
+                "US:NVDA" => ("NVIDIA Corp.", Some("NASDAQ"), Some("US"), Some("America/New_York")),
+                "US:TSLA" => ("Tesla Inc.", Some("NASDAQ"), Some("US"), Some("America/New_York")),
+                "US:AMZN" => ("Amazon.com Inc.", Some("NASDAQ"), Some("US"), Some("America/New_York")),
+                "US:META" => ("Meta Platforms Inc.", Some("NASDAQ"), Some("US"), Some("America/New_York")),
+                "US:GOOGL" => ("Alphabet Inc.", Some("NASDAQ"), Some("US"), Some("America/New_York")),
+                "US:AMD" => ("Advanced Micro Devices", Some("NASDAQ"), Some("US"), Some("America/New_York")),
+                "US:SPY" => ("SPDR S&P 500 ETF Trust", Some("NYSE"), Some("US"), Some("America/New_York")),
+                "US:QQQ" => ("Invesco QQQ Trust", Some("NASDAQ"), Some("US"), Some("America/New_York")),
+                "ID:BBCA" => ("Bank Central Asia Tbk", Some("IDX"), Some("ID"), Some("Asia/Jakarta")),
+                "ID:BBRI" => ("Bank Rakyat Indonesia Tbk", Some("IDX"), Some("ID"), Some("Asia/Jakarta")),
+                "ID:BMRI" => ("Bank Mandiri Tbk", Some("IDX"), Some("ID"), Some("Asia/Jakarta")),
+                "ID:BBNI" => ("Bank Negara Indonesia Tbk", Some("IDX"), Some("ID"), Some("Asia/Jakarta")),
+                "ID:TLKM" => ("Telkom Indonesia Tbk", Some("IDX"), Some("ID"), Some("Asia/Jakarta")),
+                "ID:ASII" => ("Astra International Tbk", Some("IDX"), Some("ID"), Some("Asia/Jakarta")),
+                "ID:ANTM" => ("Aneka Tambang Tbk", Some("IDX"), Some("ID"), Some("Asia/Jakarta")),
+                "ID:GOTO" => ("GoTo Gojek Tokopedia Tbk", Some("IDX"), Some("ID"), Some("Asia/Jakarta")),
+                other => (other, None, None, None),
             };
 
             MarketSymbolDto {
@@ -507,6 +837,9 @@ async fn handle_symbols(
                 pip_size: inst.pip_size.and_then(|p| p.to_f64()),
                 display_decimals: inst.display_decimals,
                 candle_price_basis: inst.candle_price_basis.clone(),
+                exchange: exchange.map(|s| s.to_string()),
+                country: country.map(|s| s.to_string()),
+                timezone: timezone.map(|s| s.to_string()),
             }
         })
         .collect();
@@ -516,6 +849,10 @@ async fn handle_symbols(
 
 async fn handle_fx_symbols(State(state): State<AppState>) -> Json<SymbolsResponse> {
     handle_symbols(State(state), Query(SymbolsQuery { asset_class: Some("fx".into()) })).await
+}
+
+async fn handle_equity_symbols(State(state): State<AppState>) -> Json<SymbolsResponse> {
+    handle_symbols(State(state), Query(SymbolsQuery { asset_class: Some("stocks".into()) })).await
 }
 
 #[derive(Deserialize, Default)]
@@ -558,6 +895,16 @@ struct MarketTickerDto {
     spread_pips: Option<f64>,
     #[serde(rename = "sessionState", skip_serializing_if = "Option::is_none")]
     session_state: Option<String>,
+    #[serde(rename = "sessionSegment", skip_serializing_if = "Option::is_none")]
+    session_segment: Option<String>,
+    #[serde(rename = "dataQuality", skip_serializing_if = "Option::is_none")]
+    data_quality: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    market: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    currency: Option<String>,
+    #[serde(rename = "previousClose", skip_serializing_if = "Option::is_none")]
+    previous_close: Option<f64>,
 }
 
 #[derive(Serialize)]
@@ -578,8 +925,19 @@ async fn handle_markets(
                 AssetClass::Crypto => "crypto",
                 AssetClass::Fx => "fx",
                 AssetClass::Metal => "metal",
+                AssetClass::UsStocks | AssetClass::Equity | AssetClass::Etf => "us_stocks",
+                AssetClass::IdxStocks => "idx_stocks",
             };
-            class_str.eq_ignore_ascii_case(ac)
+
+            if ac.eq_ignore_ascii_case("stocks") || ac.eq_ignore_ascii_case("equity") || ac.eq_ignore_ascii_case("equities") {
+                class_str == "us_stocks" || class_str == "idx_stocks"
+            } else if ac.eq_ignore_ascii_case("us") {
+                class_str == "us_stocks"
+            } else if ac.eq_ignore_ascii_case("id") || ac.eq_ignore_ascii_case("idx") {
+                class_str == "idx_stocks"
+            } else {
+                class_str.eq_ignore_ascii_case(ac)
+            }
         } else {
             true
         }
@@ -591,6 +949,8 @@ async fn handle_markets(
                 AssetClass::Crypto => "crypto",
                 AssetClass::Fx => "fx",
                 AssetClass::Metal => "metal",
+                AssetClass::UsStocks | AssetClass::Equity | AssetClass::Etf => "us_stocks",
+                AssetClass::IdxStocks => "idx_stocks",
             };
             let pip_size_f64 = inst.pip_size.and_then(|p| p.to_f64()).unwrap_or(0.0001);
 
@@ -617,6 +977,11 @@ async fn handle_markets(
                     spread: spread_f64,
                     spread_pips,
                     session_state: t.session_state.clone().or_else(|| Some("open".into())),
+                    session_segment: t.session_segment.clone(),
+                    data_quality: t.data_quality.clone(),
+                    market: t.market.clone(),
+                    currency: t.currency.clone(),
+                    previous_close: t.previous_close.and_then(|v| v.to_f64()),
                 }
             } else {
                 MarketTickerDto {
@@ -637,7 +1002,12 @@ async fn handle_markets(
                     mid: None,
                     spread: None,
                     spread_pips: None,
-                    session_state: Some("open".into()),
+                    session_state: Some("closed".into()),
+                    session_segment: None,
+                    data_quality: Some("last_known".into()),
+                    market: None,
+                    currency: None,
+                    previous_close: None,
                 }
             }
         })
@@ -651,6 +1021,65 @@ async fn handle_markets(
 
 async fn handle_fx_markets(State(state): State<AppState>) -> Json<MarketsResponse> {
     handle_markets(State(state), Query(MarketsQuery { asset_class: Some("fx".into()) })).await
+}
+
+#[derive(Serialize)]
+struct SessionResponse {
+    market: String,
+    state: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    segment: Option<String>,
+    #[serde(rename = "nextTransitionAt", skip_serializing_if = "Option::is_none")]
+    next_transition_at: Option<i64>,
+    timestamp: i64,
+}
+
+async fn handle_us_session() -> Json<SessionResponse> {
+    let cal = UsMarketCalendar::new();
+    let now = Utc::now();
+    let state = cal.state_at(now);
+    let segment = cal.session_segment(now);
+    let next_transition = cal.next_transition(now).map(|dt| dt.timestamp_millis());
+    let state_str = match state {
+        MarketSessionState::Regular => "REGULAR",
+        MarketSessionState::PreMarket => "PRE_MARKET",
+        MarketSessionState::AfterHours => "AFTER_HOURS",
+        MarketSessionState::Break => "BREAK",
+        MarketSessionState::Holiday => "HOLIDAY",
+        MarketSessionState::Closed => "CLOSED",
+        _ => "CLOSED",
+    };
+    Json(SessionResponse {
+        market: "US".to_string(),
+        state: state_str.to_string(),
+        segment,
+        next_transition_at: next_transition,
+        timestamp: now.timestamp_millis(),
+    })
+}
+
+async fn handle_id_session() -> Json<SessionResponse> {
+    let cal = IdxMarketCalendar::new();
+    let now = Utc::now();
+    let state = cal.state_at(now);
+    let segment = cal.session_segment(now);
+    let next_transition = cal.next_transition(now).map(|dt| dt.timestamp_millis());
+    let state_str = match state {
+        MarketSessionState::Regular => "REGULAR",
+        MarketSessionState::PreMarket => "PRE_MARKET",
+        MarketSessionState::AfterHours => "AFTER_HOURS",
+        MarketSessionState::Break => "BREAK",
+        MarketSessionState::Holiday => "HOLIDAY",
+        MarketSessionState::Closed => "CLOSED",
+        _ => "CLOSED",
+    };
+    Json(SessionResponse {
+        market: "ID".to_string(),
+        state: state_str.to_string(),
+        segment,
+        next_transition_at: next_transition,
+        timestamp: now.timestamp_millis(),
+    })
 }
 
 #[derive(Deserialize)]
@@ -699,7 +1128,7 @@ async fn handle_candles_path(
     handle_candles(State(state), Query(params)).await
 }
 
-async fn warmup_fx_candles(
+async fn warmup_external_candles(
     client: &reqwest::Client,
     inst: &Instrument,
     interval_str: &str,
@@ -739,8 +1168,10 @@ async fn warmup_fx_candles(
                         (timestamps, opens, highs, lows, closes)
                     {
                         let len = ts_arr.len().min(o_arr.len()).min(h_arr.len()).min(l_arr.len()).min(c_arr.len());
+                        let is_fx = inst.asset_class == AssetClass::Fx;
                         let pip_size = inst.pip_size.and_then(|p| p.to_f64()).unwrap_or(0.0001);
-                        let spread_val = pip_size * 0.8;
+                        let spread_val = if is_fx { Some(pip_size * 0.8) } else { None };
+                        let price_basis = if is_fx { Some("mid".into()) } else { Some("trade".into()) };
 
                         for i in 0..len {
                             if let (Some(ts), Some(open), Some(high), Some(low), Some(close)) = (
@@ -781,8 +1212,8 @@ async fn warmup_fx_candles(
                                     trades: 1,
                                     finalized: true,
                                     provider: inst.provider.to_string(),
-                                    price_basis: Some("mid".into()),
-                                    spread_close: Some(spread_val),
+                                    price_basis: price_basis.clone(),
+                                    spread_close: spread_val,
                                 });
                             }
                         }
@@ -813,9 +1244,16 @@ async fn handle_candles(
 
     let matching_inst = state.instruments.iter().find(|i| i.id.as_str() == instrument);
     let is_fx = matching_inst.map(|i| i.asset_class == AssetClass::Fx).unwrap_or(false);
+    let is_equity = matching_inst.map(|i| {
+        matches!(
+            i.asset_class,
+            AssetClass::UsStocks | AssetClass::IdxStocks | AssetClass::Equity | AssetClass::Etf
+        ) || i.id.as_str().starts_with("US:")
+            || i.id.as_str().starts_with("ID:")
+    }).unwrap_or(false);
 
-    // Forex base timeframe is 1m (no 1s needed per user preference)
-    if is_fx && interval_str == "1s" {
+    // Forex and Equities base timeframe is 1m (no 1s needed per user preference & spec)
+    if (is_fx || is_equity) && interval_str == "1s" {
         interval_str = "1m".to_string();
     }
 
@@ -885,12 +1323,12 @@ async fn handle_candles(
     }
 
     // Warmup backfill:
-    if is_fx {
+    if is_fx || is_equity {
         if dtos.len() < 30 {
             if let Some(inst) = matching_inst {
-                let fx_warmup = warmup_fx_candles(&state.http_client, inst, &interval_str, limit).await;
-                if !fx_warmup.is_empty() {
-                    dtos = fx_warmup;
+                let warmup = warmup_external_candles(&state.http_client, inst, &interval_str, limit).await;
+                if !warmup.is_empty() {
+                    dtos = warmup;
                 }
             }
         }
@@ -1332,6 +1770,56 @@ async fn handle_ws_session(socket: WebSocket, state: AppState) {
                                                     }
                                                 }
                                             }
+                                        } else if ch.starts_with("session") || ch.starts_with("equity:session") {
+                                            let now = Utc::now();
+                                            let us_cal = UsMarketCalendar::new();
+                                            let id_cal = IdxMarketCalendar::new();
+
+                                            let us_state = us_cal.state_at(now);
+                                            let us_state_str = match us_state {
+                                                MarketSessionState::Regular => "REGULAR",
+                                                MarketSessionState::PreMarket => "PRE_MARKET",
+                                                MarketSessionState::AfterHours => "AFTER_HOURS",
+                                                MarketSessionState::Break => "BREAK",
+                                                MarketSessionState::Holiday => "HOLIDAY",
+                                                MarketSessionState::Closed => "CLOSED",
+                                                _ => "CLOSED",
+                                            };
+                                            let us_evt = ServerWsEvent::Session {
+                                                session: SessionStateUpdate {
+                                                    market: "US".to_string(),
+                                                    state: us_state_str.to_string(),
+                                                    segment: us_cal.session_segment(now),
+                                                    next_transition_at: us_cal.next_transition(now).map(|dt| dt.timestamp_millis()),
+                                                    ts: now.timestamp_millis(),
+                                                },
+                                            };
+                                            if let Ok(json) = serde_json::to_string(&us_evt) {
+                                                let _ = sender.send(Message::Text(json.into())).await;
+                                            }
+
+                                            let id_state = id_cal.state_at(now);
+                                            let id_state_str = match id_state {
+                                                MarketSessionState::Regular => "REGULAR",
+                                                MarketSessionState::PreMarket => "PRE_MARKET",
+                                                MarketSessionState::AfterHours => "AFTER_HOURS",
+                                                MarketSessionState::Break => "BREAK",
+                                                MarketSessionState::Holiday => "HOLIDAY",
+                                                MarketSessionState::Closed => "CLOSED",
+                                                _ => "CLOSED",
+                                            };
+                                            let id_evt = ServerWsEvent::Session {
+                                                session: SessionStateUpdate {
+                                                    market: "ID".to_string(),
+                                                    state: id_state_str.to_string(),
+                                                    segment: id_cal.session_segment(now),
+                                                    next_transition_at: id_cal.next_transition(now).map(|dt| dt.timestamp_millis()),
+                                                    ts: now.timestamp_millis(),
+                                                },
+                                            };
+                                            if let Ok(json) = serde_json::to_string(&id_evt) {
+                                                let _ = sender.send(Message::Text(json.into())).await;
+                                            }
                                         }
                                     }
                                 }
@@ -1392,6 +1880,16 @@ async fn handle_ws_session(socket: WebSocket, state: AppState) {
                                 let ch1 = format!("status:{}", status.provider.as_str());
                                 let ch2 = "status:*".to_string();
                                 subscribed_channels.contains(&ch1) || subscribed_channels.contains(&ch2)
+                            }
+                            ServerWsEvent::Session { session } => {
+                                let ch1 = format!("session:{}", session.market.to_lowercase());
+                                let ch2 = "session:*".to_string();
+                                let ch3 = format!("equity:session:{}", session.market.to_uppercase());
+                                subscribed_channels.contains(&ch1)
+                                    || subscribed_channels.contains(&ch2)
+                                    || subscribed_channels.contains(&ch3)
+                                    || subscribed_channels.contains("session")
+                                    || subscribed_channels.contains("equity:session:*")
                             }
                             _ => false,
                         };

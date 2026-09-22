@@ -56,6 +56,20 @@ impl NatsSubjects {
     pub fn all_statuses() -> &'static str {
         "market.status.*"
     }
+
+    /// e.g. "equity.snapshot.us.AAPL" or "equity.snapshot.id.BBCA"
+    pub fn equity_snapshot(market: &str, symbol: &str) -> String {
+        format!("equity.snapshot.{}.{}", market.to_lowercase(), symbol)
+    }
+
+    /// e.g. "equity.session.us" or "equity.session.id"
+    pub fn equity_session(market: &str) -> String {
+        format!("equity.session.{}", market.to_lowercase())
+    }
+
+    pub fn all_equity_sessions() -> &'static str {
+        "equity.session.*"
+    }
 }
 
 #[cfg(test)]

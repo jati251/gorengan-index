@@ -32,9 +32,15 @@ pub enum SessionKind {
 #[serde(rename_all = "snake_case")]
 pub enum MarketSessionState {
     Open,
+    Regular,
+    PreMarket,
+    Break,
+    AfterHours,
+    Overnight,
     Closed,
-    PreOpen,
+    Holiday,
     Halted,
+    PreOpen,
     Unknown,
 }
 

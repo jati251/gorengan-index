@@ -24,6 +24,7 @@ import {
   isSubMinuteTimeframe,
 } from "../utils/chartConfig";
 import { isFxSymbol, getFxMetadata } from "@/features/forex";
+import { isUsEquitySymbol, isIdxEquitySymbol } from "@/features/equities";
 
 interface TradingViewChartProps {
   symbol: string;
@@ -44,9 +45,13 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
   const showVolume = useMarketStore((s) => s.showVolume);
 
   const isFx = isFxSymbol(symbol);
+  const isUs = isUsEquitySymbol(symbol);
+  const isId = isIdxEquitySymbol(symbol);
   const fxMeta = getFxMetadata(symbol);
-  const precision = isFx ? (fxMeta?.displayDecimals ?? 5) : 2;
-  const minMove = 1 / Math.pow(10, precision);
+
+  // Precision: IDX stocks have 0 decimals (Rupiah integer), US stocks have 2 decimals, FX 3-5, Crypto 2
+  const precision = isId ? 0 : isUs ? 2 : isFx ? (fxMeta?.displayDecimals ?? 5) : 2;
+  const minMove = precision === 0 ? 1 : 1 / Math.pow(10, precision);
 
   const { data: candlesData, isLoading } = useCandlesQuery(symbol, selectedTimeframe);
 
@@ -101,7 +106,7 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
     const volumeSeries = chart.addSeries(HistogramSeries, {
       priceFormat: { type: "volume" },
       priceScaleId: "volume_scale",
-      visible: !isFx && showVolume,
+      visible: (!isFx || isUs || isId) && showVolume,
     });
 
     chart.priceScale("volume_scale").applyOptions({

@@ -1,5 +1,5 @@
 import type { Candle, Timeframe } from "../domain/candle.js";
-import type { FxQuoteTick } from "../domain/quote.js";
+import type { FxQuoteTick, MarketSessionState } from "../domain/quote.js";
 import type { MarketTicker } from "../domain/ticker.js";
 
 export type ClientOp = "subscribe" | "unsubscribe" | "ping";
@@ -68,6 +68,15 @@ export interface SnapshotMessage {
   statuses: Record<string, StatusEventMessage>;
 }
 
+export interface SessionEventMessage {
+  type: "session";
+  market: "US" | "ID";
+  state: MarketSessionState;
+  segment?: string;
+  nextTransitionAt?: number;
+  ts: number;
+}
+
 export interface PongMessage {
   type: "pong";
   ts: number;
@@ -83,6 +92,7 @@ export type WebSocketServerMessage =
   | FxQuoteEventMessage
   | CandleEventMessage
   | StatusEventMessage
+  | SessionEventMessage
   | SnapshotMessage
   | PongMessage
   | ErrorMessage;

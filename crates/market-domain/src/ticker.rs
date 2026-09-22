@@ -34,4 +34,14 @@ pub struct TickerState {
     pub updated_at_ns: i64,
     #[serde(default)]
     pub session_state: Option<String>,
+    #[serde(default)]
+    pub session_segment: Option<String>,
+    #[serde(default)]
+    pub data_quality: Option<String>,
+    #[serde(default)]
+    pub market: Option<String>,
+    #[serde(default)]
+    pub currency: Option<String>,
+    #[serde(default)]
+    pub previous_close: Option<Decimal>,
 }

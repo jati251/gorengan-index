@@ -24,15 +24,19 @@ export function TimeframeSelector() {
   const selectedAssetClass = useMarketStore((s) => s.selectedAssetClass);
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
 
-  const isFx = selectedAssetClass === "fx" || !selectedSymbol.endsWith("USDT");
+  const isSubMinuteRestricted =
+    selectedAssetClass === "fx" ||
+    selectedAssetClass === "us_stocks" ||
+    selectedAssetClass === "idx_stocks" ||
+    !selectedSymbol.endsWith("USDT");
 
   const availableTimeframes = useMemo(() => {
-    if (isFx) {
-      // Per user instruction: 1m is enough for Forex, hide sub-minute resolutions
+    if (isSubMinuteRestricted) {
+      // Sub-minute resolutions are disabled for Forex & Equities (1m minimum base resolution)
       return TIMEFRAMES.filter((tf) => !["1s", "5s", "15s"].includes(tf.value));
     }
     return TIMEFRAMES;
-  }, [isFx]);
+  }, [isSubMinuteRestricted]);
 
   return (
     <div className="flex items-center gap-0.5 bg-[#060910] p-1 rounded-md border border-slate-800/80 shadow-inner">

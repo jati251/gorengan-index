@@ -73,6 +73,8 @@ export function useTerminalWebSocket(subscribedSymbols: string[] = []) {
             channels.push(formatCandleChannel(currentSelected, currentTimeframe));
           }
 
+          channels.push("session:*");
+
           if (channels.length > 0) {
             ws.send(JSON.stringify({ op: "subscribe", channels }));
           }
@@ -105,6 +107,25 @@ export function useTerminalWebSocket(subscribedSymbols: string[] = []) {
               case "candle": {
                 const candle = parseCandle((raw.candle ?? {}) as Record<string, unknown>);
                 store.setCandle(candle);
+                break;
+              }
+              case "session": {
+                const s = (raw.session ?? {}) as {
+                  market: string;
+                  state: string;
+                  segment?: string;
+                  next_transition_at?: number;
+                  ts: number;
+                };
+                if (s.market && s.state) {
+                  store.setSession({
+                    market: s.market,
+                    state: s.state,
+                    segment: s.segment,
+                    nextTransitionAt: s.next_transition_at,
+                    ts: s.ts ?? Date.now(),
+                  });
+                }
                 break;
               }
               case "status": {

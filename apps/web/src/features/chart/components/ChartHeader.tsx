@@ -11,6 +11,14 @@ import {
   getDeviceTimezoneOffset,
 } from "@/utils/formatters";
 import { formatFxPrice, formatPips, isFxSymbol, getFxMetadata } from "@/features/forex";
+import {
+  formatEquityPrice,
+  formatEquityVolume,
+  getSessionBadgeInfo,
+  isUsEquitySymbol,
+  isIdxEquitySymbol,
+  getEquityMetadata,
+} from "@/features/equities";
 import { TimeframeSelector } from "./TimeframeSelector";
 
 export function ChartHeader() {
@@ -24,20 +32,34 @@ export function ChartHeader() {
   const toggleEma20 = useMarketStore((s) => s.toggleEma20);
   const toggleEma50 = useMarketStore((s) => s.toggleEma50);
 
-  const isFx = selectedAssetClass === "fx" || isFxSymbol(selectedSymbol);
-  const fxMeta = useMemo(() => getFxMetadata(selectedSymbol), [selectedSymbol]);
+  const isUs = selectedAssetClass === "us_stocks" || isUsEquitySymbol(selectedSymbol);
+  const isId = selectedAssetClass === "idx_stocks" || isIdxEquitySymbol(selectedSymbol);
+  const isEquity = isUs || isId;
+  const isFx = !isEquity && (selectedAssetClass === "fx" || isFxSymbol(selectedSymbol));
+
+  const fxMeta = useMemo(() => (isFx ? getFxMetadata(selectedSymbol) : undefined), [selectedSymbol, isFx]);
+  const eqMeta = useMemo(() => (isEquity ? getEquityMetadata(selectedSymbol) : undefined), [selectedSymbol, isEquity]);
 
   const isPositive = (ticker?.changePercent24h ?? 0) >= 0;
 
   // Format price appropriately depending on asset class
-  const formattedPrice = isFx
-    ? formatFxPrice(ticker?.price, selectedSymbol, fxMeta?.displayDecimals)
-    : `$${formatPrice(ticker?.price)}`;
+  let formattedPrice = `$${formatPrice(ticker?.price)}`;
+  if (isFx) {
+    formattedPrice = formatFxPrice(ticker?.price, selectedSymbol, fxMeta?.displayDecimals);
+  } else if (isId) {
+    formattedPrice = formatEquityPrice(ticker?.price, selectedSymbol, "IDR");
+  } else if (isUs) {
+    formattedPrice = formatEquityPrice(ticker?.price, selectedSymbol, "USD");
+  }
 
   const pipSize = fxMeta?.pipSize ?? 0.0001;
   const spreadDisplay = ticker?.spreadPips != null
     ? `${ticker.spreadPips} pip`
     : formatPips(ticker?.spread, pipSize);
+
+  const equityBadgeInfo = isEquity
+    ? getSessionBadgeInfo(ticker?.sessionState, ticker?.dataQuality, isUs)
+    : null;
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-[#080c16] border-b border-slate-800/90 font-mono select-none">
@@ -48,7 +70,35 @@ export function ChartHeader() {
             {selectedSymbol}
           </span>
 
-          {isFx ? (
+          {isUs ? (
+            <>
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-cyan-950/70 text-cyan-400 border border-cyan-800/50">
+                US
+              </span>
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-800/80 text-cyan-300 border border-slate-700/50">
+                {eqMeta?.exchange ?? "NASDAQ"}
+              </span>
+              {equityBadgeInfo && (
+                <span className={clsx("text-[9px] font-bold px-1.5 py-0.5 rounded border tracking-wider", equityBadgeInfo.colorClass)}>
+                  {equityBadgeInfo.label}
+                </span>
+              )}
+            </>
+          ) : isId ? (
+            <>
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-950/70 text-amber-400 border border-amber-800/50">
+                IDX
+              </span>
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-800/80 text-amber-300 border border-slate-700/50">
+                JAKARTA
+              </span>
+              {equityBadgeInfo && (
+                <span className={clsx("text-[9px] font-bold px-1.5 py-0.5 rounded border tracking-wider", equityBadgeInfo.colorClass)}>
+                  {equityBadgeInfo.label}
+                </span>
+              )}
+            </>
+          ) : isFx ? (
             <>
               <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-950/70 text-blue-400 border border-blue-800/50">
                 FOREX
@@ -97,7 +147,41 @@ export function ChartHeader() {
         </div>
 
         {/* Dynamic Asset-Specific Stats Header */}
-        {isFx ? (
+        {isEquity ? (
+          <div className="hidden xl:flex items-center gap-4 text-xs text-slate-400 border-l border-slate-800/80 pl-4">
+            <div>
+              <span className="text-slate-500">PREV CLOSE: </span>
+              <span className="text-slate-200 font-medium tabular-nums">
+                {formatEquityPrice(ticker?.previousClose ?? ticker?.open24h, selectedSymbol, isId ? "IDR" : "USD")}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500">DAY HIGH: </span>
+              <span className="text-slate-200 font-medium tabular-nums">
+                {formatEquityPrice(ticker?.high24h, selectedSymbol, isId ? "IDR" : "USD")}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500">DAY LOW: </span>
+              <span className="text-slate-200 font-medium tabular-nums">
+                {formatEquityPrice(ticker?.low24h, selectedSymbol, isId ? "IDR" : "USD")}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500">VOL: </span>
+              <span className="text-slate-200 font-medium tabular-nums">
+                {formatEquityVolume(ticker?.volume24h)}
+              </span>
+            </div>
+            {ticker?.sessionSegment && (
+              <div className="flex items-center gap-1.5 pl-1">
+                <span className="text-[10px] text-cyan-400 font-semibold px-1.5 py-0.5 rounded bg-cyan-950/60 border border-cyan-800/40 uppercase">
+                  {ticker.sessionSegment}
+                </span>
+              </div>
+            )}
+          </div>
+        ) : isFx ? (
           <div className="hidden xl:flex items-center gap-4 text-xs text-slate-400 border-l border-slate-800/80 pl-4">
             <div>
               <span className="text-slate-500">BID: </span>

@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { useMarketStore } from "@/stores/marketStore";
 import { formatPrice, formatPercent } from "@/utils/formatters";
 import { formatFxPrice, isFxSymbol } from "@/features/forex";
+import { formatEquityPrice, isUsEquitySymbol, isIdxEquitySymbol } from "@/features/equities";
 import { MarketStatusBadge } from "./MarketStatusBadge";
 import { DeviceClock } from "./DeviceClock";
 
@@ -47,9 +48,17 @@ export function MarketHeaderTicker() {
             tickerList.map((t) => {
               const isPositive = (t.changePercent24h ?? 0) >= 0;
               const isFx = isFxSymbol(t.symbol);
-              const formattedPrice = isFx
-                ? formatFxPrice(t.price, t.symbol)
-                : `$${formatPrice(t.price)}`;
+              const isUs = isUsEquitySymbol(t.symbol);
+              const isId = isIdxEquitySymbol(t.symbol);
+
+              let formattedPrice = `$${formatPrice(t.price)}`;
+              if (isFx) {
+                formattedPrice = formatFxPrice(t.price, t.symbol);
+              } else if (isId) {
+                formattedPrice = formatEquityPrice(t.price, t.symbol, "IDR");
+              } else if (isUs) {
+                formattedPrice = formatEquityPrice(t.price, t.symbol, "USD");
+              }
 
               return (
                 <motion.button

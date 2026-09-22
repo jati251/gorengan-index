@@ -25,6 +25,7 @@ export interface MarketStoreState {
   selectedTimeframe: Timeframe;
   selectedAssetClass: AssetClass;
   fxQuotes: Record<string, FxQuoteTick>;
+  sessions: Record<string, { market: string; state: string; segment?: string; nextTransitionAt?: number; ts: number }>;
 
   // Technical Indicators
   showEma20: boolean;
@@ -39,6 +40,7 @@ export interface MarketStoreActions {
   setTickers: (tickers: MarketTicker[]) => void;
   setFxQuote: (quote: FxQuoteTick) => void;
   setCandle: (candle: Candle) => void;
+  setSession: (session: { market: string; state: string; segment?: string; nextTransitionAt?: number; ts: number }) => void;
   setProviderStatus: (status: ProviderStatusLevel, lastEventAt?: number) => void;
   setSelectedSymbol: (symbol: string) => void;
   setSelectedTimeframe: (timeframe: Timeframe) => void;
@@ -67,6 +69,7 @@ export const useMarketStore = create<MarketStore>((set) => ({
   selectedTimeframe: "1m",
   selectedAssetClass: "crypto",
   fxQuotes: {},
+  sessions: {},
   showEma20: true,
   showEma50: true,
   showVolume: true,
@@ -75,16 +78,34 @@ export const useMarketStore = create<MarketStore>((set) => ({
   toggleEma50: () => set((state) => ({ showEma50: !state.showEma50 })),
   toggleVolume: () => set((state) => ({ showVolume: !state.showVolume })),
 
+  setSession: (session) =>
+    set((state) => ({
+      sessions: { ...state.sessions, [session.market.toUpperCase()]: session },
+    })),
+
   setSelectedAssetClass: (assetClass) =>
     set((state) => {
       let nextSymbol = state.selectedSymbol;
       let nextTimeframe = state.selectedTimeframe;
 
-      if (assetClass === "fx") {
-        if (!nextSymbol.includes("-") || nextSymbol.endsWith("USDT")) {
+      if (assetClass === "us_stocks") {
+        if (!nextSymbol.startsWith("US:")) {
+          nextSymbol = "US:AAPL";
+        }
+        if (nextTimeframe === "1s" || nextTimeframe === "5s" || nextTimeframe === "15s") {
+          nextTimeframe = "1m";
+        }
+      } else if (assetClass === "idx_stocks") {
+        if (!nextSymbol.startsWith("ID:")) {
+          nextSymbol = "ID:BBCA";
+        }
+        if (nextTimeframe === "1s" || nextTimeframe === "5s" || nextTimeframe === "15s") {
+          nextTimeframe = "1m";
+        }
+      } else if (assetClass === "fx") {
+        if (!nextSymbol.includes("-") || nextSymbol.endsWith("USDT") || nextSymbol.startsWith("US:") || nextSymbol.startsWith("ID:")) {
           nextSymbol = "EUR-USD";
         }
-        // Sub-minute not supported for forex (1m minimum per user instruction)
         if (nextTimeframe === "1s" || nextTimeframe === "5s" || nextTimeframe === "15s") {
           nextTimeframe = "1m";
         }
@@ -148,15 +169,24 @@ export const useMarketStore = create<MarketStore>((set) => ({
 
   setSelectedSymbol: (symbol) =>
     set((state) => {
-      const isFx = !symbol.endsWith("USDT");
+      const isUs = symbol.startsWith("US:");
+      const isId = symbol.startsWith("ID:");
+      const isFx = !symbol.endsWith("USDT") && !isUs && !isId;
+
+      let nextAssetClass: AssetClass = "crypto";
+      if (isUs) nextAssetClass = "us_stocks";
+      else if (isId) nextAssetClass = "idx_stocks";
+      else if (isFx) nextAssetClass = "fx";
+
       let nextTimeframe = state.selectedTimeframe;
-      if (isFx && (nextTimeframe === "1s" || nextTimeframe === "5s" || nextTimeframe === "15s")) {
+      if ((isFx || isUs || isId) && (nextTimeframe === "1s" || nextTimeframe === "5s" || nextTimeframe === "15s")) {
         nextTimeframe = "1m";
       }
+
       return {
         selectedSymbol: symbol,
         selectedTimeframe: nextTimeframe,
-        selectedAssetClass: isFx ? "fx" : "crypto",
+        selectedAssetClass: nextAssetClass,
       };
     }),
 

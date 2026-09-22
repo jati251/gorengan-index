@@ -7,6 +7,8 @@ import type {
   CandlePriceBasis,
   MarketSessionState,
   AssetClass,
+  MarketDataQuality,
+  DataProvenance,
 } from "@gorengan/shared";
 
 /* ─── Raw WebSocket Server Message ────────────────────────────────── */
@@ -17,6 +19,7 @@ export interface WsServerMessage {
     | "fx_quote"
     | "candle"
     | "status"
+    | "session"
     | "snapshot"
     | "pong"
     | "subscribed"
@@ -25,6 +28,7 @@ export interface WsServerMessage {
   ticker?: Record<string, unknown>;
   quote?: Record<string, unknown>;
   candle?: Record<string, unknown>;
+  session?: Record<string, unknown>;
   status?: Record<string, unknown> | string;
   tickers?: Record<string, MarketTicker>;
   candles?: Record<string, Candle>;
@@ -58,6 +62,13 @@ export function parseTicker(raw: Record<string, unknown>): MarketTicker {
         ? (String(raw.asset_class) as AssetClass)
         : undefined;
 
+  const dataQuality = raw.dataQuality != null ? String(raw.dataQuality) : raw.data_quality != null ? String(raw.data_quality) : undefined;
+  const provenance = raw.provenance != null ? String(raw.provenance) : undefined;
+  const sessionSegment = raw.sessionSegment != null ? String(raw.sessionSegment) : raw.session_segment != null ? String(raw.session_segment) : undefined;
+  const market = raw.market != null ? String(raw.market) : undefined;
+  const currency = raw.currency != null ? String(raw.currency) : undefined;
+  const previousClose = raw.previousClose != null ? Number(raw.previousClose) : raw.previous_close != null ? Number(raw.previous_close) : undefined;
+
   return {
     symbol,
     price: Number(raw.price ?? mid ?? 0),
@@ -78,6 +89,12 @@ export function parseTicker(raw: Record<string, unknown>): MarketTicker {
     spreadPips,
     sessionState,
     assetClass,
+    dataQuality: dataQuality as MarketDataQuality | undefined,
+    provenance: provenance as DataProvenance | undefined,
+    sessionSegment,
+    market: market as "US" | "ID" | "CRYPTO" | "FX" | undefined,
+    currency,
+    previousClose,
   };
 }
 

@@ -9,6 +9,13 @@ import { useMarketStore } from "@/stores/marketStore";
 import { useWatchlistStore } from "@/stores/watchlistStore";
 import { formatPrice, formatPercent } from "@/utils/formatters";
 import { formatFxPrice, isFxSymbol } from "@/features/forex";
+import {
+  formatEquityPrice,
+  getSessionBadgeInfo,
+  isEquitySymbol,
+  isUsEquitySymbol,
+  isIdxEquitySymbol,
+} from "@/features/equities";
 
 interface WatchlistSidebarProps {
   symbols: MarketSymbol[];
@@ -32,10 +39,16 @@ export function WatchlistSidebar({ symbols }: WatchlistSidebarProps) {
   const filteredSymbols = useMemo(() => {
     return symbols.filter((sym) => {
       // 1. Asset class filter
-      const matchesAssetClass =
-        selectedAssetClass === "fx"
-          ? sym.assetClass === "fx" || isFxSymbol(sym.id)
-          : sym.assetClass !== "fx" && !isFxSymbol(sym.id);
+      let matchesAssetClass = false;
+      if (selectedAssetClass === "us_stocks") {
+        matchesAssetClass = sym.assetClass === "us_stocks" || isUsEquitySymbol(sym.id);
+      } else if (selectedAssetClass === "idx_stocks") {
+        matchesAssetClass = sym.assetClass === "idx_stocks" || isIdxEquitySymbol(sym.id);
+      } else if (selectedAssetClass === "fx") {
+        matchesAssetClass = sym.assetClass === "fx" || isFxSymbol(sym.id);
+      } else {
+        matchesAssetClass = sym.assetClass === "crypto" || (!isFxSymbol(sym.id) && !isEquitySymbol(sym.id));
+      }
 
       if (!matchesAssetClass) return false;
 
@@ -54,15 +67,28 @@ export function WatchlistSidebar({ symbols }: WatchlistSidebarProps) {
     });
   }, [symbols, search, tab, watchlist, selectedAssetClass]);
 
+  const searchPlaceholder = useMemo(() => {
+    switch (selectedAssetClass) {
+      case "us_stocks":
+        return "Search US stock (e.g. AAPL, NVDA)...";
+      case "idx_stocks":
+        return "Search IDX stock (e.g. BBCA, BBRI)...";
+      case "fx":
+        return "Search FX pair (e.g. EUR-USD)...";
+      default:
+        return "Search crypto pair (e.g. BTC-USDT)...";
+    }
+  }, [selectedAssetClass]);
+
   return (
     <div className="flex flex-col h-full bg-[#080c16] border-r border-slate-800/90 font-mono select-none">
-      {/* 1. Asset Class Switcher (CRYPTO | FOREX) */}
+      {/* 1. Asset Class Switcher (CRYPTO | FOREX | US STOCKS | IDX) */}
       <div className="p-3 border-b border-slate-800/80 space-y-2.5">
-        <div className="grid grid-cols-2 gap-1 bg-[#04060b] p-0.5 rounded-lg border border-slate-800 text-xs">
+        <div className="grid grid-cols-4 gap-1 bg-[#04060b] p-0.5 rounded-lg border border-slate-800 text-[10px]">
           <button
             onClick={() => setSelectedAssetClass("crypto")}
             className={clsx(
-              "relative py-1.5 rounded-md transition-colors cursor-pointer flex items-center justify-center gap-1.5 font-bold tracking-wider",
+              "relative py-1.5 rounded-md transition-colors cursor-pointer flex items-center justify-center font-bold tracking-tight",
               selectedAssetClass === "crypto"
                 ? "text-emerald-400"
                 : "text-slate-500 hover:text-slate-300"
@@ -75,7 +101,7 @@ export function WatchlistSidebar({ symbols }: WatchlistSidebarProps) {
                 transition={{ type: "spring", stiffness: 450, damping: 35 }}
               />
             )}
-            <span className="relative z-10 flex items-center gap-1">
+            <span className="relative z-10 flex items-center gap-0.5 truncate">
               ⚡ CRYPTO
             </span>
           </button>
@@ -83,7 +109,7 @@ export function WatchlistSidebar({ symbols }: WatchlistSidebarProps) {
           <button
             onClick={() => setSelectedAssetClass("fx")}
             className={clsx(
-              "relative py-1.5 rounded-md transition-colors cursor-pointer flex items-center justify-center gap-1.5 font-bold tracking-wider",
+              "relative py-1.5 rounded-md transition-colors cursor-pointer flex items-center justify-center font-bold tracking-tight",
               selectedAssetClass === "fx"
                 ? "text-blue-400"
                 : "text-slate-500 hover:text-slate-300"
@@ -96,8 +122,50 @@ export function WatchlistSidebar({ symbols }: WatchlistSidebarProps) {
                 transition={{ type: "spring", stiffness: 450, damping: 35 }}
               />
             )}
-            <span className="relative z-10 flex items-center gap-1">
+            <span className="relative z-10 flex items-center gap-0.5 truncate">
               💱 FOREX
+            </span>
+          </button>
+
+          <button
+            onClick={() => setSelectedAssetClass("us_stocks")}
+            className={clsx(
+              "relative py-1.5 rounded-md transition-colors cursor-pointer flex items-center justify-center font-bold tracking-tight",
+              selectedAssetClass === "us_stocks"
+                ? "text-cyan-400"
+                : "text-slate-500 hover:text-slate-300"
+            )}
+          >
+            {selectedAssetClass === "us_stocks" && (
+              <motion.div
+                layoutId="activeAssetClassPill"
+                className="absolute inset-0 bg-cyan-950/40 rounded-md border border-cyan-500/50 shadow-xs"
+                transition={{ type: "spring", stiffness: 450, damping: 35 }}
+              />
+            )}
+            <span className="relative z-10 flex items-center gap-0.5 truncate">
+              🇺🇸 US
+            </span>
+          </button>
+
+          <button
+            onClick={() => setSelectedAssetClass("idx_stocks")}
+            className={clsx(
+              "relative py-1.5 rounded-md transition-colors cursor-pointer flex items-center justify-center font-bold tracking-tight",
+              selectedAssetClass === "idx_stocks"
+                ? "text-amber-400"
+                : "text-slate-500 hover:text-slate-300"
+            )}
+          >
+            {selectedAssetClass === "idx_stocks" && (
+              <motion.div
+                layoutId="activeAssetClassPill"
+                className="absolute inset-0 bg-amber-950/40 rounded-md border border-amber-500/50 shadow-xs"
+                transition={{ type: "spring", stiffness: 450, damping: 35 }}
+              />
+            )}
+            <span className="relative z-10 flex items-center gap-0.5 truncate">
+              🇮🇩 IDX
             </span>
           </button>
         </div>
@@ -107,7 +175,7 @@ export function WatchlistSidebar({ symbols }: WatchlistSidebarProps) {
           <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-500" />
           <input
             type="text"
-            placeholder={selectedAssetClass === "fx" ? "Search FX pair (e.g. EUR-USD)..." : "Search crypto pair..."}
+            placeholder={searchPlaceholder}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full bg-[#04060b] border border-slate-800 rounded px-2.5 py-1.5 pl-8 text-xs text-slate-200 placeholder-slate-500 focus:outline-hidden focus:border-emerald-500/50 transition-colors"
@@ -170,10 +238,21 @@ export function WatchlistSidebar({ symbols }: WatchlistSidebarProps) {
               const isStarred = watchlist.includes(sym.id);
               const isPositive = (ticker?.changePercent24h ?? 0) >= 0;
               const isFx = sym.assetClass === "fx" || isFxSymbol(sym.id);
+              const isUs = sym.assetClass === "us_stocks" || isUsEquitySymbol(sym.id);
+              const isId = sym.assetClass === "idx_stocks" || isIdxEquitySymbol(sym.id);
 
-              const formattedPrice = isFx
-                ? formatFxPrice(ticker?.price, sym.id, sym.displayDecimals)
-                : `$${formatPrice(ticker?.price)}`;
+              let formattedPrice = `$${formatPrice(ticker?.price)}`;
+              if (isFx) {
+                formattedPrice = formatFxPrice(ticker?.price, sym.id, sym.displayDecimals);
+              } else if (isId) {
+                formattedPrice = formatEquityPrice(ticker?.price, sym.id, "IDR");
+              } else if (isUs) {
+                formattedPrice = formatEquityPrice(ticker?.price, sym.id, "USD");
+              }
+
+              const badgeInfo = isUs || isId
+                ? getSessionBadgeInfo(ticker?.sessionState, ticker?.dataQuality, isUs)
+                : null;
 
               return (
                 <motion.div
@@ -186,9 +265,13 @@ export function WatchlistSidebar({ symbols }: WatchlistSidebarProps) {
                   className={clsx(
                     "p-3 flex items-center justify-between cursor-pointer transition-colors duration-150 group",
                     isSelected
-                      ? isFx
-                        ? "bg-blue-950/25 border-l-2 border-blue-400"
-                        : "bg-emerald-950/25 border-l-2 border-emerald-400"
+                      ? isUs
+                        ? "bg-cyan-950/25 border-l-2 border-cyan-400"
+                        : isId
+                          ? "bg-amber-950/25 border-l-2 border-amber-400"
+                          : isFx
+                            ? "bg-blue-950/25 border-l-2 border-blue-400"
+                            : "bg-emerald-950/25 border-l-2 border-emerald-400"
                       : "hover:bg-slate-800/35 border-l-2 border-transparent"
                   )}
                 >
@@ -217,9 +300,13 @@ export function WatchlistSidebar({ symbols }: WatchlistSidebarProps) {
                           className={clsx(
                             "font-semibold text-xs",
                             isSelected
-                              ? isFx
-                                ? "text-blue-400"
-                                : "text-emerald-400"
+                              ? isUs
+                                ? "text-cyan-400"
+                                : isId
+                                  ? "text-amber-400"
+                                  : isFx
+                                    ? "text-blue-400"
+                                    : "text-emerald-400"
                               : "text-slate-200 group-hover:text-white"
                           )}
                         >
@@ -233,6 +320,16 @@ export function WatchlistSidebar({ symbols }: WatchlistSidebarProps) {
                         {isFx && (
                           <span className="text-[9px] px-1 py-0.2 rounded bg-blue-950/60 text-blue-400 border border-blue-800/40">
                             FX
+                          </span>
+                        )}
+                        {badgeInfo && (
+                          <span
+                            className={clsx(
+                              "text-[8px] font-bold px-1 py-0.2 rounded border tracking-wider",
+                              badgeInfo.colorClass
+                            )}
+                          >
+                            {badgeInfo.label}
                           </span>
                         )}
                       </div>

@@ -11,6 +11,15 @@ pub struct ProviderStatusEvent {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SessionStateUpdate {
+    pub market: String, // "US" or "ID"
+    pub state: String,  // "REGULAR", "PRE_MARKET", "BREAK", "CLOSED", etc.
+    pub segment: Option<String>,
+    pub next_transition_at: Option<i64>,
+    pub ts: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload", rename_all = "snake_case")]
 pub enum MarketMessage {
     Trade(TradeEvent),
@@ -18,6 +27,7 @@ pub enum MarketMessage {
     Ticker(TickerState),
     Candle(Candle),
     Status(ProviderStatusEvent),
+    Session(SessionStateUpdate),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -34,6 +44,7 @@ pub enum ServerWsEvent {
     Ticker { ticker: TickerState },
     FxQuote { quote: QuoteTick },
     Candle { candle: Candle },
+    Session { session: SessionStateUpdate },
     Status { status: ProviderStatusEvent },
     Pong { ts: i64 },
     Subscribed { channels: Vec<String> },

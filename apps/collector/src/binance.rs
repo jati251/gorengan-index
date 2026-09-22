@@ -150,6 +150,11 @@ impl BinanceNormalizer {
             change_percent_24h,
             updated_at_ns,
             session_state: Some("open".to_string()),
+            session_segment: Some("REGULAR".to_string()),
+            data_quality: Some("realtime_consolidated".to_string()),
+            market: Some("CRYPTO".to_string()),
+            currency: Some("USDT".to_string()),
+            previous_close: None,
         })
     }
 
