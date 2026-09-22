@@ -63,6 +63,8 @@ spec:
                   optional: true
             - name: NEXTAUTH_URL
               value: "https://gorengan-index.cekcok.my.id"
+            - name: AUTH_TRUST_HOST
+              value: "true"
           resources:
             requests:
               cpu: "50m"
