@@ -115,9 +115,9 @@ export function NewsFeed() {
   const { data: articles, isLoading, isError, refetch, isFetching } = useNewsQuery();
 
   return (
-    <div className="flex flex-col h-full font-mono select-none">
+    <div className="flex flex-col h-full font-mono select-none overflow-hidden min-h-0">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-slate-800/80 bg-[#080c16]/80">
+      <div className="flex items-center justify-between px-3 py-2.5 border-b border-slate-800/80 bg-[#080c16]/80 shrink-0">
         <div className="flex items-center gap-2">
           <Newspaper className="w-3.5 h-3.5 text-cyan-400" />
           <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">
@@ -144,8 +144,8 @@ export function NewsFeed() {
         </button>
       </div>
 
-      {/* Feed Content */}
-      <div className="flex-1 overflow-y-auto no-scrollbar">
+      {/* Feed Content — scrollable & bounded */}
+      <div className="flex-1 overflow-y-auto max-h-[380px] lg:max-h-none min-h-0">
         {isLoading ? (
           <NewsFeedSkeleton />
         ) : isError ? (

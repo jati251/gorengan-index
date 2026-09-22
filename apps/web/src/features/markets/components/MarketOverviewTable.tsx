@@ -20,9 +20,10 @@ import { Badge } from "@/components/ui/badge";
 
 interface MarketOverviewTableProps {
   symbols: MarketSymbol[];
+  onSelectSymbol?: (symbolId: string) => void;
 }
 
-export function MarketOverviewTable({ symbols }: MarketOverviewTableProps) {
+export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewTableProps) {
   const tickers = useMarketStore((s) => s.tickers);
   const priceDirections = useMarketStore((s) => s.priceDirections);
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
@@ -81,22 +82,22 @@ export function MarketOverviewTable({ symbols }: MarketOverviewTableProps) {
   }, [displaySymbols, tickers, priceDirections, watchlist, selectedSymbol]);
 
   return (
-    <div className="w-full overflow-x-auto no-scrollbar">
+    <div className="w-full max-h-[380px] overflow-y-auto overflow-x-auto relative">
       <table className="w-full text-left border-collapse text-xs font-mono">
-        <thead>
+        <thead className="sticky top-0 z-10 bg-[#060910] shadow-xs">
           <tr className="border-b border-slate-800 text-slate-500 uppercase text-[10px] tracking-wider bg-[#060910] select-none">
-            <th className="py-2.5 px-3 w-10 text-center">Fav</th>
-            <th className="py-2.5 px-3">Symbol</th>
-            <th className="py-2.5 px-3">Type</th>
-            <th className="py-2.5 px-3 text-right">Last Price</th>
-            <th className="py-2.5 px-3 text-right">24h Change</th>
-            <th className="py-2.5 px-3 text-center hidden md:table-cell">24h Range</th>
-            <th className="py-2.5 px-3 text-right hidden sm:table-cell">24h High</th>
-            <th className="py-2.5 px-3 text-right hidden sm:table-cell">24h Low</th>
-            <th className="py-2.5 px-3 text-right">
+            <th className="py-2.5 px-3 w-10 text-center bg-[#060910]">Fav</th>
+            <th className="py-2.5 px-3 bg-[#060910]">Symbol</th>
+            <th className="py-2.5 px-3 bg-[#060910]">Type</th>
+            <th className="py-2.5 px-3 text-right bg-[#060910]">Last Price</th>
+            <th className="py-2.5 px-3 text-right bg-[#060910]">24h Change</th>
+            <th className="py-2.5 px-3 text-center hidden md:table-cell bg-[#060910]">24h Range</th>
+            <th className="py-2.5 px-3 text-right hidden sm:table-cell bg-[#060910]">24h High</th>
+            <th className="py-2.5 px-3 text-right hidden sm:table-cell bg-[#060910]">24h Low</th>
+            <th className="py-2.5 px-3 text-right bg-[#060910]">
               {selectedCategory === "fx" ? "Spread (Pips)" : "24h Volume"}
             </th>
-            <th className="py-2.5 px-3 text-center">Source</th>
+            <th className="py-2.5 px-3 text-center bg-[#060910]">Source</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-800/40">
@@ -128,7 +129,10 @@ export function MarketOverviewTable({ symbols }: MarketOverviewTableProps) {
               return (
                 <motion.tr
                   key={symbol.id}
-                  onClick={() => setSelectedSymbol(symbol.id)}
+                  onClick={() => {
+                    setSelectedSymbol(symbol.id);
+                    onSelectSymbol?.(symbol.id);
+                  }}
                   whileHover={{ backgroundColor: "rgba(30, 41, 59, 0.3)" }}
                   className={clsx(
                     "transition-colors duration-150 cursor-pointer group select-none",

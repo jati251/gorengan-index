@@ -19,6 +19,7 @@ import {
 
 interface WatchlistSidebarProps {
   symbols: MarketSymbol[];
+  onSelectSymbol?: (symbolId: string) => void;
 }
 
 const CATEGORIES: { id: MarketCategory; label: string; icon: string }[] = [
@@ -29,7 +30,7 @@ const CATEGORIES: { id: MarketCategory; label: string; icon: string }[] = [
   { id: "idx_stocks", label: "IDX", icon: "🇮🇩" },
 ];
 
-export function WatchlistSidebar({ symbols }: WatchlistSidebarProps) {
+export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarProps) {
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<"favorites" | "all">("favorites");
 
@@ -245,7 +246,10 @@ export function WatchlistSidebar({ symbols }: WatchlistSidebarProps) {
               return (
                 <div
                   key={sym.id}
-                  onClick={() => setSelectedSymbol(sym.id)}
+                  onClick={() => {
+                    setSelectedSymbol(sym.id);
+                    onSelectSymbol?.(sym.id);
+                  }}
                   className={clsx(
                     "p-3 flex items-center justify-between cursor-pointer transition-colors duration-150 group",
                     isSelected
