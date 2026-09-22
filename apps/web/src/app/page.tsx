@@ -38,16 +38,16 @@ export default function TerminalPage() {
   };
 
   return (
-    <main className="min-h-screen lg:h-screen flex flex-col bg-[#070a12] text-slate-200 lg:overflow-hidden">
+    <main className="min-h-screen flex flex-col bg-[#040711] text-slate-200 relative selection:bg-emerald-500/30">
       {/* 1. Realtime Marquee & Status Header */}
       <MarketHeaderTicker />
 
-      {/* 2. Main Terminal Content — 3-Column Workstation on Desktop, Tabbed on Mobile */}
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
-        {/* LEFT: Watchlist Sidebar */}
+      {/* 2. Main Terminal Content — Sticky sidebars on desktop, smoothly scrollable center */}
+      <div className="flex-1 flex flex-col lg:flex-row w-full min-h-0">
+        {/* LEFT: Watchlist Sidebar (Sticky on desktop, full height) */}
         <aside
           className={clsx(
-            "w-full lg:w-72 xl:w-80 shrink-0 border-b lg:border-b-0 lg:border-r border-slate-800/80 bg-[#0a0e17] flex-col h-[520px] lg:h-full overflow-hidden min-h-0 pb-16 lg:pb-0",
+            "w-full lg:w-72 xl:w-80 shrink-0 border-b lg:border-b-0 lg:border-r border-white/[0.08] bg-[#080d1b]/70 backdrop-blur-xl flex-col h-[520px] lg:h-[calc(100vh-74px)] lg:sticky lg:top-[74px] lg:self-start overflow-hidden min-h-0 pb-16 lg:pb-0 z-20",
             mobileTab === "markets" ? "flex" : "hidden lg:flex"
           )}
         >
@@ -57,10 +57,10 @@ export default function TerminalPage() {
           />
         </aside>
 
-        {/* CENTER: Interactive Chart & Market Table */}
+        {/* CENTER: Interactive Chart & Market Table (Natural vertical scroll) */}
         <section
           className={clsx(
-            "flex-1 flex-col overflow-y-auto p-2.5 sm:p-3 lg:p-4 gap-3 sm:gap-4 min-w-0 pb-20 lg:pb-4",
+            "flex-1 flex-col p-2.5 sm:p-3 lg:p-4 gap-3 sm:gap-4 min-w-0 pb-24 lg:pb-8",
             mobileTab === "chart"
               ? "flex"
               : mobileTab === "markets"
@@ -68,11 +68,11 @@ export default function TerminalPage() {
                 : "hidden lg:flex"
           )}
         >
-          {/* Main Candlestick Chart Card — visible in Chart tab and Desktop */}
+          {/* Main Candlestick Chart Card */}
           <div className={clsx(mobileTab === "chart" ? "block" : "hidden lg:block")}>
-            <Card className="flex flex-col shrink-0">
+            <Card className="flex flex-col shrink-0 shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
               <ChartHeader />
-              <div className="w-full h-[360px] sm:h-[420px] lg:h-[480px] bg-[#090d16]">
+              <div className="w-full h-[360px] sm:h-[420px] lg:h-[480px] bg-[#080d1a]/80">
                 <TradingViewChart
                   key={selectedSymbol}
                   symbol={selectedSymbol}
@@ -95,16 +95,18 @@ export default function TerminalPage() {
             </Card>
           </div>
 
-          {/* Realtime Market Table Card */}
-          <Card className="flex-1 min-h-0">
-            <CardHeader className="bg-[#0a0e17]/80 shrink-0 py-2.5 sm:py-3">
-              <CardTitle className="text-xs sm:text-sm">
-                <Zap className="w-3.5 h-3.5 text-emerald-400" />
-                Market Overview
-              </CardTitle>
-              <span className="text-[10px] sm:text-[11px] text-slate-500 font-mono">
-                Real-time prices
-              </span>
+          {/* Realtime Market Table Card — always easily accessible by scrolling down */}
+          <Card id="market-overview" className="shrink-0 shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+            <CardHeader className="bg-white/[0.02] shrink-0 py-2.5 sm:py-3 border-b border-white/[0.07]">
+              <div className="flex items-center justify-between w-full">
+                <CardTitle className="text-xs sm:text-sm">
+                  <Zap className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+                  Market Overview
+                </CardTitle>
+                <span className="text-[10px] sm:text-[11px] text-slate-400 font-mono px-2 py-0.5 rounded-full bg-white/[0.04] border border-white/[0.07]">
+                  Real-time prices · {symbols.length} pairs
+                </span>
+              </div>
             </CardHeader>
             <CardContent className="p-0">
               <MarketOverviewTable
@@ -115,15 +117,15 @@ export default function TerminalPage() {
           </Card>
         </section>
 
-        {/* RIGHT: Intelligence Sidebar — News, Sentiment, Stats */}
+        {/* RIGHT: Intelligence Sidebar (Sticky on desktop) */}
         <aside
           className={clsx(
-            "w-full lg:w-80 xl:w-[340px] shrink-0 border-t lg:border-t-0 lg:border-l border-slate-800/80 bg-[#0a0e17] flex-col h-auto lg:h-full overflow-hidden min-h-0 pb-20 lg:pb-0",
+            "w-full lg:w-80 xl:w-[340px] shrink-0 border-t lg:border-t-0 lg:border-l border-white/[0.08] bg-[#080d1b]/70 backdrop-blur-xl flex-col h-auto lg:h-[calc(100vh-74px)] lg:sticky lg:top-[74px] lg:self-start overflow-hidden min-h-0 pb-24 lg:pb-0 z-20",
             mobileTab === "intel" ? "flex" : "hidden lg:flex"
           )}
         >
           {/* Market Stats Panel */}
-          <div className="p-3 border-b border-slate-800/60 shrink-0">
+          <div className="p-3 border-b border-white/[0.06] shrink-0">
             <div className="flex items-center gap-2 mb-2.5">
               <BarChart3 className="w-3.5 h-3.5 text-amber-400" />
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300 font-mono">
@@ -134,7 +136,7 @@ export default function TerminalPage() {
           </div>
 
           {/* Sentiment Gauge */}
-          <div className="p-3 border-b border-slate-800/60 shrink-0">
+          <div className="p-3 border-b border-white/[0.06] shrink-0">
             <SentimentGauge />
           </div>
 

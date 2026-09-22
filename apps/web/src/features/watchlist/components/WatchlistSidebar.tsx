@@ -98,10 +98,10 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
   }, [selectedCategory]);
 
   return (
-    <div className="flex flex-col h-full bg-[#080c16] border-r border-slate-800/90 font-mono select-none overflow-hidden min-h-0">
+    <div className="flex flex-col h-full bg-[#080d1b]/70 backdrop-blur-xl border-r border-white/[0.08] font-mono select-none overflow-hidden min-h-0 shadow-[4px_0_24px_rgba(0,0,0,0.35)]">
       {/* 1. Category Switcher (ALL | CRYPTO | FOREX | US | IDX) */}
-      <div className="p-2.5 sm:p-3 border-b border-slate-800/80 space-y-2.5 shrink-0">
-        <div className="grid grid-cols-5 gap-0.5 bg-[#04060b] p-0.5 rounded-lg border border-slate-800 text-[10px]">
+      <div className="p-2.5 sm:p-3 border-b border-white/[0.06] bg-white/[0.01] space-y-2.5 shrink-0">
+        <div className="grid grid-cols-5 gap-0.5 bg-black/40 p-0.5 rounded-lg border border-white/[0.07] text-[10px] backdrop-blur-md">
           {CATEGORIES.map((cat) => {
             const isActive = selectedCategory === cat.id;
             return (
@@ -120,13 +120,13 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
                           : cat.id === "us_stocks"
                             ? "text-cyan-400"
                             : "text-amber-400"
-                    : "text-slate-500 hover:text-slate-300"
+                    : "text-slate-400 hover:text-slate-200"
                 )}
               >
                 {isActive && (
                   <motion.div
                     layoutId="activeCategoryPill"
-                    className="absolute inset-0 bg-slate-800/80 rounded-md border border-slate-700/60 shadow-xs"
+                    className="absolute inset-0 bg-white/[0.09] rounded-md border border-white/[0.14] shadow-xs"
                     transition={{ type: "spring", stiffness: 450, damping: 35 }}
                   />
                 )}
@@ -140,29 +140,29 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
 
         {/* Search Input */}
         <div className="relative">
-          <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-500" />
+          <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
           <input
             type="text"
             placeholder={searchPlaceholder}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-[#04060b] border border-slate-800 rounded px-2.5 py-1.5 pl-8 text-xs text-slate-200 placeholder-slate-500 focus:outline-hidden focus:border-emerald-500/50 transition-colors"
+            className="w-full bg-black/35 border border-white/[0.08] focus:border-emerald-500/50 rounded-lg px-2.5 py-1.5 pl-8 text-xs text-slate-100 placeholder-slate-500 focus:outline-hidden backdrop-blur-md transition-all shadow-inner"
           />
         </div>
 
         {/* Watchlist & All Tabs with accurate independent counts */}
-        <div className="grid grid-cols-2 gap-1 bg-[#04060b] p-0.5 rounded-md border border-slate-800/80 text-[11px]">
+        <div className="grid grid-cols-2 gap-1 bg-black/40 p-0.5 rounded-lg border border-white/[0.07] text-[11px] backdrop-blur-md">
           <button
             onClick={() => setTab("favorites")}
             className={clsx(
-              "relative py-1 rounded transition-colors cursor-pointer flex items-center justify-center gap-1.5",
+              "relative py-1 rounded-md transition-colors cursor-pointer flex items-center justify-center gap-1.5",
               tab === "favorites" ? "text-emerald-400 font-bold" : "text-slate-400 hover:text-slate-200"
             )}
           >
             {tab === "favorites" && (
               <motion.div
                 layoutId="watchlistTabPill"
-                className="absolute inset-0 bg-slate-800/90 rounded border border-slate-700/60 shadow-xs"
+                className="absolute inset-0 bg-white/[0.09] rounded-md border border-white/[0.14] shadow-xs"
                 transition={{ type: "spring", stiffness: 450, damping: 35 }}
               />
             )}
@@ -175,14 +175,14 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
           <button
             onClick={() => setTab("all")}
             className={clsx(
-              "relative py-1 rounded transition-colors cursor-pointer flex items-center justify-center",
+              "relative py-1 rounded-md transition-colors cursor-pointer flex items-center justify-center",
               tab === "all" ? "text-emerald-400 font-bold" : "text-slate-400 hover:text-slate-200"
             )}
           >
             {tab === "all" && (
               <motion.div
                 layoutId="watchlistTabPill"
-                className="absolute inset-0 bg-slate-800/90 rounded border border-slate-700/60 shadow-xs"
+                className="absolute inset-0 bg-white/[0.09] rounded-md border border-white/[0.14] shadow-xs"
                 transition={{ type: "spring", stiffness: 450, damping: 35 }}
               />
             )}
@@ -192,7 +192,7 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
       </div>
 
       {/* Symbol List — Rendered cleanly without AnimatePresence layout shifts */}
-      <div className="flex-1 overflow-y-auto divide-y divide-slate-800/40 no-scrollbar min-h-0">
+      <div className="flex-1 overflow-y-auto divide-y divide-white/[0.04] no-scrollbar min-h-0">
         {displayedSymbols.length === 0 ? (
           tab === "favorites" ? (
             <div className="p-6 text-center text-xs flex flex-col items-center justify-center gap-2 text-slate-400">
@@ -206,7 +206,7 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
               {categoryMatchedSymbols.length > 0 && (
                 <button
                   onClick={() => setTab("all")}
-                  className="mt-1 px-3 py-1 bg-slate-800/80 hover:bg-slate-700 text-emerald-400 rounded text-[11px] font-semibold transition-colors cursor-pointer border border-slate-700/60"
+                  className="mt-1 px-3 py-1 bg-white/[0.06] hover:bg-white/[0.1] text-emerald-400 rounded-md text-[11px] font-semibold transition-colors cursor-pointer border border-white/[0.09]"
                 >
                   Browse All Pairs ({categoryMatchedSymbols.length})
                 </button>
@@ -251,16 +251,16 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
                     onSelectSymbol?.(sym.id);
                   }}
                   className={clsx(
-                    "p-3 flex items-center justify-between cursor-pointer transition-colors duration-150 group",
+                    "p-3 flex items-center justify-between cursor-pointer transition-all duration-150 group",
                     isSelected
                       ? isUs
-                        ? "bg-cyan-950/25 border-l-2 border-cyan-400"
+                        ? "bg-cyan-500/[0.12] border-l-2 border-cyan-400 shadow-[inset_0_0_12px_rgba(6,182,212,0.12)]"
                         : isId
-                          ? "bg-amber-950/25 border-l-2 border-amber-400"
+                          ? "bg-amber-500/[0.12] border-l-2 border-amber-400 shadow-[inset_0_0_12px_rgba(245,158,11,0.12)]"
                           : isFx
-                            ? "bg-blue-950/25 border-l-2 border-blue-400"
-                            : "bg-emerald-950/25 border-l-2 border-emerald-400"
-                      : "hover:bg-slate-800/35 border-l-2 border-transparent"
+                            ? "bg-blue-500/[0.12] border-l-2 border-blue-400 shadow-[inset_0_0_12px_rgba(59,130,246,0.12)]"
+                            : "bg-emerald-500/[0.12] border-l-2 border-emerald-400 shadow-[inset_0_0_12px_rgba(16,185,129,0.12)]"
+                      : "hover:bg-white/[0.035] border-l-2 border-transparent"
                   )}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">

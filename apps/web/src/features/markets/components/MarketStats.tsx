@@ -19,28 +19,30 @@ import type { StatCardProps } from "../types";
 
 function StatCard({ label, value, icon, accent = "slate", subtext }: StatCardProps) {
   const accentClasses = {
-    emerald: "text-emerald-400 bg-emerald-950/30 border-emerald-800/30",
-    rose: "text-rose-400 bg-rose-950/30 border-rose-800/30",
-    cyan: "text-cyan-400 bg-cyan-950/30 border-cyan-800/30",
-    amber: "text-amber-400 bg-amber-950/30 border-amber-800/30",
-    slate: "text-slate-300 bg-slate-800/30 border-slate-700/30",
+    emerald: "text-emerald-400 bg-emerald-500/[0.07] border-emerald-500/30 shadow-[0_4px_20px_rgba(16,185,129,0.08)]",
+    rose: "text-rose-400 bg-rose-500/[0.07] border-rose-500/30 shadow-[0_4px_20px_rgba(244,63,94,0.08)]",
+    cyan: "text-cyan-400 bg-cyan-500/[0.07] border-cyan-500/30 shadow-[0_4px_20px_rgba(6,182,212,0.08)]",
+    amber: "text-amber-400 bg-amber-500/[0.07] border-amber-500/30 shadow-[0_4px_20px_rgba(245,158,11,0.08)]",
+    slate: "text-slate-200 bg-white/[0.03] border-white/[0.08] shadow-[0_4px_20px_rgba(0,0,0,0.25)]",
   };
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
+      whileHover={{ y: -1 }}
+      transition={{ duration: 0.15 }}
       className={clsx(
-        "flex items-center gap-2.5 px-3 py-2 rounded-lg border font-mono transition-colors",
+        "flex items-center gap-2.5 px-3 py-2.5 rounded-xl border backdrop-blur-md font-mono transition-all relative overflow-hidden group",
         accentClasses[accent]
       )}
     >
-      <div className="shrink-0 opacity-70">{icon}</div>
+      <div className="shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">{icon}</div>
       <div className="min-w-0 flex-1">
-        <div className="text-[9px] uppercase tracking-wider text-slate-500 font-semibold truncate">
+        <div className="text-[9px] uppercase tracking-wider text-slate-400 font-semibold truncate">
           {label}
         </div>
-        <div className="text-sm font-bold tabular-nums truncate">{value}</div>
+        <div className="text-sm font-bold tabular-nums truncate text-white drop-shadow-xs">{value}</div>
         {subtext && (
           <div className="text-[9px] text-slate-500 font-mono truncate">{subtext}</div>
         )}

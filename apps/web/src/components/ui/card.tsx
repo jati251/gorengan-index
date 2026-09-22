@@ -9,7 +9,7 @@ export function Card({
   return (
     <div
       className={clsx(
-        "bg-[#0d121c]/90 border border-slate-800/80 rounded-lg backdrop-blur-md shadow-lg overflow-hidden",
+        "glass-card rounded-xl overflow-hidden transition-all duration-200",
         className
       )}
       {...props}
@@ -27,7 +27,7 @@ export function CardHeader({
   return (
     <div
       className={clsx(
-        "px-4 py-3 border-b border-slate-800/80 flex items-center justify-between",
+        "px-3.5 sm:px-4 py-2.5 sm:py-3 border-b border-white/[0.07] bg-white/[0.02] backdrop-blur-md flex items-center justify-between",
         className
       )}
       {...props}
@@ -45,7 +45,7 @@ export function CardTitle({
   return (
     <h3
       className={clsx(
-        "text-sm font-semibold uppercase tracking-wider text-slate-200 font-mono flex items-center gap-2",
+        "text-xs sm:text-sm font-semibold uppercase tracking-wider text-slate-200 font-mono flex items-center gap-2",
         className
       )}
       {...props}
@@ -61,7 +61,7 @@ export function CardContent({
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={clsx("p-4", className)} {...props}>
+    <div className={clsx("p-3 sm:p-4", className)} {...props}>
       {children}
     </div>
   );
