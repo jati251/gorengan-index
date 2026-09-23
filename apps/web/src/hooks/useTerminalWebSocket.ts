@@ -64,6 +64,8 @@ export function useTerminalWebSocket(
     activeChannelsRef.current = desired;
   }, []);
 
+  const rafIdRef = useRef<number | null>(null);
+
   const flushPending = useCallback(() => {
     const store = useMarketStore.getState();
     if (pendingTickersRef.current.size) {
@@ -75,6 +77,14 @@ export function useTerminalWebSocket(
     for (const candle of pendingCandlesRef.current.values()) store.setCandle(candle);
     pendingCandlesRef.current.clear();
   }, []);
+
+  const scheduleLiveFlush = useCallback(() => {
+    if (rafIdRef.current != null) return;
+    rafIdRef.current = requestAnimationFrame(() => {
+      rafIdRef.current = null;
+      flushPending();
+    });
+  }, [flushPending]);
 
   useEffect(() => {
     if (!isThrottled) return;
@@ -133,29 +143,26 @@ export function useTerminalWebSocket(
             switch (raw.type) {
               case "ticker": {
                 const ticker = parseTicker((raw.ticker ?? {}) as Record<string, unknown>);
-                if (isThrottledRef.current) {
-                  pendingTickersRef.current.set(ticker.symbol, ticker);
-                } else {
-                  store.setTicker(ticker);
+                pendingTickersRef.current.set(ticker.symbol, ticker);
+                if (!isThrottledRef.current) {
+                  scheduleLiveFlush();
                 }
                 break;
               }
               case "fx_quote": {
                 const quote = parseFxQuote((raw.quote ?? {}) as Record<string, unknown>);
-                if (isThrottledRef.current) {
-                  pendingQuotesRef.current.set(quote.instrument, quote);
-                } else {
-                  store.setFxQuote(quote);
+                pendingQuotesRef.current.set(quote.instrument, quote);
+                if (!isThrottledRef.current) {
+                  scheduleLiveFlush();
                 }
                 break;
               }
               case "candle": {
                 const candle = parseCandle((raw.candle ?? {}) as Record<string, unknown>);
-                if (isThrottledRef.current) {
-                  const key = `${candle.symbol}:${candle.timeframe}`;
-                  pendingCandlesRef.current.set(key, candle);
-                } else {
-                  store.setCandle(candle);
+                const key = `${candle.symbol}:${candle.timeframe}`;
+                pendingCandlesRef.current.set(key, candle);
+                if (!isThrottledRef.current) {
+                  scheduleLiveFlush();
                 }
                 break;
               }
@@ -235,8 +242,12 @@ export function useTerminalWebSocket(
         }
         wsRef.current = null;
       }
+      if (rafIdRef.current != null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
     };
-  }, [syncSubscriptions]);
+  }, [syncSubscriptions, scheduleLiveFlush]);
 
   const symbolsKey = subscribedSymbols.join(",");
   useEffect(() => {

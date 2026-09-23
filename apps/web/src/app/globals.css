@@ -471,7 +471,7 @@ button { cursor: pointer; }
   100% { opacity: 0; transform: translateY(-5px); }
 }
 
-/* Spectacular Neon Cyber Glow for Bottom Ticker Tape */
+/* Spectacular Neon Cyber Glow for Bottom Ticker Tape and Terminal */
 @keyframes tape-beacon-up {
   0% {
     box-shadow: 0 0 10px rgba(63, 223, 151, 0.5), inset 0 0 8px rgba(63, 223, 151, 0.25);
@@ -496,37 +496,95 @@ button { cursor: pointer; }
   }
 }
 
+@keyframes ticker-scroll {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.tape-marquee-track {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+  animation: ticker-scroll 240s linear infinite;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  -webkit-transform: translate3d(0, 0, 0);
+  transform: translate3d(0, 0, 0);
+}
+
+.tape-marquee-track:hover,
+.tape-marquee-track:focus-within,
+.tape-marquee-track:active,
+.tape-marquee-track.is-paused {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tape-marquee-track {
+    animation: none;
+  }
+}
+
 .tape-glow-up {
-  background: radial-gradient(ellipse at 50% 50%, rgba(63, 223, 151, 0.3) 0%, rgba(42, 40, 57, 0.95) 100%) !important;
-  border-color: rgba(63, 223, 151, 0.85) !important;
-  animation: tape-beacon-up 850ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  background: radial-gradient(ellipse at 50% 50%, rgba(63, 223, 151, 0.28) 0%, rgba(42, 40, 57, 0.95) 100%) !important;
+  border-color: rgba(63, 223, 151, 0.9) !important;
+  color: #3fdf97 !important;
+  box-shadow: 0 0 12px rgba(63, 223, 151, 0.5) !important;
+  transition: background 300ms ease, border-color 300ms ease, color 200ms ease, box-shadow 300ms ease;
 }
 
 .tape-glow-down {
+  background: radial-gradient(ellipse at 50% 50%, rgba(235, 97, 159, 0.28) 0%, rgba(42, 40, 57, 0.95) 100%) !important;
+  border-color: rgba(235, 97, 159, 0.9) !important;
+  color: #eb619f !important;
+  box-shadow: 0 0 12px rgba(235, 97, 159, 0.5) !important;
+  transition: background 300ms ease, border-color 300ms ease, color 200ms ease, box-shadow 300ms ease;
+}
+
+.cyber-glow-up,
+.price-glow-up {
+  background: radial-gradient(ellipse at 50% 50%, rgba(63, 223, 151, 0.3) 0%, rgba(42, 40, 57, 0.95) 100%) !important;
+  border-color: rgba(63, 223, 151, 0.85) !important;
+  color: #3fdf97 !important;
+  box-shadow: 0 0 14px rgba(63, 223, 151, 0.65), inset 0 0 10px rgba(63, 223, 151, 0.3) !important;
+  animation: tape-beacon-up 850ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.cyber-glow-down,
+.price-glow-down {
   background: radial-gradient(ellipse at 50% 50%, rgba(235, 97, 159, 0.3) 0%, rgba(42, 40, 57, 0.95) 100%) !important;
   border-color: rgba(235, 97, 159, 0.85) !important;
+  color: #eb619f !important;
+  box-shadow: 0 0 14px rgba(235, 97, 159, 0.65), inset 0 0 10px rgba(235, 97, 159, 0.3) !important;
   animation: tape-beacon-down 850ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-.price-pixel-flash { position: relative; isolation: isolate; }
-.price-pixel-flash[data-direction="up"] { color: #3fdf97; background-color: #2a2839; border-color: #3fdf97; }
-.price-pixel-flash[data-direction="down"] { color: #eb619f; background-color: #2a2839; border-color: #eb619f; }
-.price-pixel-flash[data-direction="up"]::after,
-.price-pixel-flash[data-direction="down"]::after {
-  content: "";
-  position: absolute;
-  z-index: 2;
-  top: -3px;
-  right: -4px;
-  width: 4px;
-  height: 4px;
-  background: currentColor;
-  box-shadow: -7px -3px 0 currentColor, 5px 6px 0 currentColor, -3px 10px 0 currentColor;
-  pointer-events: none;
-  animation: pixel-quote-flash 650ms steps(4, end) both;
+/* Base price flash transition */
+.price-pixel-flash {
+  position: relative;
+  isolation: isolate;
+  transition: background-color 300ms cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 300ms cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 300ms cubic-bezier(0.16, 1, 0.3, 1),
+              color 200ms ease;
 }
-@media (prefers-reduced-motion: reduce) {
-  .price-pixel-flash::after { animation: none !important; display: none; }
+.price-pixel-flash[data-direction="up"] {
+  color: #3fdf97 !important;
+  background: radial-gradient(ellipse at 50% 50%, rgba(63, 223, 151, 0.28) 0%, rgba(42, 40, 57, 0.95) 100%) !important;
+  border-color: rgba(63, 223, 151, 0.85) !important;
+  box-shadow: 0 0 12px rgba(63, 223, 151, 0.6), inset 0 0 8px rgba(63, 223, 151, 0.25) !important;
+  animation: tape-beacon-up 850ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.price-pixel-flash[data-direction="down"] {
+  color: #eb619f !important;
+  background: radial-gradient(ellipse at 50% 50%, rgba(235, 97, 159, 0.28) 0%, rgba(42, 40, 57, 0.95) 100%) !important;
+  border-color: rgba(235, 97, 159, 0.85) !important;
+  box-shadow: 0 0 12px rgba(235, 97, 159, 0.6), inset 0 0 8px rgba(235, 97, 159, 0.25) !important;
+  animation: tape-beacon-down 850ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .site-header, .terminal-header { position: relative; border-bottom-color: var(--pixel-edge); }

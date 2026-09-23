@@ -120,34 +120,38 @@ export function ChartHeader() {
         {/* Animated Live Price */}
         <div className="flex items-center gap-2.5">
           <div
-            key={ticker?.price}
             data-direction={direction || "neutral"}
             className={clsx(
-              "price-pixel-flash flex items-center gap-1.5 px-3 py-1 border",
-              direction === "up" &&
-                "bg-emerald-500/20 border-emerald-500/50",
-              direction === "down" &&
-                "bg-rose-500/20 border-rose-500/50",
+              "flex items-center gap-1.5 px-3 py-1 rounded-lg border font-mono transition-all duration-300",
+              direction === "up" && "cyber-glow-up",
+              direction === "down" && "cyber-glow-down",
               (!direction || direction === "neutral") &&
-                "bg-white/[0.02] border-white/[0.06]"
+                "bg-white/[0.03] border-white/[0.08] text-slate-100"
             )}
           >
             <span
               className={clsx(
                 "text-xl sm:text-2xl font-bold tabular-nums tracking-tight transition-colors duration-200",
-                direction === "up" && "text-emerald-300 ",
-                direction === "down" && "text-rose-300 ",
+                direction === "up" && "text-emerald-300 drop-shadow-[0_0_8px_rgba(63,223,151,0.95)]",
+                direction === "down" && "text-rose-300 drop-shadow-[0_0_8px_rgba(235,97,159,0.95)]",
                 (!direction || direction === "neutral") && "text-slate-100"
               )}
             >
               {formattedPrice}
             </span>
-            {direction === "up" && (
-              <span className="text-xs font-bold text-emerald-300">▲</span>
-            )}
-            {direction === "down" && (
-              <span className="text-xs font-bold text-rose-300">▼</span>
-            )}
+            <span
+              aria-hidden="true"
+              className={clsx(
+                "w-3 h-3 inline-flex items-center justify-center shrink-0 text-[10px] font-black leading-none transition-all duration-300",
+                direction === "up"
+                  ? "text-emerald-300 opacity-100 scale-100 drop-shadow-[0_0_6px_#3fdf97]"
+                  : direction === "down"
+                    ? "text-rose-300 opacity-100 scale-100 drop-shadow-[0_0_6px_#eb619f]"
+                    : "opacity-0 scale-50"
+              )}
+            >
+              {direction === "down" ? "▼" : "▲"}
+            </span>
           </div>
 
           <span

@@ -11,7 +11,9 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
+  SearchX,
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { clsx } from "clsx";
 import type { MarketSymbol } from "@gorengan/shared";
 import { useMarketStore, type MarketCategory } from "@/stores/marketStore";
@@ -56,6 +58,7 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
 
   // Search & Suggestion Dropdown state
   const [searchQuery, setSearchQuery] = useState("");
+  const [committedSearch, setCommittedSearch] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
   const searchContainerRef = useRef<HTMLDivElement>(null);
@@ -131,9 +134,9 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
     });
   }, [symbols, selectedCategory]);
 
-  // Search filter applied to category symbols
+  // Search filter applied to category symbols ONLY when committed via Enter or Dropdown select
   const displaySymbols = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
+    const q = committedSearch.trim().toLowerCase();
     if (!q) return categoryFilteredSymbols;
     return categoryFilteredSymbols.filter(
       (sym) =>
@@ -141,7 +144,7 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
         sym.name.toLowerCase().includes(q) ||
         sym.base.toLowerCase().includes(q)
     );
-  }, [categoryFilteredSymbols, searchQuery]);
+  }, [categoryFilteredSymbols, committedSearch]);
 
   // Compute table rows during render (no useEffect)
   const rows = useMemo(() => {
@@ -248,12 +251,25 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
     setSelectedSymbol(sym.id);
     onSelectSymbol?.(sym.id);
     setIsDropdownOpen(false);
-    setSearchQuery("");
+    setSearchQuery(sym.id);
+    setCommittedSearch(sym.id);
     setVisibleCount(25);
   };
 
-  // Keyboard navigation for suggestions
+  // Keyboard navigation for suggestions and Enter to commit search
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (isDropdownOpen && activeSuggestionIndex >= 0 && activeSuggestionIndex < suggestions.length) {
+        handleSelectSuggestion(suggestions[activeSuggestionIndex]);
+      } else {
+        setCommittedSearch(searchQuery.trim());
+        setIsDropdownOpen(false);
+        setVisibleCount(25);
+      }
+      return;
+    }
+
     if (!isDropdownOpen || suggestions.length === 0) {
       if (e.key === "ArrowDown" && suggestions.length > 0) {
         setIsDropdownOpen(true);
@@ -268,13 +284,6 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setActiveSuggestionIndex((prev) => (prev > 0 ? prev - 1 : suggestions.length - 1));
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      if (activeSuggestionIndex >= 0 && activeSuggestionIndex < suggestions.length) {
-        handleSelectSuggestion(suggestions[activeSuggestionIndex]);
-      } else if (suggestions.length > 0) {
-        handleSelectSuggestion(suggestions[0]);
-      }
     } else if (e.key === "Escape") {
       setIsDropdownOpen(false);
     }
@@ -344,93 +353,107 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
               className="w-full bg-[#2a2839] border border-white/[0.1] focus:border-emerald-500/60 rounded-lg py-1.5 pl-8 pr-7 text-xs text-slate-100 placeholder-slate-400 focus:outline-hidden font-mono transition-all focus:ring-1 focus:ring-emerald-500/30"
             />
             {searchQuery && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchQuery("");
-                  setIsDropdownOpen(false);
-                  setVisibleCount(25);
-                }}
-                className="absolute right-2 text-slate-400 hover:text-white transition-colors cursor-pointer"
-                title="Clear search"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
+              <div className="absolute right-2 flex items-center gap-1.5">
+                <span className="hidden sm:inline-flex items-center text-[9px] font-mono text-emerald-400/80 bg-emerald-500/10 border border-emerald-500/25 px-1 rounded">
+                  ↵ Enter
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setCommittedSearch("");
+                    setIsDropdownOpen(false);
+                    setVisibleCount(25);
+                  }}
+                  className="text-slate-400 hover:text-white transition-colors cursor-pointer"
+                  title="Clear search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
             )}
           </div>
 
-          {/* Suggestion Dropdown List */}
-          {isDropdownOpen && searchQuery.trim().length > 0 && (
-            <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-[#2a2839] border border-white/[0.14] rounded-lg shadow-2xl backdrop-blur-xl overflow-hidden font-mono">
-              <div className="px-3 py-1.5 bg-[#3c3f5f]/80 border-b border-white/[0.08] text-[9.5px] uppercase tracking-wider text-slate-400 font-semibold flex items-center justify-between">
-                <span>Matching Markets</span>
-                <span>{suggestions.length} results</span>
-              </div>
-
-              {suggestions.length === 0 ? (
-                <div className="p-3 text-center text-xs text-slate-400 italic">
-                  No matching symbol for &ldquo;{searchQuery}&rdquo;
+          {/* Suggestion Dropdown List with Framer Motion */}
+          <AnimatePresence>
+            {isDropdownOpen && searchQuery.trim().length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                transition={{ duration: 0.16, ease: "easeOut" }}
+                className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-[#2a2839] border border-white/[0.14] rounded-lg shadow-2xl backdrop-blur-xl overflow-hidden font-mono"
+              >
+                <div className="px-3 py-1.5 bg-[#3c3f5f]/80 border-b border-white/[0.08] text-[9.5px] uppercase tracking-wider text-slate-400 font-semibold flex items-center justify-between">
+                  <span>Matching Markets</span>
+                  <span>{suggestions.length} results</span>
                 </div>
-              ) : (
-                <div className="max-h-[260px] overflow-y-auto divide-y divide-white/[0.04]">
-                  {suggestions.map((sym, idx) => {
-                    const isHighlighted = idx === activeSuggestionIndex;
-                    const ticker = tickers[sym.id];
-                    const isPositive = (ticker?.changePercent24h ?? 0) >= 0;
-                    const isUs = sym.assetClass === "us_stocks" || isUsEquitySymbol(sym.id);
-                    const isId = sym.assetClass === "idx_stocks" || isIdxEquitySymbol(sym.id);
-                    const isFx = !isUs && !isId && (sym.assetClass === "fx" || isFxSymbol(sym.id));
 
-                    let priceText = `$${formatPrice(ticker?.price)}`;
-                    if (isFx) {
-                      priceText = formatFxPrice(ticker?.price, sym.id, sym.displayDecimals);
-                    } else if (isId) {
-                      priceText = formatEquityPrice(ticker?.price, sym.id, "IDR");
-                    } else if (isUs) {
-                      priceText = formatEquityPrice(ticker?.price, sym.id, "USD");
-                    }
+                {suggestions.length === 0 ? (
+                  <div className="p-3 text-center text-xs text-slate-400 italic">
+                    No matching symbol for &ldquo;{searchQuery}&rdquo; · Press Enter to search
+                  </div>
+                ) : (
+                  <div className="max-h-[260px] overflow-y-auto divide-y divide-white/[0.04]">
+                    {suggestions.map((sym, idx) => {
+                      const isHighlighted = idx === activeSuggestionIndex;
+                      const ticker = tickers[sym.id];
+                      const isPositive = (ticker?.changePercent24h ?? 0) >= 0;
+                      const isUs = sym.assetClass === "us_stocks" || isUsEquitySymbol(sym.id);
+                      const isId = sym.assetClass === "idx_stocks" || isIdxEquitySymbol(sym.id);
+                      const isFx = !isUs && !isId && (sym.assetClass === "fx" || isFxSymbol(sym.id));
 
-                    return (
-                      <button
-                        key={sym.id}
-                        type="button"
-                        onClick={() => handleSelectSuggestion(sym)}
-                        onMouseEnter={() => setActiveSuggestionIndex(idx)}
-                        className={clsx(
-                          "w-full text-left px-3 py-2 flex items-center justify-between gap-2 transition-colors cursor-pointer",
-                          isHighlighted ? "bg-white/[0.08] text-white" : "hover:bg-white/[0.04] text-slate-200"
-                        )}
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="font-bold text-xs text-emerald-300 shrink-0">
-                            {sym.id}
-                          </span>
-                          <span className="text-[11px] text-slate-400 truncate">
-                            {sym.name}
-                          </span>
-                        </div>
+                      let priceText = `$${formatPrice(ticker?.price)}`;
+                      if (isFx) {
+                        priceText = formatFxPrice(ticker?.price, sym.id, sym.displayDecimals);
+                      } else if (isId) {
+                        priceText = formatEquityPrice(ticker?.price, sym.id, "IDR");
+                      } else if (isUs) {
+                        priceText = formatEquityPrice(ticker?.price, sym.id, "USD");
+                      }
 
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-xs font-semibold tabular-nums text-slate-100">
-                            {priceText}
-                          </span>
-                          <span
-                            className={clsx(
-                              "text-[10px] px-1.5 py-0.2 rounded font-semibold tabular-nums",
-                              isPositive ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
-                            )}
-                          >
-                            {formatPercent(ticker?.changePercent24h)}
-                          </span>
-                          <ArrowRight className="w-3 h-3 text-slate-500" />
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
+                      return (
+                        <button
+                          key={sym.id}
+                          type="button"
+                          onClick={() => handleSelectSuggestion(sym)}
+                          onMouseEnter={() => setActiveSuggestionIndex(idx)}
+                          className={clsx(
+                            "w-full text-left px-3 py-2 flex items-center justify-between gap-2 transition-colors cursor-pointer",
+                            isHighlighted ? "bg-white/[0.08] text-white" : "hover:bg-white/[0.04] text-slate-200"
+                          )}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-bold text-xs text-emerald-300 shrink-0">
+                              {sym.id}
+                            </span>
+                            <span className="text-[11px] text-slate-400 truncate">
+                              {sym.name}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-xs font-semibold tabular-nums text-slate-100">
+                              {priceText}
+                            </span>
+                            <span
+                              className={clsx(
+                                "text-[10px] px-1.5 py-0.2 rounded font-semibold tabular-nums",
+                                isPositive ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
+                              )}
+                            >
+                              {formatPercent(ticker?.changePercent24h)}
+                            </span>
+                            <ArrowRight className="w-3 h-3 text-slate-500" />
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
@@ -500,8 +523,31 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
           <tbody className="divide-y divide-white/[0.04]">
             {visibleRows.length === 0 ? (
               <tr>
-                <td colSpan={10} className="py-12 text-center text-slate-400 italic">
-                  No market symbols match your current filter.
+                <td colSpan={10} className="py-14 px-4 text-center">
+                  <div className="flex flex-col items-center justify-center gap-2 font-mono text-slate-400">
+                    <SearchX className="w-8 h-8 text-slate-500 mb-1" />
+                    <span className="text-sm font-semibold text-slate-200">
+                      No matching markets found
+                    </span>
+                    <p className="text-xs text-slate-500 max-w-sm">
+                      {committedSearch
+                        ? `No assets match "${committedSearch}" in the ${selectedCategory.toUpperCase()} category.`
+                        : "No assets match your current category and search filter."}
+                    </p>
+                    {committedSearch && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSearchQuery("");
+                          setCommittedSearch("");
+                          setVisibleCount(25);
+                        }}
+                        className="mt-2 text-xs px-3 py-1.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 font-bold transition-colors cursor-pointer"
+                      >
+                        Clear Search Filter
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ) : (
@@ -638,22 +684,28 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
                     {/* Price with Animated Glow/Flash */}
                     <td className="py-3 px-3 text-right">
                       <span
-                        key={ticker?.price}
                         data-direction={direction}
                         className={clsx(
-                          "price-pixel-flash inline-flex items-center justify-end gap-1 px-2 py-0.5 font-semibold text-xs sm:text-sm tabular-nums border border-transparent rounded",
-                          direction === "up" && "bg-emerald-500/25 text-emerald-300 drop-shadow-[0_0_8px_rgba(63,223,151,0.8)]",
-                          direction === "down" && "bg-rose-500/25 text-rose-300 drop-shadow-[0_0_8px_rgba(235,97,159,0.8)]",
-                          direction === "neutral" && "text-slate-100 bg-white/[0.02]"
+                          "inline-flex items-center justify-end gap-1 px-2 py-0.5 font-semibold text-xs sm:text-sm tabular-nums border rounded transition-colors duration-200",
+                          direction === "up" && "price-glow-up",
+                          direction === "down" && "price-glow-down",
+                          direction === "neutral" && "text-slate-100 bg-white/[0.02] border-transparent"
                         )}
                       >
                         <span>{formattedPrice}</span>
-                        {direction === "up" && (
-                          <span className="text-[10px] text-emerald-300 font-extrabold">▲</span>
-                        )}
-                        {direction === "down" && (
-                          <span className="text-[10px] text-rose-300 font-extrabold">▼</span>
-                        )}
+                        <span
+                          aria-hidden="true"
+                          className={clsx(
+                            "w-2.5 h-2.5 inline-flex items-center justify-center shrink-0 text-[9px] font-black leading-none transition-all duration-300",
+                            direction === "up"
+                              ? "text-emerald-300 opacity-100 scale-100 drop-shadow-[0_0_6px_#3fdf97]"
+                              : direction === "down"
+                                ? "text-rose-300 opacity-100 scale-100 drop-shadow-[0_0_6px_#eb619f]"
+                                : "opacity-0 scale-50"
+                          )}
+                        >
+                          {direction === "down" ? "▼" : "▲"}
+                        </span>
                       </span>
                     </td>
 

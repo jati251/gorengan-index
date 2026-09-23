@@ -1,41 +1,52 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { clsx } from "clsx";
 import { useMarketStore, type PriceDirection } from "@/stores/marketStore";
 import { formatPrice, formatPercent } from "@/utils/formatters";
 import { formatFxPrice, isFxSymbol } from "@/features/forex";
 import { formatEquityPrice, isUsEquitySymbol, isIdxEquitySymbol } from "@/features/equities";
-import type { MarketTicker } from "@gorengan/shared";
+import { DEFAULT_SYMBOLS, type MarketSymbol, type MarketTicker } from "@gorengan/shared";
 
 interface TapeItemProps {
-  ticker: MarketTicker;
+  symbol: MarketSymbol;
+  ticker?: MarketTicker;
   direction: PriceDirection;
   selected: boolean;
   copy: number;
   onSelect: (symbol: string) => void;
 }
 
-const TapeItem = React.memo(function TapeItem({ ticker, direction, selected, copy, onSelect }: TapeItemProps) {
-  const isPositive = (ticker.changePercent24h ?? 0) >= 0;
-  const isFx = isFxSymbol(ticker.symbol);
-  const isUs = isUsEquitySymbol(ticker.symbol);
-  const isId = isIdxEquitySymbol(ticker.symbol);
-  const price = isFx
-    ? formatFxPrice(ticker.price, ticker.symbol)
-    : isId
-      ? formatEquityPrice(ticker.price, ticker.symbol, "IDR")
-      : isUs
-        ? formatEquityPrice(ticker.price, ticker.symbol, "USD")
-        : "$" + formatPrice(ticker.price);
+const TapeItem = React.memo(function TapeItem({
+  symbol,
+  ticker,
+  direction,
+  selected,
+  copy,
+  onSelect,
+}: TapeItemProps) {
+  const isPositive = (ticker?.changePercent24h ?? 0) >= 0;
+  const isFx = isFxSymbol(symbol.id);
+  const isUs = isUsEquitySymbol(symbol.id);
+  const isId = isIdxEquitySymbol(symbol.id);
+
+  const priceFormatted = ticker && Number.isFinite(ticker.price) && ticker.price > 0
+    ? isFx
+      ? formatFxPrice(ticker.price, symbol.id)
+      : isId
+        ? formatEquityPrice(ticker.price, symbol.id, "IDR")
+        : isUs
+          ? formatEquityPrice(ticker.price, symbol.id, "USD")
+          : "$" + formatPrice(ticker.price)
+    : "--";
 
   return (
     <button
       type="button"
       tabIndex={copy === 0 ? 0 : -1}
-      onClick={() => onSelect(ticker.symbol)}
+      onClick={() => onSelect(symbol.id)}
       className={clsx(
-        "relative flex items-center gap-2 px-2.5 py-1 rounded-md text-[11px] cursor-pointer shrink-0 border font-mono transition-[background,border-color,box-shadow,color] duration-300",
+        "relative flex items-center justify-between w-[172px] min-w-[172px] max-w-[172px] px-2 py-1 rounded text-[11px] cursor-pointer shrink-0 border font-mono transition-colors duration-200",
         direction === "up" && "tape-glow-up",
         direction === "down" && "tape-glow-down",
         direction === "neutral" && (
@@ -44,19 +55,23 @@ const TapeItem = React.memo(function TapeItem({ ticker, direction, selected, cop
             : "bg-white/[0.03] hover:bg-white/[0.08] border-white/[0.06] hover:border-white/[0.18] text-slate-300"
         )
       )}
-      title={"Select " + ticker.symbol}
+      title={"Select " + symbol.id}
     >
-      <span className="font-semibold text-slate-200">{ticker.symbol}</span>
+      {/* 1. Fixed-width Symbol */}
+      <span className="w-[50px] min-w-[50px] max-w-[50px] font-semibold text-slate-200 truncate text-left">
+        {symbol.id}
+      </span>
+
+      {/* 2. Fixed-width Price & Stable 10px Arrow */}
       <span
         className={clsx(
-          "font-semibold tabular-nums flex items-center gap-1 transition-colors duration-200",
+          "w-[68px] min-w-[68px] max-w-[68px] font-semibold tabular-nums flex items-center justify-end gap-0.5 transition-colors duration-200",
           direction === "up" ? "text-emerald-300 drop-shadow-[0_0_8px_rgba(63,223,151,0.95)]" :
           direction === "down" ? "text-rose-300 drop-shadow-[0_0_8px_rgba(235,97,159,0.95)]" :
           "text-white"
         )}
       >
-        <span>{price}</span>
-        {/* Fixed-width arrow slot: width is permanently stable so card width NEVER shifts */}
+        <span className="truncate text-right">{priceFormatted}</span>
         <span
           aria-hidden="true"
           className={clsx(
@@ -71,15 +86,17 @@ const TapeItem = React.memo(function TapeItem({ ticker, direction, selected, cop
           {direction === "down" ? "▼" : "▲"}
         </span>
       </span>
+
+      {/* 3. Fixed-width 24h Change Badge */}
       <span
         className={clsx(
-          "font-semibold tabular-nums text-[10px] px-1.5 py-0.2 rounded border transition-colors duration-200",
+          "w-[44px] min-w-[44px] max-w-[44px] font-semibold tabular-nums text-[10px] text-center py-0.2 rounded border transition-colors duration-200 shrink-0",
           isPositive
             ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/25"
             : "text-rose-400 bg-rose-500/10 border-rose-500/25"
         )}
       >
-        {formatPercent(ticker.changePercent24h)}
+        {ticker ? formatPercent(ticker.changePercent24h) : "0.00%"}
       </span>
     </button>
   );
@@ -93,12 +110,9 @@ export function BottomStickyTickerTape() {
   const { tickers, priceDirections } = market;
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
   const setSelectedSymbol = useMarketStore((s) => s.setSelectedSymbol);
+  const [isPaused, setIsPaused] = useState(false);
 
-  const pausedRef = useRef(false);
-  const contentRef = useRef<HTMLDivElement>(null);
-  const widthRef = useRef(0);
-  const offsetRef = useRef(0);
-
+  // Throttle store updates to 250ms to keep React updates lightweight and eliminate stutter
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const unsubscribe = useMarketStore.subscribe((state, previous) => {
@@ -116,89 +130,55 @@ export function BottomStickyTickerTape() {
     };
   }, []);
 
-  const tickerList = useMemo(() => Object.values(tickers), [tickers]);
-
-  useEffect(() => {
-    const content = contentRef.current;
-    if (!content || tickerList.length === 0) return;
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
-
-    const updateWidth = () => {
-      const half = content.scrollWidth / 2;
-      if (half > 0 && Math.abs(widthRef.current - half) > 1) {
-        widthRef.current = half;
-      }
-    };
-
-    updateWidth();
-    const observer = new ResizeObserver(() => {
-      updateWidth();
-    });
-    observer.observe(content);
-
-    let frame = 0;
-    let previousTime = 0;
-    const SPEED = 36; // px per second
-
-    const animate = (time: number) => {
-      if (previousTime && !pausedRef.current && !document.hidden && !reducedMotion.matches && widthRef.current > 0) {
-        const delta = Math.min((time - previousTime) / 1000, 0.05);
-        offsetRef.current += SPEED * delta;
-        if (offsetRef.current >= widthRef.current) {
-          offsetRef.current -= widthRef.current;
-        }
-        content.style.transform = `translate3d(${-offsetRef.current}px, 0, 0)`;
-      }
-      previousTime = time;
-      frame = requestAnimationFrame(animate);
-    };
-
-    frame = requestAnimationFrame(animate);
-    return () => {
-      cancelAnimationFrame(frame);
-      observer.disconnect();
-    };
-  }, [tickerList.length]);
+  // Use immutable universe of symbols - constant width from frame 0, strictly invariant
+  const symbols = useMemo(() => DEFAULT_SYMBOLS, []);
 
   return (
     <div
       aria-label="Real-time Market Ticker Tape"
-      className="fixed bottom-[72px] xl:bottom-0 left-0 right-0 z-40 h-9 bg-[#3c3f5f] border-t border-white/[0.08] flex items-center font-mono select-none overflow-hidden "
-      onMouseEnter={() => { pausedRef.current = true; }}
-      onMouseLeave={() => { pausedRef.current = false; }}
-      onFocusCapture={() => { pausedRef.current = true; }}
-      onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) pausedRef.current = false; }}
+      className="fixed bottom-[calc(70px+env(safe-area-inset-bottom,0px))] xl:bottom-0 left-0 right-0 z-40 h-9 bg-[#3c3f5f] border-t border-white/[0.08] flex items-center font-mono select-none overflow-hidden"
+      style={{
+        WebkitTransform: "translateZ(0)",
+        transform: "translateZ(0)",
+      }}
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
+      onTouchStart={() => setIsPaused(true)}
+      onTouchEnd={() => setIsPaused(false)}
     >
       {/* Marquee Track Container with Edge Fades */}
       <div className="relative flex-1 w-full overflow-hidden h-full flex items-center">
         {/* Left fade gradient */}
         <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-[#3c3f5f] via-[#3c3f5f]/80 to-transparent z-10" />
 
-        {tickerList.length === 0 ? (
-          <div className="px-4 text-xs text-slate-500 italic">
-            Connecting to live market stream...
-          </div>
-        ) : (
-          <div
-            ref={contentRef}
-            className="flex w-max items-center py-0.5 will-change-transform"
-          >
-            {([0, 1] as const).map((copy) => (
-              <div key={copy} aria-hidden={copy === 1 ? true : undefined} className="flex shrink-0 items-center gap-2 pr-2">
-                {tickerList.map((ticker) => (
-                  <TapeItem
-                    key={ticker.symbol}
-                    ticker={ticker}
-                    direction={priceDirections[ticker.symbol] || "neutral"}
-                    selected={ticker.symbol === selectedSymbol}
-                    copy={copy}
-                    onSelect={setSelectedSymbol}
-                  />
-                ))}
-              </div>
-            ))}
-          </div>
-        )}
+        {/* Hardware-accelerated CSS marquee track */}
+        <div
+          className={clsx("tape-marquee-track", isPaused && "is-paused")}
+          style={{
+            WebkitBackfaceVisibility: "hidden",
+            backfaceVisibility: "hidden",
+          }}
+        >
+          {([0, 1] as const).map((copy) => (
+            <div
+              key={copy}
+              aria-hidden={copy === 1 ? true : undefined}
+              className="flex shrink-0 items-center gap-2 pr-2"
+            >
+              {symbols.map((sym) => (
+                <TapeItem
+                  key={sym.id}
+                  symbol={sym}
+                  ticker={tickers[sym.id]}
+                  direction={priceDirections[sym.id] || "neutral"}
+                  selected={sym.id === selectedSymbol}
+                  copy={copy}
+                  onSelect={setSelectedSymbol}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
 
         {/* Right fade gradient */}
         <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-[#3c3f5f] via-[#3c3f5f]/80 to-transparent z-10" />

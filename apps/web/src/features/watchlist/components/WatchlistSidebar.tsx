@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useMemo, useRef, useEffect } from "react";
-import { Search, Star, TrendingUp, TrendingDown, X } from "lucide-react";
-import { motion } from "framer-motion";
+import { Search, Star, TrendingUp, TrendingDown, X, SearchX } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { clsx } from "clsx";
 import type { MarketSymbol } from "@gorengan/shared";
 import { useMarketStore, type MarketCategory } from "@/stores/marketStore";
@@ -32,6 +32,7 @@ const CATEGORIES: { id: MarketCategory; label: string; icon: string }[] = [
 
 export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarProps) {
   const [search, setSearch] = useState("");
+  const [committedSearch, setCommittedSearch] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState<"favorites" | "all">("favorites");
@@ -72,7 +73,7 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
   const watchlist = useWatchlistStore((s) => s.watchlist);
   const toggleWatchlist = useWatchlistStore((s) => s.toggleWatchlist);
 
-  // 1. Filter symbols by category and search query (applies to both tabs)
+  // 1. Filter symbols by category and search query (only applies committed search)
   const categoryMatchedSymbols = useMemo(() => {
     return symbols.filter((sym) => {
       // Category filter
@@ -92,15 +93,15 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
 
       if (!matchesCategory) return false;
 
-      // Search query filter
-      if (!search.trim()) return true;
-      const q = search.toLowerCase();
+      // Search query filter (applies only after Enter or dropdown selection)
+      if (!committedSearch.trim()) return true;
+      const q = committedSearch.toLowerCase();
       return (
         sym.id.toLowerCase().includes(q) ||
         sym.name.toLowerCase().includes(q)
       );
     });
-  }, [symbols, search, selectedCategory]);
+  }, [symbols, committedSearch, selectedCategory]);
 
   // 2. Favorites subset for this active category/search
   const categoryFavorites = useMemo(() => {
@@ -203,71 +204,95 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
             onFocus={() => {
               if (search.trim().length > 0) setIsDropdownOpen(true);
             }}
-            className="w-full bg-[#2a2839] border border-white/[0.08] focus:border-emerald-500/50 rounded-lg px-2.5 py-1.5 pl-8 pr-7 text-xs text-slate-100 placeholder-slate-500 focus:outline-hidden transition-all"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                setCommittedSearch(search.trim());
+                setIsDropdownOpen(false);
+              } else if (e.key === "Escape") {
+                setIsDropdownOpen(false);
+              }
+            }}
+            className="w-full bg-[#2a2839] border border-white/[0.08] focus:border-emerald-500/50 rounded-lg px-2.5 py-1.5 pl-8 pr-16 text-xs text-slate-100 placeholder-slate-500 focus:outline-hidden transition-all"
           />
           {search && (
-            <button
-              type="button"
-              onClick={() => {
-                setSearch("");
-                setIsDropdownOpen(false);
-              }}
-              className="absolute right-2 top-2 text-slate-400 hover:text-white"
-              title="Clear"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-
-          {/* Suggestion Dropdown */}
-          {isDropdownOpen && search.trim().length > 0 && (
-            <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-[#2a2839] border border-white/[0.14] rounded-lg shadow-2xl backdrop-blur-xl overflow-hidden font-mono text-left">
-              <div className="px-2.5 py-1 bg-[#3c3f5f]/90 border-b border-white/[0.08] text-[9px] uppercase tracking-wider text-slate-400 font-semibold flex items-center justify-between">
-                <span>Matching Markets</span>
-                <span>{suggestions.length} results</span>
-              </div>
-              {suggestions.length === 0 ? (
-                <div className="p-2.5 text-center text-xs text-slate-400 italic">
-                  No matching symbol
-                </div>
-              ) : (
-                <div className="max-h-[220px] overflow-y-auto divide-y divide-white/[0.04]">
-                  {suggestions.map((sym) => {
-                    const ticker = tickers[sym.id];
-                    const isPositive = (ticker?.changePercent24h ?? 0) >= 0;
-                    return (
-                      <button
-                        key={sym.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedSymbol(sym.id);
-                          onSelectSymbol?.(sym.id);
-                          setIsDropdownOpen(false);
-                          setSearch("");
-                        }}
-                        className="w-full text-left px-2.5 py-1.5 flex items-center justify-between gap-1.5 hover:bg-white/[0.06] transition-colors cursor-pointer"
-                      >
-                        <div className="min-w-0">
-                          <div className="font-bold text-xs text-emerald-300">{sym.id}</div>
-                          <div className="text-[10px] text-slate-400 truncate">{sym.name}</div>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <span
-                            className={clsx(
-                              "text-[10px] px-1 py-0.2 rounded font-semibold tabular-nums",
-                              isPositive ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
-                            )}
-                          >
-                            {formatPercent(ticker?.changePercent24h)}
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+            <div className="absolute right-2 top-2 flex items-center gap-1.5">
+              <span className="text-[9px] font-mono text-emerald-400/80 bg-emerald-500/10 border border-emerald-500/25 px-1 rounded">
+                ↵
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setCommittedSearch("");
+                  setIsDropdownOpen(false);
+                }}
+                className="text-slate-400 hover:text-white cursor-pointer"
+                title="Clear search"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
             </div>
           )}
+
+          {/* Suggestion Dropdown with Framer Motion */}
+          <AnimatePresence>
+            {isDropdownOpen && search.trim().length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                transition={{ duration: 0.16, ease: "easeOut" }}
+                className="absolute left-0 right-0 top-full mt-1 z-50 bg-[#2a2839] border border-white/[0.14] rounded-lg shadow-2xl backdrop-blur-xl overflow-hidden font-mono text-left"
+              >
+                <div className="px-2.5 py-1 bg-[#3c3f5f]/90 border-b border-white/[0.08] text-[9px] uppercase tracking-wider text-slate-400 font-semibold flex items-center justify-between">
+                  <span>Matching Markets</span>
+                  <span>{suggestions.length} results</span>
+                </div>
+                {suggestions.length === 0 ? (
+                  <div className="p-2.5 text-center text-xs text-slate-400 italic">
+                    No matching symbol · Press Enter to search
+                  </div>
+                ) : (
+                  <div className="max-h-[220px] overflow-y-auto divide-y divide-white/[0.04]">
+                    {suggestions.map((sym) => {
+                      const ticker = tickers[sym.id];
+                      const isPositive = (ticker?.changePercent24h ?? 0) >= 0;
+                      return (
+                        <button
+                          key={sym.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedSymbol(sym.id);
+                            onSelectSymbol?.(sym.id);
+                            setIsDropdownOpen(false);
+                            setSearch(sym.id);
+                            setCommittedSearch(sym.id);
+                          }}
+                          className="w-full text-left px-2.5 py-1.5 flex items-center justify-between gap-1.5 hover:bg-white/[0.06] transition-colors cursor-pointer"
+                        >
+                          <div className="min-w-0">
+                            <div className="font-bold text-xs text-emerald-300">{sym.id}</div>
+                            <div className="text-[10px] text-slate-400 truncate">{sym.name}</div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span
+                              className={clsx(
+                                "text-[10px] px-1 py-0.2 rounded font-semibold tabular-nums",
+                                isPositive ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
+                              )}
+                            >
+                              {formatPercent(ticker?.changePercent24h)}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Watchlist & All Tabs with accurate independent counts */}
@@ -375,8 +400,26 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
               )}
             </div>
           ) : (
-            <div className="p-8 text-center text-xs text-slate-500 italic">
-              No markets match your search.
+            <div className="p-6 text-center text-xs flex flex-col items-center justify-center gap-2 text-slate-400 font-mono">
+              <SearchX className="w-8 h-8 text-slate-500 mb-1" />
+              <p className="font-semibold text-slate-300">
+                No markets found
+              </p>
+              <p className="text-[11px] text-slate-500 max-w-[200px]">
+                {committedSearch ? `No symbols match "${committedSearch}"` : "No markets match current filters."}
+              </p>
+              {committedSearch && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch("");
+                    setCommittedSearch("");
+                  }}
+                  className="mt-1 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-md text-[11px] font-semibold transition-colors cursor-pointer border border-emerald-500/25"
+                >
+                  Clear Search
+                </button>
+              )}
             </div>
           )
         ) : (
@@ -520,28 +563,28 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
                   {/* Price & Direction Flash */}
                   <div className="text-right shrink-0 pl-2">
                     <div
-                      key={ticker?.price}
                       data-direction={direction}
                       className={clsx(
-                        "price-pixel-flash text-xs font-semibold tabular-nums px-1.5 py-0.5 border border-transparent flex items-center justify-end gap-1",
-                        direction === "up" &&
-                          "bg-emerald-500/25 text-emerald-300",
-                        direction === "down" &&
-                          "bg-rose-500/25 text-rose-300",
-                        direction === "neutral" && "text-slate-200 bg-transparent"
+                        "text-xs font-semibold tabular-nums px-1.5 py-0.5 border rounded flex items-center justify-end gap-1 font-mono transition-colors duration-200",
+                        direction === "up" && "price-glow-up",
+                        direction === "down" && "price-glow-down",
+                        direction === "neutral" && "text-slate-200 bg-transparent border-transparent"
                       )}
                     >
                       <span>{formattedPrice}</span>
-                      {direction === "up" && (
-                        <span className="text-[9px] text-emerald-300 font-extrabold ">
-                          ▲
-                        </span>
-                      )}
-                      {direction === "down" && (
-                        <span className="text-[9px] text-rose-300 font-extrabold ">
-                          ▼
-                        </span>
-                      )}
+                      <span
+                        aria-hidden="true"
+                        className={clsx(
+                          "w-2.5 h-2.5 inline-flex items-center justify-center shrink-0 text-[8px] font-black leading-none transition-all duration-300",
+                          direction === "up"
+                            ? "text-emerald-300 opacity-100 scale-100 drop-shadow-[0_0_6px_#3fdf97]"
+                            : direction === "down"
+                              ? "text-rose-300 opacity-100 scale-100 drop-shadow-[0_0_6px_#eb619f]"
+                              : "opacity-0 scale-50"
+                        )}
+                      >
+                        {direction === "down" ? "▼" : "▲"}
+                      </span>
                     </div>
 
                     <div
