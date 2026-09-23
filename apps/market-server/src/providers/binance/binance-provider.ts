@@ -36,10 +36,11 @@ export class BinanceProvider extends EventEmitter implements MarketProvider {
 
   constructor(initialSymbols?: string[]) {
     super();
-    if (initialSymbols) {
-      for (const s of initialSymbols) this.activeSymbols.add(s);
-    } else {
-      for (const s of DEFAULT_SYMBOLS.map((x) => x.id)) this.activeSymbols.add(s);
+    const source = initialSymbols || DEFAULT_SYMBOLS.map((x) => x.id);
+    for (const s of source) {
+      if (s.endsWith("-USDT") && !s.includes(":")) {
+        this.activeSymbols.add(s);
+      }
     }
   }
 
@@ -126,7 +127,7 @@ export class BinanceProvider extends EventEmitter implements MarketProvider {
   public async subscribe(symbols: string[]): Promise<void> {
     let added = false;
     for (const sym of symbols) {
-      if (!this.activeSymbols.has(sym)) {
+      if (sym.endsWith("-USDT") && !sym.includes(":") && !this.activeSymbols.has(sym)) {
         this.activeSymbols.add(sym);
         added = true;
       }
@@ -151,6 +152,10 @@ export class BinanceProvider extends EventEmitter implements MarketProvider {
     from: number;
     to: number;
   }): Promise<Candle[]> {
+    if (!params.symbol.endsWith("-USDT") || params.symbol.includes(":")) {
+      return [];
+    }
+
     const binanceSymbol = toBinanceSymbol(params.symbol);
     const interval = this.mapTimeframeToBinance(params.timeframe);
 

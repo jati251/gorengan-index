@@ -120,6 +120,26 @@ export function createHttpServer(
 
         let candles = repository.getCandles(symbol, timeframe, from, to, limit);
 
+        // On-demand seed if repository has no candles for this symbol
+        if (candles.length === 0) {
+          try {
+            const now = Date.now();
+            const seedFrom = from ?? (now - Math.min(limit, 500) * 60000);
+            const liveCandles = await provider.getHistoricalCandles({
+              symbol,
+              timeframe: "1m",
+              from: seedFrom,
+              to: to ?? now,
+            });
+            if (liveCandles.length > 0) {
+              repository.saveCandles(liveCandles);
+              candles = repository.getCandles(symbol, timeframe, from, to, limit);
+            }
+          } catch (err) {
+            logger.warn({ err, symbol }, "On-demand candle seed failed");
+          }
+        }
+
         // Fallback for sub-minute timeframes (1s, 5s, 15s) when repository has few candles
         if (
           candles.length < 30 &&

@@ -4,7 +4,8 @@ import { getDatabase, closeDatabase } from "./persistence/database.js";
 import { CandleRepository } from "./persistence/candle-repository.js";
 import { MarketState } from "./market/market-state.js";
 import { CandleEngine } from "./market/candle-engine.js";
-import { BinanceProvider } from "./providers/binance/binance-provider.js";
+import { CompositeMarketProvider } from "./providers/composite/composite-provider.js";
+import { seedInitialDataIfEmpty } from "./market/baseline-data.js";
 import { createHttpServer } from "./transport/http/server.js";
 import { MarketWebSocketGateway } from "./transport/websocket/gateway.js";
 import { runBackfill, runRetentionJob } from "./jobs/backfill.js";
@@ -23,12 +24,16 @@ async function bootstrap() {
   const marketState = new MarketState();
   const candleEngine = new CandleEngine(repository);
 
-  // 3. Symbols
-  const symbols = repository.getSymbols().map((s) => s.id);
-  logger.info({ symbols }, "Configured symbols for ingestion");
+  // 3. Seed baseline tickers and candles for any empty symbols
+  seedInitialDataIfEmpty(repository, marketState);
 
-  // 4. Initialize Binance provider
-  const provider = new BinanceProvider(symbols);
+  // 4. Symbols
+  const allSymbols = repository.getSymbols();
+  const symbols = allSymbols.map((s) => s.id);
+  logger.info({ symbolsCount: symbols.length }, "Configured symbols for ingestion");
+
+  // 5. Initialize Composite provider (Binance for Crypto + Yahoo for Equities/Forex)
+  const provider = new CompositeMarketProvider(allSymbols);
 
   // 5. Create HTTP Server & WebSocket Gateway
   const httpServer = createHttpServer(
