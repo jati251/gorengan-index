@@ -67,7 +67,7 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
   const [committedSearch, setCommittedSearch] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
-  const [tab, setTab] = useState<"favorites" | "all">("favorites");
+  const [tab, setTab] = useState<"favorites" | "all">("all");
   const [trendFilter, setTrendFilter] = useState<"all" | "gainers" | "losers">("all");
 
   const categories: { id: MarketCategory; label: string }[] = useMemo(() => [
@@ -113,7 +113,7 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
   const watchlist = useWatchlistStore((s) => s.watchlist);
   const toggleWatchlist = useWatchlistStore((s) => s.toggleWatchlist);
 
-  // 1. Filter symbols by category and search query (only applies committed search)
+  // 1. Filter symbols by category and search query (live search supported)
   const categoryMatchedSymbols = useMemo(() => {
     return symbols.filter((sym) => {
       // Category filter
@@ -127,29 +127,34 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
       } else if (selectedCategory === "fx") {
         matchesCategory = sym.assetClass === "fx" || isFxSymbol(sym.id);
       } else {
-        matchesCategory =
-          sym.assetClass === "crypto" || (!isFxSymbol(sym.id) && !isEquitySymbol(sym.id));
+        // Strict crypto & metals — never match fx or equity
+        if (sym.assetClass === "fx" || isFxSymbol(sym.id)) return false;
+        if (sym.assetClass === "us_stocks" || isUsEquitySymbol(sym.id)) return false;
+        if (sym.assetClass === "idx_stocks" || isIdxEquitySymbol(sym.id)) return false;
+        matchesCategory = sym.assetClass === "crypto" || sym.assetClass === "metal";
       }
 
       if (!matchesCategory) return false;
 
-      // Search query filter (applies only after Enter or dropdown selection)
-      if (!committedSearch.trim()) return true;
-      const q = committedSearch.toLowerCase();
+      // Search query filter (applies live as user types or on committed search)
+      const q = (search.trim() || committedSearch.trim()).toLowerCase();
+      if (!q) return true;
       return (
         sym.id.toLowerCase().includes(q) ||
-        sym.name.toLowerCase().includes(q)
+        sym.name.toLowerCase().includes(q) ||
+        sym.base.toLowerCase().includes(q)
       );
     });
-  }, [symbols, committedSearch, selectedCategory]);
+  }, [symbols, search, committedSearch, selectedCategory]);
 
   // 2. Favorites subset for this active category/search
   const categoryFavorites = useMemo(() => {
     return categoryMatchedSymbols.filter((sym) => watchlist.includes(sym.id));
   }, [categoryMatchedSymbols, watchlist]);
 
-  // 3. Current active base list before trend filter
-  const baseSymbols = tab === "favorites" ? categoryFavorites : categoryMatchedSymbols;
+  // 3. Current active base list before trend filter (searching always searches all category symbols)
+  const isSearching = (search.trim() || committedSearch.trim()).length > 0;
+  const baseSymbols = (tab === "favorites" && !isSearching) ? categoryFavorites : categoryMatchedSymbols;
 
   // 4. Trend counts (Gainers vs Losers)
   const { gainersCount, losersCount } = useMemo(() => {

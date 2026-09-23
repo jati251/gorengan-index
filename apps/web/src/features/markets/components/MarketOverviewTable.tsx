@@ -216,13 +216,17 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
       if (selectedCategory === "fx") {
         return sym.assetClass === "fx" || isFxSymbol(sym.id);
       }
-      return sym.assetClass === "crypto" || (!isFxSymbol(sym.id) && !isEquitySymbol(sym.id));
+      // Strict crypto & metal check — never match fx or equity
+      if (sym.assetClass === "fx" || isFxSymbol(sym.id)) return false;
+      if (sym.assetClass === "us_stocks" || isUsEquitySymbol(sym.id)) return false;
+      if (sym.assetClass === "idx_stocks" || isIdxEquitySymbol(sym.id)) return false;
+      return sym.assetClass === "crypto" || sym.assetClass === "metal";
     });
   }, [symbols, selectedCategory]);
 
-  // Search filter applied to category symbols ONLY when committed via Enter or Dropdown select
+  // Live search filter applied to category symbols as user types, with fallback to committedSearch
   const displaySymbols = useMemo(() => {
-    const q = committedSearch.trim().toLowerCase();
+    const q = (searchQuery.trim() || committedSearch.trim()).toLowerCase();
     if (!q) return categoryFilteredSymbols;
     return categoryFilteredSymbols.filter(
       (sym) =>
@@ -230,7 +234,7 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
         sym.name.toLowerCase().includes(q) ||
         sym.base.toLowerCase().includes(q)
     );
-  }, [categoryFilteredSymbols, committedSearch]);
+  }, [categoryFilteredSymbols, searchQuery, committedSearch]);
 
   // Compute table rows during render (no useEffect)
   const rows = useMemo(() => {

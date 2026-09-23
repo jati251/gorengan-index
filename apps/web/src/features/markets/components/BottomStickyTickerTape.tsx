@@ -142,8 +142,23 @@ export function BottomStickyTickerTape() {
     };
   }, []);
 
-  // Use immutable universe of symbols - constant width from frame 0, strictly invariant
-  const symbols = useMemo(() => DEFAULT_SYMBOLS, []);
+  // Curate 40 prominent items across crypto, forex, US, and IDX equities for a smooth, high-impact tape
+  const symbols = useMemo(() => {
+    const TAPE_TOP_IDS = new Set([
+      // Crypto (16)
+      "BTC-USDT", "ETH-USDT", "SOL-USDT", "BNB-USDT", "XRP-USDT", "DOGE-USDT",
+      "ADA-USDT", "AVAX-USDT", "LINK-USDT", "SUI-USDT", "NEAR-USDT", "PEPE-USDT",
+      "SHIB-USDT", "DOT-USDT", "LTC-USDT", "PAXG-USDT",
+      // Forex (8)
+      "EUR-USD", "GBP-USD", "USD-JPY", "AUD-USD", "USD-CAD", "USD-CHF", "USD-IDR", "EUR-JPY",
+      // US Equities (8)
+      "US:AAPL", "US:NVDA", "US:MSFT", "US:AMZN", "US:GOOGL", "US:META", "US:TSLA", "US:AMD",
+      // IDX Equities (8)
+      "ID:BBCA", "ID:BBRI", "ID:BMRI", "ID:BBNI", "ID:ASII", "ID:TLKM", "ID:ICBP", "ID:AMMN",
+    ]);
+    const curated = DEFAULT_SYMBOLS.filter((sym) => TAPE_TOP_IDS.has(sym.id));
+    return curated.length > 0 ? curated : DEFAULT_SYMBOLS.slice(0, 40);
+  }, []);
 
   return (
     <div
