@@ -158,29 +158,20 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  // Handle column header click for sorting (3-state cycle: primary -> secondary -> clear)
+  // Handle column header click for sorting (clean 2-state toggle: desc <-> asc)
   const handleSort = (col: SortColumn) => {
     if (sortColumn !== col) {
       setSortColumn(col);
       // Alphabetical defaults to asc (A-Z), numeric metrics default to desc (highest first)
       setSortDirection(col === "symbol" ? "asc" : "desc");
     } else {
-      const defaultDir: SortDirection = col === "symbol" ? "asc" : "desc";
-      const secondaryDir: SortDirection = defaultDir === "asc" ? "desc" : "asc";
-
-      if (sortDirection === defaultDir) {
-        setSortDirection(secondaryDir);
-      } else {
-        // Third click clears sort back to default
-        setSortColumn(null);
-        setSortDirection("desc");
-      }
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
     }
     setVisibleCount(25);
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0;
+    }
   };
-
-
-
 
   // Click outside to close suggestion dropdown
   useEffect(() => {
@@ -289,6 +280,11 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
         case "price":
           valA = a.ticker?.price;
           valB = b.ticker?.price;
+          // In "all" category, normalize IDR prices (approx 16,000 IDR/USD) so all prices are comparable in USD
+          if (selectedCategory === "all") {
+            if (a.isId && valA != null) valA = valA / 16000;
+            if (b.isId && valB != null) valB = valB / 16000;
+          }
           break;
 
         case "change":
@@ -304,11 +300,19 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
         case "high":
           valA = a.ticker?.high24h;
           valB = b.ticker?.high24h;
+          if (selectedCategory === "all") {
+            if (a.isId && valA != null) valA = valA / 16000;
+            if (b.isId && valB != null) valB = valB / 16000;
+          }
           break;
 
         case "low":
           valA = a.ticker?.low24h;
           valB = b.ticker?.low24h;
+          if (selectedCategory === "all") {
+            if (a.isId && valA != null) valA = valA / 16000;
+            if (b.isId && valB != null) valB = valB / 16000;
+          }
           break;
 
         case "volume":
@@ -316,15 +320,24 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
             valA = a.ticker?.spreadPips ?? a.ticker?.spread;
             valB = b.ticker?.spreadPips ?? b.ticker?.spread;
           } else {
-            valA = a.isFx ? (a.ticker?.volume24h ?? a.ticker?.spreadPips) : a.ticker?.volume24h;
-            valB = b.isFx ? (b.ticker?.volume24h ?? b.ticker?.spreadPips) : b.ticker?.volume24h;
+            valA = a.ticker?.volume24h;
+            valB = b.ticker?.volume24h;
+            if (selectedCategory === "all") {
+              if (a.isId && valA != null) valA = valA / 16000;
+              if (b.isId && valB != null) valB = valB / 16000;
+            }
           }
           break;
       }
 
-      // Null-safety: always push undefined/null/non-finite values to the bottom
-      const aNull = valA == null || !Number.isFinite(valA);
-      const bNull = valB == null || !Number.isFinite(valB);
+      // Null-safety: values <= 0 for prices or non-finite are pushed to the bottom
+      const isPriceLike = sortColumn === "price" || sortColumn === "high" || sortColumn === "low";
+      const aNull = isPriceLike
+        ? (valA == null || !Number.isFinite(valA) || valA <= 0)
+        : (valA == null || !Number.isFinite(valA));
+      const bNull = isPriceLike
+        ? (valB == null || !Number.isFinite(valB) || valB <= 0)
+        : (valB == null || !Number.isFinite(valB));
 
       if (aNull && bNull) {
         const cmp = a.symbol.id.localeCompare(b.symbol.id);
@@ -607,7 +620,11 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
               <th className="py-2.5 px-3 w-10 text-center">Fav</th>
               <th
                 onClick={() => handleSort("symbol")}
-                className="py-2.5 px-3 cursor-pointer group/th hover:text-white transition-colors"
+                className={clsx(
+                  "py-2.5 px-3 cursor-pointer group/th transition-colors",
+                  sortColumn === "symbol" ? "text-emerald-300 font-semibold" : "hover:text-white"
+                )}
+                aria-sort={sortColumn === "symbol" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
                 title="Sort by Symbol"
               >
                 {dict.marketTable.columns.symbol} {renderSortIcon("symbol")}
@@ -615,42 +632,66 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
               <th className="py-2.5 px-3 hidden md:table-cell">Type</th>
               <th
                 onClick={() => handleSort("price")}
-                className="py-2.5 px-3 text-right cursor-pointer group/th hover:text-white transition-colors"
+                className={clsx(
+                  "py-2.5 px-3 text-right cursor-pointer group/th transition-colors",
+                  sortColumn === "price" ? "text-emerald-300 font-semibold" : "hover:text-white"
+                )}
+                aria-sort={sortColumn === "price" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
                 title="Sort by Last Price"
               >
                 {dict.marketTable.columns.price} {renderSortIcon("price")}
               </th>
               <th
                 onClick={() => handleSort("change")}
-                className="py-2.5 px-3 text-right cursor-pointer group/th hover:text-white transition-colors"
+                className={clsx(
+                  "py-2.5 px-3 text-right cursor-pointer group/th transition-colors",
+                  sortColumn === "change" ? "text-emerald-300 font-semibold" : "hover:text-white"
+                )}
+                aria-sort={sortColumn === "change" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
                 title="Sort by 24h Change %"
               >
                 {dict.marketTable.columns.change24h} {renderSortIcon("change")}
               </th>
               <th
                 onClick={() => handleSort("range")}
-                className="py-2.5 px-3 text-center hidden md:table-cell cursor-pointer group/th hover:text-white transition-colors"
+                className={clsx(
+                  "py-2.5 px-3 text-center hidden md:table-cell cursor-pointer group/th transition-colors",
+                  sortColumn === "range" ? "text-emerald-300 font-semibold" : "hover:text-white"
+                )}
+                aria-sort={sortColumn === "range" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
                 title="Sort by 24h Range"
               >
                 {dict.marketTable.columns.range} {renderSortIcon("range")}
               </th>
               <th
                 onClick={() => handleSort("high")}
-                className="py-2.5 px-3 text-right hidden lg:table-cell cursor-pointer group/th hover:text-white transition-colors"
+                className={clsx(
+                  "py-2.5 px-3 text-right hidden lg:table-cell cursor-pointer group/th transition-colors",
+                  sortColumn === "high" ? "text-emerald-300 font-semibold" : "hover:text-white"
+                )}
+                aria-sort={sortColumn === "high" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
                 title="Sort by 24h High"
               >
                 {dict.marketTable.columns.high24h} {renderSortIcon("high")}
               </th>
               <th
                 onClick={() => handleSort("low")}
-                className="py-2.5 px-3 text-right hidden lg:table-cell cursor-pointer group/th hover:text-white transition-colors"
+                className={clsx(
+                  "py-2.5 px-3 text-right hidden lg:table-cell cursor-pointer group/th transition-colors",
+                  sortColumn === "low" ? "text-emerald-300 font-semibold" : "hover:text-white"
+                )}
+                aria-sort={sortColumn === "low" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
                 title="Sort by 24h Low"
               >
                 {dict.marketTable.columns.low24h} {renderSortIcon("low")}
               </th>
               <th
                 onClick={() => handleSort("volume")}
-                className="py-2.5 px-3 text-right hidden md:table-cell cursor-pointer group/th hover:text-white transition-colors"
+                className={clsx(
+                  "py-2.5 px-3 text-right hidden md:table-cell cursor-pointer group/th transition-colors",
+                  sortColumn === "volume" ? "text-emerald-300 font-semibold" : "hover:text-white"
+                )}
+                aria-sort={sortColumn === "volume" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
                 title="Sort by 24h Volume / Spread"
               >
                 {selectedCategory === "fx" ? "Spread" : dict.marketTable.columns.volume24h} {renderSortIcon("volume")}

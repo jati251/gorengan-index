@@ -47,8 +47,8 @@ export default function LandingPage() {
     return merged;
   }, [serverSymbols]);
 
-  // Curate 2 representative items per asset class category for landing page
-  const landingSymbols = useMemo(() => {
+  // Curate 8 representative items for hero snapshot tape
+  const featuredTapeSymbols = useMemo(() => {
     const counts: Record<string, number> = {
       crypto: 0,
       fx: 0,
@@ -70,7 +70,7 @@ export default function LandingPage() {
     return result.length > 0 ? result : symbols.slice(0, 8);
   }, [symbols]);
 
-  const symbolIds = useMemo(() => landingSymbols.map((symbol) => symbol.id), [landingSymbols]);
+  const symbolIds = useMemo(() => symbols.map((symbol) => symbol.id), [symbols]);
   useTerminalWebSocket(symbolIds, { isThrottled: !isAuthenticated, throttleMs: 5000 });
 
   const selectedSymbol = useMarketStore((state) => state.selectedSymbol);
@@ -118,14 +118,14 @@ export default function LandingPage() {
 
         <div className="tape-label">
           <span>{dict.landing.tape.boardLabel}</span>
-          <span>01 — {landingSymbols.length.toString().padStart(2, "0")} / {landingSymbols.length.toString().padStart(2, "0")}</span>
+          <span>01 — {featuredTapeSymbols.length.toString().padStart(2, "0")} / {featuredTapeSymbols.length.toString().padStart(2, "0")}</span>
         </div>
         <div className="home-market-tape" aria-label="Market snapshot">
           <div className="snapshot-head">
             <span>{dict.landing.tape.featuredTitle}</span>
-            <span>{interpolate(dict.landing.tape.assetsCount, { count: landingSymbols.length })}</span>
+            <span>{interpolate(dict.landing.tape.assetsCount, { count: featuredTapeSymbols.length })}</span>
           </div>
-          {landingSymbols.map((symbol) => {
+          {featuredTapeSymbols.map((symbol) => {
             const ticker = tickers[symbol.id];
             const change = ticker?.changePercent24h;
             return (
@@ -200,10 +200,10 @@ export default function LandingPage() {
               ) : (
                 <div className="flex flex-col gap-3">
                   <Card className="preview-table">
-                    <MarketOverviewTable symbols={landingSymbols} />
+                    <MarketOverviewTable symbols={symbols} />
                   </Card>
                   <div className="flex items-center justify-between px-2 py-1 text-xs font-mono text-slate-400">
-                    <span>{interpolate(dict.landing.market.showingFeatured, { count: landingSymbols.length })}</span>
+                    <span>{interpolate(dict.landing.market.showingFeatured, { count: symbols.length })}</span>
                     <Link
                       href="/terminal"
                       className="text-emerald-400 hover:text-emerald-300 inline-flex items-center gap-1 font-semibold transition-colors cursor-pointer"

@@ -52,6 +52,7 @@ export default function TerminalPage() {
   const symbolIds = React.useMemo(() => symbols.map((symbol) => symbol.id), [symbols]);
   useTerminalWebSocket(symbolIds, { isThrottled: true, throttleMs: isCompact ? 250 : 100 });
   const selectedSymbol = useMarketStore((state) => state.selectedSymbol);
+  const selectedCategory = useMarketStore((state) => state.selectedCategory);
 
   return (
     <main className="terminal-shell">
@@ -66,7 +67,13 @@ export default function TerminalPage() {
 
       <div className="terminal-workspace">
         <aside className={clsx("terminal-watchlist-panel", mobileTab === "markets" ? "is-mobile-active" : "")} aria-label="Watchlist and markets">
-          {(!isCompact || mobileTab === "markets") && <WatchlistSidebar symbols={symbols} onSelectSymbol={() => setMobileTab("chart")} />}
+          {(!isCompact || mobileTab === "markets") && (
+            <WatchlistSidebar
+              key={selectedCategory}
+              symbols={symbols}
+              onSelectSymbol={() => setMobileTab("chart")}
+            />
+          )}
         </aside>
 
         <section className={clsx("terminal-main-panel", mobileTab === "chart" ? "is-mobile-active" : "")} aria-label="Chart and market prices">

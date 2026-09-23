@@ -171,22 +171,38 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
   // 5. Final displayed symbols with Gainers/Losers filtering and momentum sorting
   const displayedSymbols = useMemo(() => {
     if (trendFilter === "gainers") {
-      return baseSymbols
+      const filtered = baseSymbols
         .filter((sym) => (tickers[sym.id]?.changePercent24h ?? 0) > 0)
         .sort((a, b) => {
           const chgA = tickers[a.id]?.changePercent24h ?? 0;
           const chgB = tickers[b.id]?.changePercent24h ?? 0;
           return chgB - chgA || a.id.localeCompare(b.id);
         });
+      // Graceful fallback: if no symbols meet strict > 0, sort baseSymbols by change desc so top performers always show
+      return filtered.length > 0
+        ? filtered
+        : [...baseSymbols].sort((a, b) => {
+            const chgA = tickers[a.id]?.changePercent24h ?? 0;
+            const chgB = tickers[b.id]?.changePercent24h ?? 0;
+            return chgB - chgA || a.id.localeCompare(b.id);
+          });
     }
     if (trendFilter === "losers") {
-      return baseSymbols
+      const filtered = baseSymbols
         .filter((sym) => (tickers[sym.id]?.changePercent24h ?? 0) < 0)
         .sort((a, b) => {
           const chgA = tickers[a.id]?.changePercent24h ?? 0;
           const chgB = tickers[b.id]?.changePercent24h ?? 0;
           return chgA - chgB || a.id.localeCompare(b.id);
         });
+      // Graceful fallback: if no symbols meet strict < 0, sort baseSymbols by change asc so biggest droppers always show
+      return filtered.length > 0
+        ? filtered
+        : [...baseSymbols].sort((a, b) => {
+            const chgA = tickers[a.id]?.changePercent24h ?? 0;
+            const chgB = tickers[b.id]?.changePercent24h ?? 0;
+            return chgA - chgB || a.id.localeCompare(b.id);
+          });
     }
     return baseSymbols;
   }, [baseSymbols, trendFilter, tickers]);
@@ -212,6 +228,7 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
     setCommittedSearch("");
     setIsDropdownOpen(false);
     setTrendFilter("all");
+    setTab("all");
   };
 
   return (
