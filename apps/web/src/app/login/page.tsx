@@ -51,10 +51,10 @@ function LoginForm() {
   };
 
   return (
-    <main className="login-page h-[100dvh] max-h-[100dvh] w-full overflow-hidden select-none">
+    <main className="login-page select-none">
       {/* Left panel: Auth shell */}
-      <div className="login-shell flex flex-col justify-between h-full max-h-[100dvh] overflow-hidden py-3 sm:py-5 px-5 sm:px-8 md:px-12">
-        <Link href="/" className="login-back hover:text-white transition-colors self-start inline-flex items-center gap-1.5 text-xs">
+      <div className="login-shell">
+        <Link href="/" className="login-back hover:text-white transition-colors">
           <ArrowLeft className="w-3.5 h-3.5" />
           <span>Back to markets</span>
         </Link>
@@ -63,27 +63,30 @@ function LoginForm() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-          className="login-content my-auto mx-auto w-full max-w-[430px] flex flex-col justify-center"
+          className="login-content"
         >
-          <div className="login-identity mb-2 sm:mb-3">
-            <span className="brand-mark inline-flex items-center justify-center font-bold text-sm border border-current mr-2 w-6 h-6 rounded-sm" aria-hidden="true">
+          <div className="login-identity">
+            <span
+              className="inline-flex items-center justify-center font-serif font-bold text-base border-2 border-[#c3e6eb] text-[#c3e6eb] w-8 h-8 rounded-sm"
+              aria-hidden="true"
+            >
               G<span className="text-[#f4c41b]">.</span>
             </span>
-            <span className="text-sm sm:text-base font-bold tracking-tight">
-              Gorengan <strong className="text-[#f4c41b] font-extrabold">Index</strong>
+            <span>
+              Gorengan <strong>Index</strong>
             </span>
           </div>
 
-          <p className="eyebrow text-[11px] uppercase tracking-widest text-[#f4c41b] font-mono mb-1">
+          <p className="eyebrow text-xs uppercase tracking-widest text-[#f4c41b] font-mono mb-1.5">
             Your workspace
           </p>
 
-          <h1 className="font-normal tracking-tight text-[#c3e6eb] mb-1.5">
+          <h1>
             Pick up where<br />
-            <em className="text-[#f4c41b] not-italic">the market is.</em>
+            <em>the market is.</em>
           </h1>
 
-          <p className="login-description text-xs sm:text-sm text-[#c3e6eb]/80 leading-snug my-1.5 sm:my-2 max-w-[380px]">
+          <p className="login-description">
             Sign in to open your watchlist, real-time charts, and market news in the institutional terminal.
           </p>
 
@@ -94,7 +97,7 @@ function LoginForm() {
                 initial={{ opacity: 0, height: 0, y: -4 }}
                 animate={{ opacity: 1, height: "auto", y: 0 }}
                 exit={{ opacity: 0, height: 0, y: -4 }}
-                className="mb-2 p-1.5 rounded bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-mono flex items-center gap-2"
+                className="login-error flex items-center gap-2 p-2 rounded bg-rose-500/15 border border-rose-500/30 text-rose-300"
                 role="alert"
               >
                 <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-400" />
@@ -109,7 +112,7 @@ function LoginForm() {
             disabled={isLoading}
             whileHover={{ scale: 1.01 }}
             whileTap={{ scale: 0.99 }}
-            className="login-google cursor-pointer transition-transform disabled:cursor-wait mt-1 w-full"
+            className="login-google cursor-pointer transition-transform"
           >
             <div className="flex items-center gap-2.5">
               {isLoading ? (
@@ -117,40 +120,36 @@ function LoginForm() {
               ) : (
                 <GoogleIcon />
               )}
-              <span>
-                {isLoading ? "Connecting…" : "Continue with Google"}
-              </span>
+              <span>{isLoading ? "Connecting…" : "Continue with Google"}</span>
             </div>
-            <ArrowRight className="w-3.5 h-3.5 text-[#2a2839]/80" />
+            <ArrowRight className="w-4 h-4 text-[#2a2839]/80" />
           </motion.button>
 
-          <p className="login-footnote text-[10px] sm:text-[11px] text-[#c3e6eb]/60 font-mono mt-2">
+          <p className="login-footnote">
             Authentication is securely verified through Google OAuth.
           </p>
         </motion.div>
 
-        <p className="login-bottom text-[10px] sm:text-[11px] text-[#c3e6eb]/50 font-mono">
+        <p className="login-bottom">
           Gorengan Index · Market data for personal research
         </p>
       </div>
 
       {/* Right panel: Editorial aside split */}
-      <div className="login-aside flex items-center justify-center p-5 lg:p-10 bg-[#3c3f5f] border-l border-[#55607e] overflow-hidden" aria-hidden="true">
+      <div className="login-aside" aria-hidden="true">
         <motion.div
           initial={{ opacity: 0, x: 14 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.45, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
-          className="login-aside-inner w-full max-w-[440px]"
+          className="login-aside-inner"
         >
-          <span className="text-[#f4c41b] text-[11px] font-bold font-mono tracking-widest block">
-            MARKET / 01
-          </span>
-          <p className="text-[#c3e6eb]">
+          <span>MARKET / 01</span>
+          <p>
             One place to watch<br />
             what moves.
           </p>
-          <div className="login-aside-rule h-px bg-[#757e8a]" />
-          <span className="text-[10px] sm:text-[11px] text-[#c3e6eb]/70 font-mono tracking-wider">
+          <div className="login-aside-rule" />
+          <span className="text-[11px] text-[#c3e6eb]/70 tracking-wider">
             CHARTS &nbsp;·&nbsp; WATCHLIST &nbsp;·&nbsp; NEWS
           </span>
         </motion.div>
