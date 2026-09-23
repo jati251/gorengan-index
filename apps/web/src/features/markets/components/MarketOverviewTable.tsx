@@ -312,9 +312,13 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
           break;
 
         case "volume":
-          // Forex symbols sort by spread/spreadPips instead of volume24h
-          valA = a.isFx ? (a.ticker?.spreadPips ?? a.ticker?.spread) : a.ticker?.volume24h;
-          valB = b.isFx ? (b.ticker?.spreadPips ?? b.ticker?.spread) : b.ticker?.volume24h;
+          if (selectedCategory === "fx") {
+            valA = a.ticker?.spreadPips ?? a.ticker?.spread;
+            valB = b.ticker?.spreadPips ?? b.ticker?.spread;
+          } else {
+            valA = a.isFx ? (a.ticker?.volume24h ?? a.ticker?.spreadPips) : a.ticker?.volume24h;
+            valB = b.isFx ? (b.ticker?.volume24h ?? b.ticker?.spreadPips) : b.ticker?.volume24h;
+          }
           break;
       }
 
@@ -336,7 +340,7 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
       // Stable secondary tie-breaker by symbol ID
       return diff !== 0 ? diff : a.symbol.id.localeCompare(b.symbol.id);
     });
-  }, [rows, sortColumn, sortDirection]);
+  }, [rows, sortColumn, sortDirection, selectedCategory]);
 
   // Slice sorted rows for 25-item infinite scrolling
   const visibleRows = useMemo(() => {
