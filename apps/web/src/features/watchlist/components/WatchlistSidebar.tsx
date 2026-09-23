@@ -168,13 +168,25 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
     return { gainersCount: g, losersCount: l };
   }, [baseSymbols, tickers]);
 
-  // 5. Final displayed symbols with Gainers/Losers filtering
+  // 5. Final displayed symbols with Gainers/Losers filtering and momentum sorting
   const displayedSymbols = useMemo(() => {
     if (trendFilter === "gainers") {
-      return baseSymbols.filter((sym) => (tickers[sym.id]?.changePercent24h ?? 0) > 0);
+      return baseSymbols
+        .filter((sym) => (tickers[sym.id]?.changePercent24h ?? 0) > 0)
+        .sort((a, b) => {
+          const chgA = tickers[a.id]?.changePercent24h ?? 0;
+          const chgB = tickers[b.id]?.changePercent24h ?? 0;
+          return chgB - chgA || a.id.localeCompare(b.id);
+        });
     }
     if (trendFilter === "losers") {
-      return baseSymbols.filter((sym) => (tickers[sym.id]?.changePercent24h ?? 0) < 0);
+      return baseSymbols
+        .filter((sym) => (tickers[sym.id]?.changePercent24h ?? 0) < 0)
+        .sort((a, b) => {
+          const chgA = tickers[a.id]?.changePercent24h ?? 0;
+          const chgB = tickers[b.id]?.changePercent24h ?? 0;
+          return chgA - chgB || a.id.localeCompare(b.id);
+        });
     }
     return baseSymbols;
   }, [baseSymbols, trendFilter, tickers]);
@@ -194,6 +206,14 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
     }
   }, [selectedCategory, dict]);
 
+  const handleCategorySelect = (categoryId: MarketCategory) => {
+    setSelectedCategory(categoryId);
+    setSearch("");
+    setCommittedSearch("");
+    setIsDropdownOpen(false);
+    setTrendFilter("all");
+  };
+
   return (
     <div className="terminal-watchlist flex flex-col h-full bg-[#3c3f5f] font-mono select-none overflow-hidden min-h-0">
       {/* 1. Category Switcher (ALL | CRYPTO | FOREX | US | IDX) */}
@@ -204,22 +224,16 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
             return (
               <button
                 key={cat.id}
-                onClick={() => setSelectedCategory(cat.id)}
+                type="button"
+                onClick={() => handleCategorySelect(cat.id)}
                 className={clsx(
-                  "relative py-1.5 px-0.5 rounded-md transition-colors cursor-pointer flex items-center justify-center font-bold tracking-tight text-center",
+                  "py-1.5 px-0.5 rounded-md transition-all cursor-pointer flex items-center justify-center font-bold tracking-tight text-center border",
                   isActive
-                    ? (CATEGORY_ACTIVE_COLORS[cat.id] ?? "text-emerald-400")
-                    : "text-slate-400 hover:text-slate-200"
+                    ? clsx(CATEGORY_ACTIVE_COLORS[cat.id] ?? "text-emerald-400", "bg-white/[0.09] border-white/[0.14] shadow-xs")
+                    : "border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/[0.03]"
                 )}
               >
-                {isActive && (
-                  <motion.div
-                    layoutId="activeCategoryPill"
-                    className="absolute inset-0 bg-white/[0.09] rounded-md border border-white/[0.14] shadow-xs"
-                    transition={{ type: "spring", stiffness: 450, damping: 35 }}
-                  />
-                )}
-                <span className="relative z-10 flex items-center justify-center gap-0.5 truncate text-[9.5px]">
+                <span className="flex items-center justify-center gap-0.5 truncate text-[9.5px]">
                   {cat.label}
                 </span>
               </button>
@@ -303,8 +317,8 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
                             setSelectedSymbol(sym.id);
                             onSelectSymbol?.(sym.id);
                             setIsDropdownOpen(false);
-                            setSearch(sym.id);
-                            setCommittedSearch(sym.id);
+                            setSearch("");
+                            setCommittedSearch("");
                           }}
                           className="w-full text-left px-2.5 py-1.5 flex items-center justify-between gap-1.5 hover:bg-white/[0.06] transition-colors cursor-pointer"
                         >
@@ -332,43 +346,33 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
           </AnimatePresence>
         </div>
 
-        {/* Watchlist & All Tabs with accurate independent counts */}
+        {/* Watchlist & All Tabs */}
         <div className="grid grid-cols-2 gap-1 bg-[#2a2839] p-0.5 rounded-lg border border-white/[0.07] text-[11px] ">
           <button
+            type="button"
             onClick={() => setTab("favorites")}
             className={clsx(
-              "relative py-1 rounded-md transition-colors cursor-pointer flex items-center justify-center gap-1.5",
-              tab === "favorites" ? "text-emerald-400 font-bold" : "text-slate-400 hover:text-slate-200"
+              "py-1 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1.5 border",
+              tab === "favorites"
+                ? "bg-white/[0.09] border-white/[0.14] text-emerald-400 font-bold shadow-xs"
+                : "border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/[0.03]"
             )}
           >
-            {tab === "favorites" && (
-              <motion.div
-                layoutId="watchlistTabPill"
-                className="absolute inset-0 bg-white/[0.09] rounded-md border border-white/[0.14] shadow-xs"
-                transition={{ type: "spring", stiffness: 450, damping: 35 }}
-              />
-            )}
-            <span className="relative z-10 flex items-center gap-1.5">
-              <Star className="w-3 h-3 fill-current text-yellow-400" />
-              {dict.watchlist.tabs.favorites} ({categoryFavorites.length})
-            </span>
+            <Star className="w-3 h-3 fill-current text-yellow-400" />
+            <span>{dict.watchlist.tabs.favorites} ({categoryFavorites.length})</span>
           </button>
 
           <button
+            type="button"
             onClick={() => setTab("all")}
             className={clsx(
-              "relative py-1 rounded-md transition-colors cursor-pointer flex items-center justify-center",
-              tab === "all" ? "text-emerald-400 font-bold" : "text-slate-400 hover:text-slate-200"
+              "py-1 rounded-md transition-all cursor-pointer flex items-center justify-center border",
+              tab === "all"
+                ? "bg-white/[0.09] border-white/[0.14] text-emerald-400 font-bold shadow-xs"
+                : "border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/[0.03]"
             )}
           >
-            {tab === "all" && (
-              <motion.div
-                layoutId="watchlistTabPill"
-                className="absolute inset-0 bg-white/[0.09] rounded-md border border-white/[0.14] shadow-xs"
-                transition={{ type: "spring", stiffness: 450, damping: 35 }}
-              />
-            )}
-            <span className="relative z-10">{dict.watchlist.tabs.all} ({categoryMatchedSymbols.length})</span>
+            <span>{dict.watchlist.tabs.all} ({categoryMatchedSymbols.length})</span>
           </button>
         </div>
 
@@ -388,11 +392,11 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
           </button>
           <button
             type="button"
-            onClick={() => setTrendFilter("gainers")}
+            onClick={() => setTrendFilter((prev) => (prev === "gainers" ? "all" : "gainers"))}
             className={clsx(
               "py-1 px-1 rounded-md transition-all cursor-pointer font-semibold text-center border flex items-center justify-center gap-1",
               trendFilter === "gainers"
-                ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40  font-bold"
+                ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-bold"
                 : "text-emerald-400/80 border-transparent hover:text-emerald-300 hover:bg-emerald-500/10"
             )}
           >
@@ -401,11 +405,11 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
           </button>
           <button
             type="button"
-            onClick={() => setTrendFilter("losers")}
+            onClick={() => setTrendFilter((prev) => (prev === "losers" ? "all" : "losers"))}
             className={clsx(
               "py-1 px-1 rounded-md transition-all cursor-pointer font-semibold text-center border flex items-center justify-center gap-1",
               trendFilter === "losers"
-                ? "bg-rose-500/20 text-rose-300 border-rose-500/40  font-bold"
+                ? "bg-rose-500/20 text-rose-300 border-rose-500/40 font-bold"
                 : "text-rose-400/80 border-transparent hover:text-rose-300 hover:bg-rose-500/10"
             )}
           >
@@ -440,14 +444,26 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
             <div className="p-6 text-center text-xs flex flex-col items-center justify-center gap-2 text-slate-400 font-mono">
               <SearchX className="w-8 h-8 text-slate-500 mb-1" />
               <p className="font-semibold text-slate-300">
-                {dict.watchlist.emptySearch.title}
+                {trendFilter !== "all"
+                  ? `No ${trendFilter.toUpperCase()} in this category`
+                  : dict.watchlist.emptySearch.title}
               </p>
               <p className="text-[11px] text-slate-500 max-w-[200px]">
-                {committedSearch
+                {trendFilter !== "all"
+                  ? `No markets matching ${trendFilter} right now.`
+                  : committedSearch
                   ? interpolate(dict.watchlist.emptySearch.desc, { query: committedSearch })
                   : dict.marketTable.empty.desc}
               </p>
-              {committedSearch && (
+              {trendFilter !== "all" ? (
+                <button
+                  type="button"
+                  onClick={() => setTrendFilter("all")}
+                  className="mt-1 px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-md text-[11px] font-semibold transition-colors cursor-pointer border border-emerald-500/25"
+                >
+                  Show All ({baseSymbols.length}) Markets
+                </button>
+              ) : committedSearch ? (
                 <button
                   type="button"
                   onClick={() => {
@@ -458,7 +474,7 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
                 >
                   Clear Search
                 </button>
-              )}
+              ) : null}
             </div>
           )
         ) : (

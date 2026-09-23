@@ -267,35 +267,64 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
     });
   }, [displaySymbols, tickers, priceDirections, watchlist, selectedSymbol]);
 
-  // Sort rows based on sortColumn and sortDirection
+  // Sort rows based on sortColumn and sortDirection with smart null-handling and stable tie-breaker
   const sortedRows = useMemo(() => {
     if (!sortColumn) return rows;
     return [...rows].sort((a, b) => {
-      let diff = 0;
+      let valA: number | string | undefined | null;
+      let valB: number | string | undefined | null;
+
       switch (sortColumn) {
         case "symbol":
-          diff = a.symbol.id.localeCompare(b.symbol.id);
-          break;
+          return sortDirection === "asc"
+            ? a.symbol.id.localeCompare(b.symbol.id)
+            : b.symbol.id.localeCompare(a.symbol.id);
+
         case "price":
-          diff = (a.ticker?.price ?? 0) - (b.ticker?.price ?? 0);
+          valA = a.ticker?.price;
+          valB = b.ticker?.price;
           break;
+
         case "change":
-          diff = (a.ticker?.changePercent24h ?? 0) - (b.ticker?.changePercent24h ?? 0);
+          valA = a.ticker?.changePercent24h;
+          valB = b.ticker?.changePercent24h;
           break;
+
         case "range":
-          diff = a.rangePercent - b.rangePercent;
+          valA = a.rangePercent;
+          valB = b.rangePercent;
           break;
+
         case "high":
-          diff = (a.ticker?.high24h ?? 0) - (b.ticker?.high24h ?? 0);
+          valA = a.ticker?.high24h;
+          valB = b.ticker?.high24h;
           break;
+
         case "low":
-          diff = (a.ticker?.low24h ?? 0) - (b.ticker?.low24h ?? 0);
+          valA = a.ticker?.low24h;
+          valB = b.ticker?.low24h;
           break;
+
         case "volume":
-          diff = (a.ticker?.volume24h ?? 0) - (b.ticker?.volume24h ?? 0);
+          // Forex symbols sort by spread/spreadPips instead of volume24h
+          valA = a.isFx ? (a.ticker?.spread ?? a.ticker?.spreadPips) : a.ticker?.volume24h;
+          valB = b.isFx ? (b.ticker?.spread ?? b.ticker?.spreadPips) : b.ticker?.volume24h;
           break;
       }
-      return sortDirection === "asc" ? diff : -diff;
+
+      // Null-safety: always push undefined/null/non-finite values to the bottom
+      const aNull = valA == null || !Number.isFinite(valA as number);
+      const bNull = valB == null || !Number.isFinite(valB as number);
+      if (aNull && bNull) return a.symbol.id.localeCompare(b.symbol.id);
+      if (aNull) return 1;
+      if (bNull) return -1;
+
+      const numA = valA as number;
+      const numB = valB as number;
+      const diff = sortDirection === "asc" ? numA - numB : numB - numA;
+
+      // Stable secondary tie-breaker by symbol ID
+      return diff !== 0 ? diff : a.symbol.id.localeCompare(b.symbol.id);
     });
   }, [rows, sortColumn, sortDirection]);
 
@@ -341,8 +370,8 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
     setSelectedSymbol(sym.id);
     onSelectSymbol?.(sym.id);
     setIsDropdownOpen(false);
-    setSearchQuery(sym.id);
-    setCommittedSearch(sym.id);
+    setSearchQuery("");
+    setCommittedSearch("");
     setVisibleCount(25);
   };
 
@@ -407,7 +436,12 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
                 type="button"
                 onClick={() => {
                   setSelectedCategory(cat.id);
+                  setSearchQuery("");
+                  setCommittedSearch("");
                   setVisibleCount(25);
+                  if (scrollContainerRef.current) {
+                    scrollContainerRef.current.scrollTop = 0;
+                  }
                 }}
                 className={clsx(
                   "px-2.5 py-1 rounded-md text-[11px] font-mono whitespace-nowrap transition-all duration-150 cursor-pointer border",

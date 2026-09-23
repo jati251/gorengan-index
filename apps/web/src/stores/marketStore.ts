@@ -109,47 +109,9 @@ export const useMarketStore = create<MarketStore>((set, get) => ({
       if (category === "all") {
         return { selectedCategory: "all" };
       }
-
-      let nextSymbol = state.selectedSymbol;
-      let nextTimeframe = state.selectedTimeframe;
-      let nextAssetClass: AssetClass = state.selectedAssetClass;
-
-      if (category === "us_stocks") {
-        nextAssetClass = "us_stocks";
-        if (!nextSymbol.startsWith("US:")) {
-          nextSymbol = "US:AAPL";
-        }
-        if (nextTimeframe === "1s" || nextTimeframe === "5s" || nextTimeframe === "15s") {
-          nextTimeframe = "1m";
-        }
-      } else if (category === "idx_stocks") {
-        nextAssetClass = "idx_stocks";
-        if (!nextSymbol.startsWith("ID:")) {
-          nextSymbol = "ID:BBCA";
-        }
-        if (nextTimeframe === "1s" || nextTimeframe === "5s" || nextTimeframe === "15s") {
-          nextTimeframe = "1m";
-        }
-      } else if (category === "fx") {
-        nextAssetClass = "fx";
-        if (!nextSymbol.includes("-") || nextSymbol.endsWith("USDT") || nextSymbol.startsWith("US:") || nextSymbol.startsWith("ID:")) {
-          nextSymbol = "EUR-USD";
-        }
-        if (nextTimeframe === "1s" || nextTimeframe === "5s" || nextTimeframe === "15s") {
-          nextTimeframe = "1m";
-        }
-      } else if (category === "crypto") {
-        nextAssetClass = "crypto";
-        if (!nextSymbol.endsWith("USDT")) {
-          nextSymbol = "BTC-USDT";
-        }
-      }
-
       return {
         selectedCategory: category,
-        selectedAssetClass: nextAssetClass,
-        selectedSymbol: nextSymbol,
-        selectedTimeframe: nextTimeframe,
+        selectedAssetClass: category as AssetClass,
       };
     }),
 

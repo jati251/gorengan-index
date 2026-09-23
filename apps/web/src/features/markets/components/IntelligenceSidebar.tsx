@@ -31,38 +31,28 @@ export function IntelligenceSidebar({ className, initialTab = "pulse" }: Intelli
             type="button"
             onClick={() => setActiveTab("pulse")}
             className={clsx(
-              "relative flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-mono font-medium transition-colors cursor-pointer z-10",
-              activeTab === "pulse" ? "text-amber-300 font-semibold" : "text-slate-400 hover:text-slate-200"
+              "relative flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-mono font-medium transition-all cursor-pointer z-10 border",
+              activeTab === "pulse"
+                ? "bg-amber-500/15 border-amber-500/30 text-amber-300 font-semibold shadow-xs"
+                : "border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]"
             )}
           >
-            {activeTab === "pulse" && (
-              <motion.div
-                layoutId="activeIntelligenceTabIndicator"
-                className="absolute inset-0 rounded-lg bg-amber-500/15 border border-amber-500/30"
-                transition={{ type: "spring", stiffness: 450, damping: 35 }}
-              />
-            )}
-            <Activity className="w-3.5 h-3.5 text-amber-400 relative z-10" />
-            <span className="relative z-10">{dict.intelligence.tabs.stats}</span>
+            <Activity className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span>{dict.intelligence.tabs.stats}</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab("news")}
             className={clsx(
-              "relative flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-mono font-medium transition-colors cursor-pointer z-10",
-              activeTab === "news" ? "text-cyan-300 font-semibold" : "text-slate-400 hover:text-slate-200"
+              "relative flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-mono font-medium transition-all cursor-pointer z-10 border",
+              activeTab === "news"
+                ? "bg-cyan-500/15 border-cyan-500/30 text-cyan-300 font-semibold shadow-xs"
+                : "border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]"
             )}
           >
-            {activeTab === "news" && (
-              <motion.div
-                layoutId="activeIntelligenceTabIndicator"
-                className="absolute inset-0 rounded-lg bg-amber-500/15 border border-amber-500/30"
-                transition={{ type: "spring", stiffness: 450, damping: 35 }}
-              />
-            )}
-            <Newspaper className="w-3.5 h-3.5 text-cyan-400 relative z-10" />
-            <span className="relative z-10">{dict.intelligence.tabs.news}</span>
+            <Newspaper className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+            <span>{dict.intelligence.tabs.news}</span>
           </button>
         </div>
       </div>

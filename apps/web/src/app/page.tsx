@@ -80,20 +80,20 @@ export default function LandingPage() {
   return (
     <main className="site-home min-h-screen">
       <header className="site-header">
-        <div className="site-container flex min-h-16 items-center justify-between gap-4">
+        <div className="site-container flex min-h-14 sm:min-h-16 items-center justify-between gap-2 sm:gap-4">
           <Link href="/" className="brand-link" aria-label="Gorengan Index home">
             <span className="brand-mark" aria-hidden="true">G<span>.</span></span>
-            <span>Gorengan <strong>Index</strong></span>
+            <span>Gorengan <strong className="hidden sm:inline">Index</strong></span>
           </Link>
           <nav aria-label="Main navigation" className="hidden sm:flex items-center gap-6 text-sm">
             <a href="#market" className="hover:text-white">{dict.landing.nav.marketView}</a>
             <a href="#about" className="hover:text-white">{dict.landing.nav.about}</a>
             <a href="#faq" className="hover:text-white">{dict.landing.nav.faq}</a>
           </nav>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
             <LanguageSwitcher />
             <Link href="/terminal" className="site-header-action">
-              {dict.landing.nav.terminal} <ArrowUpRight className="size-4" aria-hidden="true" />
+              <span>{dict.landing.nav.terminal}</span> <ArrowUpRight className="size-3.5 sm:size-4 shrink-0" aria-hidden="true" />
             </Link>
           </div>
         </div>
