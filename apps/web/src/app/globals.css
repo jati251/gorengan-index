@@ -329,11 +329,11 @@ button { cursor: pointer; }
 
 /* Terminal workspace */
 .terminal-shell { min-height: 100dvh; padding-bottom: 36px; background: #2a2839; color: #c3e6eb; }
-.terminal-header { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 60px; padding: .5rem 1.2rem; border-bottom: 3px solid #757e8a; background: #2a2839; }
+.terminal-header { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-height: 60px; padding: .5rem 1.2rem; border-bottom: 3px solid #757e8a; background: #2a2839; overflow: hidden; }
 .terminal-brand { display: inline-flex; align-items: center; gap: .7rem; color: #c3e6eb; font-family: "Press Start 2P", monospace; font-size: .7rem; white-space: nowrap; }
 .terminal-brand b { color: #f4c41b; font-weight: 400; }
 .terminal-brand-mark { display: grid; place-items: center; width: 35px; height: 35px; border: 2px solid #f4c41b; color: #f4c41b; box-shadow: 3px 3px 0 #55607e; font-size: .75rem; }
-.terminal-header-actions { display: flex; align-items: center; gap: .7rem; }
+.terminal-header-actions { display: flex; align-items: center; gap: .5rem; flex-shrink: 0; }
 .terminal-rail { position: relative; display: flex; align-items: center; gap: 1.1rem; min-height: 48px; padding: .75rem 1.25rem; border-bottom: 1px solid #55607e; background: #3c3f5f; color: #c3e6eb; font-family: "Press Start 2P", monospace; font-size: .57rem; }
 .terminal-rail strong { color: #f4c41b; font-weight: 400; }
 .terminal-rail-count { margin-left: auto; }
@@ -382,10 +382,12 @@ button { cursor: pointer; }
   .terminal-table-scroll table { min-width: 0; }
 }
 @media (max-width: 640px) {
-  .terminal-header { min-height: 54px; padding-inline: .75rem; }
+  .terminal-header { min-height: 54px; padding-inline: .75rem; gap: 0.5rem; }
   .terminal-brand { font-size: .53rem; }
   .terminal-brand-mark { width: 30px; height: 30px; font-size: .58rem; }
-  .terminal-header-actions > div:first-child { display: none; }
+  .terminal-header-actions { gap: .35rem; }
+  .terminal-header-actions [data-header-clock] { display: none; }
+  .terminal-header-actions [data-header-status] { display: none; }
   .terminal-rail { min-height: 43px; gap: .5rem; padding: .65rem .75rem; font-size: .48rem; }
   .terminal-rail-count { display: none; }
   .terminal-chart-area { height: 310px; }

@@ -17,9 +17,13 @@ export function MarketHeaderTicker() {
         <span>GORENGAN <b>INDEX</b></span>
       </Link>
       <div className="terminal-header-actions">
-        <DeviceClock />
-        <MarketStatusBadge status={status} />
-        <LanguageSwitcher />
+        <div data-header-clock>
+          <DeviceClock />
+        </div>
+        <div data-header-status>
+          <MarketStatusBadge status={status} />
+        </div>
+        <LanguageSwitcher className="shrink-0" />
         <UserNav />
       </div>
     </header>

@@ -28,7 +28,7 @@ export function LanguageSwitcher({
       role="group"
       aria-label="Language selection"
       className={clsx(
-        "inline-flex items-center gap-0.5 p-0.5 rounded bg-black/40 border border-white/[0.12] font-mono text-[11px] select-none shadow-inner",
+        "inline-flex items-center gap-0.5 p-0.5 rounded bg-black/40 border border-white/[0.12] font-mono text-[11px] select-none shadow-inner shrink-0",
         className
       )}
     >
