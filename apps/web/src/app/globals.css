@@ -546,3 +546,75 @@ button { cursor: pointer; }
   .home-hero h1 em { text-shadow: 3px 3px 0 var(--pixel-plum); }
   .hero-model-wrap { box-shadow: 5px 5px 0 var(--pixel-plum); }
 }
+
+/* Retro FAQ Section */
+.faq-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  border-top: 3px solid var(--pixel-edge);
+  padding-block: clamp(3rem, 6vw, 5rem);
+}
+.faq-section h2 {
+  font-family: "Press Start 2P", monospace;
+  font-weight: 400;
+  font-style: normal;
+  text-transform: uppercase;
+  color: var(--pixel-paper);
+  font-size: clamp(1.4rem, 2.6vw, 2.2rem);
+  line-height: 1.5;
+  letter-spacing: -.05em;
+}
+.faq-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.faq-item {
+  border: 2px solid var(--pixel-edge);
+  background: var(--pixel-panel);
+  box-shadow: 5px 5px 0 var(--pixel-ink);
+  padding: 1.2rem 1.5rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.faq-item[open] {
+  border-color: var(--pixel-mint);
+  box-shadow: 6px 6px 0 var(--pixel-plum);
+}
+.faq-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  font-family: "Press Start 2P", monospace;
+  font-size: clamp(0.72rem, 1.2vw, 0.92rem);
+  color: var(--pixel-paper);
+  cursor: pointer;
+  user-select: none;
+  line-height: 1.6;
+}
+.faq-summary::-webkit-details-marker {
+  display: none;
+}
+.faq-summary::after {
+  content: "+";
+  display: inline-block;
+  font-family: "Press Start 2P", monospace;
+  font-size: 1.1rem;
+  color: var(--pixel-yellow);
+  transition: transform 0.2s;
+}
+.faq-item[open] .faq-summary::after {
+  content: "-";
+  color: var(--pixel-pink);
+}
+.faq-answer {
+  margin-top: 1rem;
+  font-family: "VT323", monospace;
+  font-size: 1.4rem;
+  line-height: 1.5;
+  color: var(--pixel-paper);
+  border-top: 1px dashed var(--pixel-edge);
+  padding-top: 0.85rem;
+}
+

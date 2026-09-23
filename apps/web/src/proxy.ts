@@ -26,7 +26,29 @@ export default auth((req) => {
     return NextResponse.next();
   }
 
-  // Protected routes (e.g. /terminal and sub-routes) require authentication
+  // Allow search engines and social crawler bots to index routes without redirect
+  const userAgent = req.headers.get("user-agent")?.toLowerCase() || "";
+  const isCrawlerBot = [
+    "googlebot",
+    "bingbot",
+    "yandexbot",
+    "duckduckbot",
+    "slurp",
+    "baiduspider",
+    "facebookexternalhit",
+    "twitterbot",
+    "linkedinbot",
+    "whatsapp",
+    "telegrambot",
+    "discordbot",
+    "applebot",
+  ].some((bot) => userAgent.includes(bot));
+
+  if (isCrawlerBot) {
+    return NextResponse.next();
+  }
+
+  // Protected routes (e.g. /terminal and sub-routes) require authentication for regular users
   const isProtectedRoute = pathname.startsWith("/terminal");
   if (isProtectedRoute && !isLoggedIn) {
     const callbackUrl = encodeURIComponent(pathname);
