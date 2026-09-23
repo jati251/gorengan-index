@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import { motion } from "framer-motion";
 import {
   BarChart3,
   TrendingUp,
@@ -19,35 +18,26 @@ import type { StatCardProps } from "../types";
 
 function StatCard({ label, value, icon, accent = "slate", subtext }: StatCardProps) {
   const accentClasses = {
-    emerald: "text-emerald-400 bg-emerald-500/[0.07] border-emerald-500/30 shadow-[0_4px_20px_rgba(16,185,129,0.08)]",
-    rose: "text-rose-400 bg-rose-500/[0.07] border-rose-500/30 shadow-[0_4px_20px_rgba(244,63,94,0.08)]",
-    cyan: "text-cyan-400 bg-cyan-500/[0.07] border-cyan-500/30 shadow-[0_4px_20px_rgba(6,182,212,0.08)]",
-    amber: "text-amber-400 bg-amber-500/[0.07] border-amber-500/30 shadow-[0_4px_20px_rgba(245,158,11,0.08)]",
-    slate: "text-slate-200 bg-white/[0.03] border-white/[0.08] shadow-[0_4px_20px_rgba(0,0,0,0.25)]",
+    emerald: "text-emerald-300 bg-[#1d3930] border-[#4c8060]",
+    rose: "text-rose-300 bg-[#392c2c] border-[#805b57]",
+    cyan: "text-[#d6e8c8] bg-[#1d3930] border-[#4c8060]",
+    amber: "text-amber-300 bg-[#39342a] border-[#806d4f]",
+    slate: "text-slate-200 bg-[#20332e] border-[#4d6b5a]",
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -1 }}
-      transition={{ duration: 0.15 }}
-      className={clsx(
-        "flex items-center gap-2.5 px-3 py-2.5 rounded-xl border backdrop-blur-md font-mono transition-all relative overflow-hidden group",
-        accentClasses[accent]
-      )}
-    >
-      <div className="shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">{icon}</div>
+    <div className={clsx("flex items-center gap-2 px-2.5 py-2 border font-mono min-w-0", accentClasses[accent])}>
+      <div className="shrink-0">{icon}</div>
       <div className="min-w-0 flex-1">
-        <div className="text-[9px] uppercase tracking-wider text-slate-400 font-semibold truncate">
+        <div className="text-[10px] uppercase tracking-wide text-slate-300 font-semibold truncate">
           {label}
         </div>
-        <div className="text-sm font-bold tabular-nums truncate text-white drop-shadow-xs">{value}</div>
+        <div className="text-base font-bold tabular-nums truncate text-white">{value}</div>
         {subtext && (
-          <div className="text-[9px] text-slate-500 font-mono truncate">{subtext}</div>
+          <div className="text-[10px] text-slate-400 font-mono truncate">{subtext}</div>
         )}
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -69,7 +59,7 @@ export function MarketStats() {
   const totalVol = allTickers.reduce((sum, t) => sum + (t.volume24h ?? 0), 0);
 
   const totalActive = gainersCount + losersCount;
-  const gainersPercent = totalActive > 0 ? Math.round((gainersCount / totalActive) * 100) : 50;
+  const gainersPercent = totalActive > 0 ? Math.round((gainersCount / totalActive) * 100) : 0;
   const losersPercent = 100 - gainersPercent;
 
   const priceFormatted = isFx
@@ -151,31 +141,15 @@ export function MarketStats() {
         />
       </div>
 
-      {/* Interactive Market Breadth (Bulls vs Bears) Visual Bar */}
-      <div className="p-2.5 rounded-xl bg-white/[0.025] border border-white/[0.07] backdrop-blur-md font-mono">
-        <div className="flex items-center justify-between text-[10px] font-semibold text-slate-300 mb-1.5">
-          <span className="flex items-center gap-1 text-emerald-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(16,185,129,0.8)]" />
-            Bulls {gainersPercent}% ({gainersCount})
-          </span>
-          <span className="text-[9px] uppercase tracking-wider text-slate-500">Market Breadth</span>
-          <span className="flex items-center gap-1 text-rose-400">
-            ({losersCount}) {losersPercent}% Bears
-            <span className="w-1.5 h-1.5 rounded-full bg-rose-400 shadow-[0_0_6px_rgba(244,63,94,0.8)]" />
-          </span>
+      <div className="border border-[#4d6b5a] bg-[#20332e] p-2.5 font-mono">
+        <div className="flex items-center justify-between gap-2 text-xs text-slate-200 mb-2">
+          <span>Market breadth</span>
+          <span>{totalActive > 0 ? `${gainersCount} up / ${losersCount} down` : "Waiting for prices"}</span>
         </div>
-        <div className="w-full h-2 rounded-full overflow-hidden bg-black/40 flex border border-white/[0.06] shadow-inner p-0.5">
-          <motion.div
-            className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-l-full shadow-[0_0_8px_rgba(16,185,129,0.4)]"
-            animate={{ width: `${gainersPercent}%` }}
-            transition={{ type: "spring", stiffness: 200, damping: 25 }}
-          />
-          <motion.div
-            className="h-full bg-gradient-to-r from-rose-400 to-rose-500 rounded-r-full shadow-[0_0_8px_rgba(244,63,94,0.4)]"
-            animate={{ width: `${losersPercent}%` }}
-            transition={{ type: "spring", stiffness: 200, damping: 25 }}
-          />
-        </div>
+        {totalActive > 0 && <div className="flex h-2 bg-[#10251b]" role="img" aria-label={`${gainersPercent}% gainers, ${losersPercent}% losers`}>
+          <div className="h-full bg-emerald-400" style={{ width: `${gainersPercent}%` }} />
+          <div className="h-full bg-rose-400" style={{ width: `${losersPercent}%` }} />
+        </div>}
       </div>
     </div>
   );

@@ -39,7 +39,7 @@ export function TimeframeSelector() {
   }, [isSubMinuteRestricted]);
 
   return (
-    <div className="flex items-center gap-0.5 bg-[#060910] p-1 rounded-md border border-slate-800/80 shadow-inner">
+    <div className="flex max-w-full items-center gap-0.5 overflow-x-auto bg-[#10251b] p-1 border border-[#577a68] no-scrollbar">
       {availableTimeframes.map((tf) => {
         const isSelected = selectedTimeframe === tf.value;
         const isSubMinute = ["1s", "5s", "15s"].includes(tf.value);
@@ -49,7 +49,7 @@ export function TimeframeSelector() {
             key={tf.value}
             onClick={() => setSelectedTimeframe(tf.value)}
             className={clsx(
-              "relative px-2 py-0.5 sm:px-2.5 sm:py-1 text-xs font-mono rounded transition-colors cursor-pointer select-none",
+              "relative shrink-0 min-h-8 px-2 py-0.5 sm:px-2.5 sm:py-1 text-xs font-mono rounded transition-colors cursor-pointer select-none",
               isSelected
                 ? isSubMinute
                   ? "text-emerald-300 font-bold"

@@ -53,7 +53,7 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
   const precision = isId ? 0 : isUs ? 2 : isFx ? (fxMeta?.displayDecimals ?? 5) : 2;
   const minMove = precision === 0 ? 1 : 1 / Math.pow(10, precision);
 
-  const { data: candlesData, isLoading } = useCandlesQuery(symbol, selectedTimeframe);
+  const { data: candlesData, isLoading, isError } = useCandlesQuery(symbol, selectedTimeframe);
 
   // OHLC overlay state on hover and streaming updates
   const [hoveredCandle, setHoveredCandle] = useState<OhlcData | null>(null);
@@ -334,9 +334,10 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
       ? liveCandleState.candle
       : null;
   const displayOhlc = hoveredCandle || currentLiveCandle || queryLatestCandle;
+  const hasCandles = Boolean(candlesData?.candles?.length || currentLiveCandle);
 
   return (
-    <div className={`relative w-full h-full min-h-[420px] select-none ${className || ""}`}>
+    <div className={`relative w-full h-full min-h-0 select-none ${className || ""}`}>
       {/* Subtle Symbol Watermark */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none opacity-[0.035] font-mono text-7xl font-black text-slate-100 tracking-wider">
         {symbol.replace("-", "/")}
@@ -354,15 +355,18 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
         />
       )}
 
-      {/* Loading Skeleton */}
-      {isLoading && (
-        <div className="absolute inset-0 z-10 bg-[#070a13]">
+      {isLoading ? (
+        <div className="absolute inset-0 z-10 bg-[#10251b]">
           <ChartSkeleton />
         </div>
-      )}
+      ) : !hasCandles ? (
+        <div className="chart-empty-state" role="status">
+          <span>NO CHART DATA</span>
+          <p>{isError ? "Chart unavailable. Try another timeframe." : `No candles yet for ${symbol} at ${selectedTimeframe}.`}</p>
+        </div>
+      ) : null}
 
-      {/* Chart Canvas Container */}
-      <div ref={containerRef} className="w-full h-full min-h-[420px]" />
+      <div ref={containerRef} className="w-full h-full min-h-0" />
     </div>
   );
 }

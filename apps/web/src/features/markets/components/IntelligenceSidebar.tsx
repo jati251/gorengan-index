@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Activity, Newspaper, Sparkles } from "lucide-react";
+import { Activity, Newspaper } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { clsx } from "clsx";
 import { MarketStats } from "./MarketStats";
@@ -12,16 +12,17 @@ export type IntelligenceTab = "pulse" | "news";
 
 interface IntelligenceSidebarProps {
   className?: string;
+  initialTab?: IntelligenceTab;
 }
 
-export function IntelligenceSidebar({ className }: IntelligenceSidebarProps) {
-  const [activeTab, setActiveTab] = useState<IntelligenceTab>("pulse");
+export function IntelligenceSidebar({ className, initialTab = "pulse" }: IntelligenceSidebarProps) {
+  const [activeTab, setActiveTab] = useState<IntelligenceTab>(initialTab);
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
 
   return (
     <div className={clsx("flex flex-col h-full overflow-hidden select-none font-mono", className)}>
       {/* Tab Switcher Header */}
-      <div className="p-2.5 border-b border-white/[0.08] bg-[#080d1b]/80 backdrop-blur-xl shrink-0">
+      <div className="p-2.5 border-b border-white/[0.08] bg-[#193326] shrink-0">
         <div className="flex items-center gap-1.5 p-1 bg-white/[0.03] border border-white/[0.07] rounded-xl relative">
           <button
             type="button"
@@ -34,12 +35,12 @@ export function IntelligenceSidebar({ className }: IntelligenceSidebarProps) {
             {activeTab === "pulse" && (
               <motion.div
                 layoutId="activeIntelligenceTabIndicator"
-                className="absolute inset-0 rounded-lg bg-gradient-to-r from-amber-500/20 via-amber-500/10 to-transparent border border-amber-500/30 shadow-[0_2px_12px_rgba(245,158,11,0.15)]"
+                className="absolute inset-0 rounded-lg bg-amber-500/15 border border-amber-500/30"
                 transition={{ type: "spring", stiffness: 450, damping: 35 }}
               />
             )}
             <Activity className="w-3.5 h-3.5 text-amber-400 relative z-10" />
-            <span className="relative z-10">Market Pulse</span>
+            <span className="relative z-10">Market stats</span>
           </button>
 
           <button
@@ -53,12 +54,12 @@ export function IntelligenceSidebar({ className }: IntelligenceSidebarProps) {
             {activeTab === "news" && (
               <motion.div
                 layoutId="activeIntelligenceTabIndicator"
-                className="absolute inset-0 rounded-lg bg-gradient-to-r from-cyan-500/20 via-cyan-500/10 to-transparent border border-cyan-500/30 shadow-[0_2px_12px_rgba(6,182,212,0.15)]"
+                className="absolute inset-0 rounded-lg bg-amber-500/15 border border-amber-500/30"
                 transition={{ type: "spring", stiffness: 450, damping: 35 }}
               />
             )}
             <Newspaper className="w-3.5 h-3.5 text-cyan-400 relative z-10" />
-            <span className="relative z-10">Market News</span>
+            <span className="relative z-10">News</span>
           </button>
         </div>
       </div>
@@ -78,8 +79,8 @@ export function IntelligenceSidebar({ className }: IntelligenceSidebarProps) {
               {/* Active Symbol Header Pill */}
               <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-white/[0.02] border border-white/[0.06] text-[11px] text-slate-400">
                 <span className="flex items-center gap-1.5">
-                  <Sparkles className="w-3 h-3 text-amber-400" />
-                  <span>Ticker Focus</span>
+
+                  <span>Selected market</span>
                 </span>
                 <span className="font-bold text-white font-mono bg-white/[0.06] px-2 py-0.5 rounded border border-white/[0.08]">
                   {selectedSymbol}

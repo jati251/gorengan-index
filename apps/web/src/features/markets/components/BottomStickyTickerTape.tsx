@@ -49,14 +49,14 @@ export function BottomStickyTickerTape() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, ease: "easeOut" }}
       aria-label="Real-time Market Ticker Tape"
-      className="fixed bottom-[52px] lg:bottom-0 left-0 right-0 z-40 h-9 bg-[#050814]/92 backdrop-blur-xl border-t border-white/[0.08] flex items-center font-mono select-none overflow-hidden shadow-[0_-4px_24px_rgba(0,0,0,0.6)]"
+      className="fixed bottom-[72px] xl:bottom-0 left-0 right-0 z-40 h-9 bg-[#173025] border-t border-white/[0.08] flex items-center font-mono select-none overflow-hidden "
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       {/* Marquee Track Container with Edge Fades */}
       <div className="relative flex-1 w-full overflow-hidden h-full flex items-center">
         {/* Left fade gradient */}
-        <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-[#050814] via-[#050814]/80 to-transparent z-10" />
+        <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-[#173025] via-[#173025]/80 to-transparent z-10" />
 
         {loopedTickers.length === 0 ? (
           <div className="px-4 text-xs text-slate-500 italic">
@@ -141,7 +141,7 @@ export function BottomStickyTickerTape() {
         )}
 
         {/* Right fade gradient */}
-        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-[#050814] via-[#050814]/80 to-transparent z-10" />
+        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-[#173025] via-[#173025]/80 to-transparent z-10" />
       </div>
     </motion.div>
   );

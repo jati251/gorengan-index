@@ -23,11 +23,11 @@ interface WatchlistSidebarProps {
 }
 
 const CATEGORIES: { id: MarketCategory; label: string; icon: string }[] = [
-  { id: "all", label: "ALL", icon: "🌐" },
-  { id: "crypto", label: "CRYPTO", icon: "⚡" },
-  { id: "fx", label: "FOREX", icon: "💱" },
-  { id: "us_stocks", label: "US", icon: "🇺🇸" },
-  { id: "idx_stocks", label: "IDX", icon: "🇮🇩" },
+  { id: "all", label: "ALL", icon: "•" },
+  { id: "crypto", label: "CRYPTO", icon: "•" },
+  { id: "fx", label: "FOREX", icon: "•" },
+  { id: "us_stocks", label: "US", icon: "•" },
+  { id: "idx_stocks", label: "IDX", icon: "•" },
 ];
 
 export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarProps) {
@@ -109,23 +109,23 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
   const searchPlaceholder = useMemo(() => {
     switch (selectedCategory) {
       case "us_stocks":
-        return "Search US stock (e.g. AAPL)...";
+        return "Search US stocks";
       case "idx_stocks":
-        return "Search IDX stock (e.g. BBCA)...";
+        return "Search IDX stocks";
       case "fx":
-        return "Search FX pair (e.g. EUR-USD)...";
+        return "Search FX pairs";
       case "crypto":
-        return "Search crypto (e.g. BTC)...";
+        return "Search crypto";
       default:
-        return "Search all markets...";
+        return "Search markets";
     }
   }, [selectedCategory]);
 
   return (
-    <div className="flex flex-col h-full bg-[#080d1b]/70 backdrop-blur-xl border-r border-white/[0.08] font-mono select-none overflow-hidden min-h-0 shadow-[4px_0_24px_rgba(0,0,0,0.35)]">
+    <div className="terminal-watchlist flex flex-col h-full bg-[#193326] font-mono select-none overflow-hidden min-h-0">
       {/* 1. Category Switcher (ALL | CRYPTO | FOREX | US | IDX) */}
       <div className="p-2.5 sm:p-3 border-b border-white/[0.06] bg-white/[0.01] space-y-2.5 shrink-0">
-        <div className="grid grid-cols-5 gap-0.5 bg-black/40 p-0.5 rounded-lg border border-white/[0.07] text-[10px] backdrop-blur-md">
+        <div className="grid grid-cols-5 gap-0.5 bg-[#10251b] p-0.5 rounded-lg border border-white/[0.07] text-[10px] ">
           {CATEGORIES.map((cat) => {
             const isActive = selectedCategory === cat.id;
             return (
@@ -170,12 +170,12 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
             placeholder={searchPlaceholder}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-black/35 border border-white/[0.08] focus:border-emerald-500/50 rounded-lg px-2.5 py-1.5 pl-8 text-xs text-slate-100 placeholder-slate-500 focus:outline-hidden backdrop-blur-md transition-all shadow-inner"
+            className="w-full bg-[#10251b] border border-white/[0.08] focus:border-emerald-500/50 rounded-lg px-2.5 py-1.5 pl-8 text-xs text-slate-100 placeholder-slate-500 focus:outline-hidden  transition-all "
           />
         </div>
 
         {/* Watchlist & All Tabs with accurate independent counts */}
-        <div className="grid grid-cols-2 gap-1 bg-black/40 p-0.5 rounded-lg border border-white/[0.07] text-[11px] backdrop-blur-md">
+        <div className="grid grid-cols-2 gap-1 bg-[#10251b] p-0.5 rounded-lg border border-white/[0.07] text-[11px] ">
           <button
             onClick={() => setTab("favorites")}
             className={clsx(
@@ -210,7 +210,7 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
                 transition={{ type: "spring", stiffness: 450, damping: 35 }}
               />
             )}
-            <span className="relative z-10">All Pairs ({categoryMatchedSymbols.length})</span>
+            <span className="relative z-10">All markets ({categoryMatchedSymbols.length})</span>
           </button>
         </div>
 
@@ -234,7 +234,7 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
             className={clsx(
               "py-1 px-1 rounded-md transition-all cursor-pointer font-semibold text-center border flex items-center justify-center gap-1",
               trendFilter === "gainers"
-                ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-[0_0_10px_rgba(16,185,129,0.25)] font-bold"
+                ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40  font-bold"
                 : "text-emerald-400/80 border-transparent hover:text-emerald-300 hover:bg-emerald-500/10"
             )}
           >
@@ -247,7 +247,7 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
             className={clsx(
               "py-1 px-1 rounded-md transition-all cursor-pointer font-semibold text-center border flex items-center justify-center gap-1",
               trendFilter === "losers"
-                ? "bg-rose-500/20 text-rose-300 border-rose-500/40 shadow-[0_0_10px_rgba(244,63,94,0.25)] font-bold"
+                ? "bg-rose-500/20 text-rose-300 border-rose-500/40  font-bold"
                 : "text-rose-400/80 border-transparent hover:text-rose-300 hover:bg-rose-500/10"
             )}
           >
@@ -264,23 +264,23 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
             <div className="p-6 text-center text-xs flex flex-col items-center justify-center gap-2 text-slate-400">
               <Star className="w-8 h-8 text-yellow-400/25 stroke-1" />
               <p className="font-semibold text-slate-300">
-                No {selectedCategory === "all" ? "pairs" : selectedCategory.toUpperCase()} in Watchlist
+                No saved markets here
               </p>
               <p className="text-[11px] text-slate-500 max-w-[200px]">
-                Star pairs to pin them here for instant access.
+                Use the star to save a market.
               </p>
               {categoryMatchedSymbols.length > 0 && (
                 <button
                   onClick={() => setTab("all")}
                   className="mt-1 px-3 py-1 bg-white/[0.06] hover:bg-white/[0.1] text-emerald-400 rounded-md text-[11px] font-semibold transition-colors cursor-pointer border border-white/[0.09]"
                 >
-                  Browse All Pairs ({categoryMatchedSymbols.length})
+                  Browse markets ({categoryMatchedSymbols.length})
                 </button>
               )}
             </div>
           ) : (
             <div className="p-8 text-center text-xs text-slate-500 italic">
-              No matching pairs found.
+              No markets match your search.
             </div>
           )
         ) : (
@@ -312,20 +312,31 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
               return (
                 <div
                   key={sym.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Show ${sym.name} chart`}
                   onClick={() => {
                     setSelectedSymbol(sym.id);
                     onSelectSymbol?.(sym.id);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.target !== event.currentTarget) return;
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setSelectedSymbol(sym.id);
+                      onSelectSymbol?.(sym.id);
+                    }
                   }}
                   className={clsx(
                     "p-3 flex items-center justify-between cursor-pointer transition-all duration-150 group",
                     isSelected
                       ? isUs
-                        ? "bg-cyan-500/[0.12] border-l-2 border-cyan-400 shadow-[inset_0_0_12px_rgba(6,182,212,0.12)]"
+                        ? "bg-cyan-500/[0.12] border-l-2 border-cyan-400 "
                         : isId
-                          ? "bg-amber-500/[0.12] border-l-2 border-amber-400 shadow-[inset_0_0_12px_rgba(245,158,11,0.12)]"
+                          ? "bg-amber-500/[0.12] border-l-2 border-amber-400 "
                           : isFx
-                            ? "bg-blue-500/[0.12] border-l-2 border-blue-400 shadow-[inset_0_0_12px_rgba(59,130,246,0.12)]"
-                            : "bg-emerald-500/[0.12] border-l-2 border-emerald-400 shadow-[inset_0_0_12px_rgba(16,185,129,0.12)]"
+                            ? "bg-blue-500/[0.12] border-l-2 border-blue-400 "
+                            : "bg-emerald-500/[0.12] border-l-2 border-emerald-400 "
                       : "hover:bg-white/[0.035] border-l-2 border-transparent"
                   )}
                 >
@@ -336,7 +347,9 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
                         e.stopPropagation();
                         toggleWatchlist(sym.id);
                       }}
-                      className="cursor-pointer text-slate-600 hover:text-yellow-400 shrink-0 p-0.5"
+                      aria-label={`${isStarred ? "Remove" : "Add"} ${sym.id} ${isStarred ? "from" : "to"} watchlist`}
+                      aria-pressed={isStarred}
+                      className="cursor-pointer text-slate-400 hover:text-yellow-400 shrink-0 min-w-8 min-h-8 flex items-center justify-center"
                     >
                       <Star
                         className={clsx(
@@ -414,20 +427,20 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
                       className={clsx(
                         "text-xs font-semibold tabular-nums px-1.5 py-0.5 rounded transition-all duration-300 flex items-center justify-end gap-1",
                         direction === "up" &&
-                          "bg-emerald-500/25 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.4)] ring-1 ring-emerald-400/60 scale-[1.04]",
+                          "bg-emerald-500/25 text-emerald-300  ring-1 ring-emerald-400/60 ",
                         direction === "down" &&
-                          "bg-rose-500/25 text-rose-300 shadow-[0_0_12px_rgba(244,63,94,0.4)] ring-1 ring-rose-400/60 scale-[1.04]",
+                          "bg-rose-500/25 text-rose-300  ring-1 ring-rose-400/60 ",
                         direction === "neutral" && "text-slate-200 bg-transparent ring-transparent"
                       )}
                     >
                       <span>{formattedPrice}</span>
                       {direction === "up" && (
-                        <span className="text-[9px] text-emerald-300 font-extrabold animate-pulse">
+                        <span className="text-[9px] text-emerald-300 font-extrabold ">
                           ▲
                         </span>
                       )}
                       {direction === "down" && (
-                        <span className="text-[9px] text-rose-300 font-extrabold animate-pulse">
+                        <span className="text-[9px] text-rose-300 font-extrabold ">
                           ▼
                         </span>
                       )}

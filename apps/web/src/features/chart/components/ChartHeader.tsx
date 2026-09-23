@@ -63,7 +63,7 @@ export function ChartHeader() {
     : null;
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-[#080c16] border-b border-slate-800/90 font-mono select-none">
+    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-[#193326] border-b border-[#49654d] font-mono select-none">
       <div className="flex flex-wrap items-center gap-4">
         {/* Symbol badge & provenance */}
         <div className="flex items-center gap-1.5 sm:gap-2">
@@ -124,9 +124,9 @@ export function ChartHeader() {
             className={clsx(
               "flex items-center gap-1.5 px-3 py-1 rounded-lg transition-all duration-300 border",
               direction === "up" &&
-                "bg-emerald-500/20 border-emerald-500/50 shadow-[0_0_20px_rgba(16,185,129,0.35)] scale-[1.03]",
+                "bg-emerald-500/20 border-emerald-500/50  scale-[1.03]",
               direction === "down" &&
-                "bg-rose-500/20 border-rose-500/50 shadow-[0_0_20px_rgba(244,63,94,0.35)] scale-[1.03]",
+                "bg-rose-500/20 border-rose-500/50  scale-[1.03]",
               (!direction || direction === "neutral") &&
                 "bg-white/[0.02] border-white/[0.06]"
             )}
@@ -138,8 +138,8 @@ export function ChartHeader() {
               transition={{ type: "spring", stiffness: 500, damping: 25 }}
               className={clsx(
                 "text-xl sm:text-2xl font-bold tabular-nums tracking-tight transition-colors duration-200",
-                direction === "up" && "text-emerald-300 drop-shadow-[0_0_12px_rgba(16,185,129,0.8)]",
-                direction === "down" && "text-rose-300 drop-shadow-[0_0_12px_rgba(244,63,94,0.8)]",
+                direction === "up" && "text-emerald-300 ",
+                direction === "down" && "text-rose-300 ",
                 (!direction || direction === "neutral") && "text-slate-100"
               )}
             >
@@ -157,8 +157,8 @@ export function ChartHeader() {
             className={clsx(
               "text-xs font-semibold px-2.5 py-1 rounded-md border transition-all duration-200 flex items-center gap-1 shadow-sm",
               isPositive
-                ? "bg-emerald-950/60 text-emerald-400 border-emerald-800/40 shadow-[0_0_10px_rgba(16,185,129,0.2)]"
-                : "bg-rose-950/60 text-rose-400 border-rose-800/40 shadow-[0_0_10px_rgba(244,63,94,0.2)]"
+                ? "bg-emerald-950/60 text-emerald-400 border-emerald-800/40 "
+                : "bg-rose-950/60 text-rose-400 border-rose-800/40 "
             )}
           >
             {isPositive ? (
@@ -259,13 +259,13 @@ export function ChartHeader() {
       {/* Controls: Indicators + Resolution Selector + Timezone Pill */}
       <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         {/* Indicator Toggles */}
-        <div className="flex items-center gap-1 bg-[#060910] p-1 rounded-md border border-slate-800/80 text-[11px]">
+        <div className="flex items-center gap-1 bg-[#10251b] p-1 rounded-md border border-slate-800/80 text-[11px]">
           <button
             onClick={toggleEma20}
             className={clsx(
               "px-2 py-0.5 rounded transition-all cursor-pointer font-medium",
               showEma20
-                ? "bg-[#06b6d4]/20 text-[#06b6d4] border border-[#06b6d4]/40 font-bold"
+                ? "bg-[#d4a060]/20 text-[#e9bd7b] border border-[#d4a060]/40 font-bold"
                 : "text-slate-500 hover:text-slate-300"
             )}
           >
@@ -276,7 +276,7 @@ export function ChartHeader() {
             className={clsx(
               "px-2 py-0.5 rounded transition-all cursor-pointer font-medium",
               showEma50
-                ? "bg-[#f59e0b]/20 text-[#f59e0b] border border-[#f59e0b]/40 font-bold"
+                ? "bg-[#dfd6b2]/20 text-[#dfd6b2] border border-[#dfd6b2]/40 font-bold"
                 : "text-slate-500 hover:text-slate-300"
             )}
           >

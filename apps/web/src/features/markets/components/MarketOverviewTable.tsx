@@ -82,22 +82,22 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
   }, [displaySymbols, tickers, priceDirections, watchlist, selectedSymbol]);
 
   return (
-    <div className="w-full max-h-[380px] overflow-y-auto overflow-x-auto relative">
+    <div className="terminal-table-scroll w-full max-h-[440px] overflow-auto relative">
       <table className="w-full text-left border-collapse text-xs font-mono">
-        <thead className="sticky top-0 z-10 bg-[#070b18]/90 backdrop-blur-md border-b border-white/[0.08] shadow-[0_4px_16px_rgba(0,0,0,0.3)]">
+        <thead className="sticky top-0 z-10 bg-[#19332c] border-b border-[#648672]">
           <tr className="text-slate-400 uppercase text-[9.5px] tracking-wider select-none">
             <th className="py-2.5 px-3 w-10 text-center">Fav</th>
             <th className="py-2.5 px-3">Symbol</th>
-            <th className="py-2.5 px-3">Type</th>
+            <th className="py-2.5 px-3 hidden md:table-cell">Type</th>
             <th className="py-2.5 px-3 text-right">Last Price</th>
             <th className="py-2.5 px-3 text-right">24h Change</th>
             <th className="py-2.5 px-3 text-center hidden md:table-cell">24h Range</th>
-            <th className="py-2.5 px-3 text-right hidden sm:table-cell">24h High</th>
-            <th className="py-2.5 px-3 text-right hidden sm:table-cell">24h Low</th>
-            <th className="py-2.5 px-3 text-right">
+            <th className="py-2.5 px-3 text-right hidden lg:table-cell">24h High</th>
+            <th className="py-2.5 px-3 text-right hidden lg:table-cell">24h Low</th>
+            <th className="py-2.5 px-3 text-right hidden md:table-cell">
               {selectedCategory === "fx" ? "Spread (Pips)" : "24h Volume"}
             </th>
-            <th className="py-2.5 px-3 text-center">Source</th>
+            <th className="py-2.5 px-3 text-center hidden md:table-cell">Source</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-white/[0.04]">
@@ -129,9 +129,19 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
               return (
                 <motion.tr
                   key={symbol.id}
+                  tabIndex={0}
+                  aria-label={`Show ${symbol.name} chart`}
                   onClick={() => {
                     setSelectedSymbol(symbol.id);
                     onSelectSymbol?.(symbol.id);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.target !== event.currentTarget) return;
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setSelectedSymbol(symbol.id);
+                      onSelectSymbol?.(symbol.id);
+                    }
                   }}
                   whileHover={{ backgroundColor: isPositive ? "rgba(16, 185, 129, 0.04)" : "rgba(244, 63, 94, 0.04)" }}
                   className={clsx(
@@ -150,14 +160,14 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
                   )}
                 >
                   {/* Star / Watchlist toggle */}
-                  <td
-                    className="py-3 px-3 text-center"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleWatchlist(symbol.id);
-                    }}
-                  >
-                    <motion.div whileTap={{ scale: 1.4 }} className="inline-block">
+                  <td className="py-3 px-3 text-center">
+                    <button
+                      type="button"
+                      aria-label={`${isStarred ? "Remove" : "Add"} ${symbol.id} ${isStarred ? "from" : "to"} watchlist`}
+                      aria-pressed={isStarred}
+                      onClick={(event) => { event.stopPropagation(); toggleWatchlist(symbol.id); }}
+                      className="inline-flex min-h-8 min-w-8 items-center justify-center"
+                    >
                       <Star
                         className={clsx(
                           "w-3.5 h-3.5 mx-auto transition-colors",
@@ -166,7 +176,7 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
                             : "text-slate-600 hover:text-slate-400"
                         )}
                       />
-                    </motion.div>
+                    </button>
                   </td>
 
                   {/* Symbol + Name */}
@@ -195,7 +205,7 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
                   </td>
 
                   {/* Asset Class Badge */}
-                  <td className="py-3 px-3">
+                  <td className="py-3 px-3 hidden md:table-cell">
                     {symbol.isTokenizedMetal ? (
                       <Badge variant="gold" className="text-[10px] py-0 px-1.5 font-mono">
                         Tokenized Gold
@@ -226,20 +236,20 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
                       className={clsx(
                         "inline-flex items-center justify-end gap-1 px-2 py-0.5 rounded-md font-semibold text-xs sm:text-sm tabular-nums transition-all duration-300",
                         direction === "up" &&
-                          "bg-emerald-500/25 text-emerald-300 shadow-[0_0_14px_rgba(16,185,129,0.45)] ring-1 ring-emerald-400/60 scale-[1.04]",
+                          "bg-emerald-500/25 text-emerald-300  ring-1 ring-emerald-400/60 ",
                         direction === "down" &&
-                          "bg-rose-500/25 text-rose-300 shadow-[0_0_14px_rgba(244,63,94,0.45)] ring-1 ring-rose-400/60 scale-[1.04]",
+                          "bg-rose-500/25 text-rose-300  ring-1 ring-rose-400/60 ",
                         direction === "neutral" && "text-slate-100 bg-white/[0.02]"
                       )}
                     >
                       <span>{formattedPrice}</span>
                       {direction === "up" && (
-                        <span className="text-[10px] text-emerald-300 font-extrabold animate-pulse">
+                        <span className="text-[10px] text-emerald-300 font-extrabold ">
                           ▲
                         </span>
                       )}
                       {direction === "down" && (
-                        <span className="text-[10px] text-rose-300 font-extrabold animate-pulse">
+                        <span className="text-[10px] text-rose-300 font-extrabold ">
                           ▼
                         </span>
                       )}
@@ -252,8 +262,8 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
                       className={clsx(
                         "inline-flex items-center justify-end gap-1 px-2 py-0.5 rounded-md font-semibold tabular-nums text-xs border transition-all",
                         isPositive
-                          ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25 shadow-[0_0_8px_rgba(16,185,129,0.15)]"
-                          : "bg-rose-500/10 text-rose-400 border-rose-500/25 shadow-[0_0_8px_rgba(244,63,94,0.15)]"
+                          ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25 "
+                          : "bg-rose-500/10 text-rose-400 border-rose-500/25 "
                       )}
                     >
                       {isPositive ? (
@@ -287,17 +297,17 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
                   </td>
 
                   {/* 24h High */}
-                  <td className="py-3 px-3 text-right text-slate-400 tabular-nums hidden sm:table-cell">
+                  <td className="py-3 px-3 text-right text-slate-400 tabular-nums hidden lg:table-cell">
                     {highFormatted}
                   </td>
 
                   {/* 24h Low */}
-                  <td className="py-3 px-3 text-right text-slate-400 tabular-nums hidden sm:table-cell">
+                  <td className="py-3 px-3 text-right text-slate-400 tabular-nums hidden lg:table-cell">
                     {lowFormatted}
                   </td>
 
                   {/* Volume / Spread for FX */}
-                  <td className="py-3 px-3 text-right text-slate-300 tabular-nums">
+                  <td className="py-3 px-3 text-right text-slate-300 tabular-nums hidden md:table-cell">
                     {isFx ? (
                       <span className="text-amber-400 font-semibold">
                         {ticker?.spreadPips ? `${ticker.spreadPips} pip` : "0.8 pip"}
@@ -310,7 +320,7 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
                   </td>
 
                   {/* Provider Source & Session Badge */}
-                  <td className="py-3 px-3 text-center">
+                  <td className="py-3 px-3 text-center hidden md:table-cell">
                     {badgeInfo ? (
                       <span className={clsx("text-[10px] uppercase tracking-wider font-mono px-1.5 py-0.5 rounded border font-bold", badgeInfo.colorClass)}>
                         {badgeInfo.label}

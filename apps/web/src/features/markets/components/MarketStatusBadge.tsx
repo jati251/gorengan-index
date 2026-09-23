@@ -12,7 +12,7 @@ export function MarketStatusBadge({ status }: MarketStatusBadgeProps) {
   switch (status) {
     case "LIVE":
       return (
-        <Badge variant="success" className="animate-pulse">
+        <Badge variant="success">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
           Live
         </Badge>
@@ -26,16 +26,16 @@ export function MarketStatusBadge({ status }: MarketStatusBadgeProps) {
       );
     case "RECONNECTING":
       return (
-        <Badge variant="danger" className="animate-pulse">
+        <Badge variant="danger">
           <span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
-          RECONNECTING
+          Reconnecting
         </Badge>
       );
     case "CONNECTING":
       return (
-        <Badge variant="outline" className="animate-pulse">
+        <Badge variant="outline">
           <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
-          CONNECTING
+          Connecting
         </Badge>
       );
     case "OFFLINE":
@@ -43,7 +43,7 @@ export function MarketStatusBadge({ status }: MarketStatusBadgeProps) {
       return (
         <Badge variant="outline">
           <span className="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
-          OFFLINE
+          Offline
         </Badge>
       );
   }

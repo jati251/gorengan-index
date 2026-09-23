@@ -9,7 +9,7 @@ export function Card({
   return (
     <div
       className={clsx(
-        "glass-card rounded-xl overflow-hidden transition-all duration-200",
+        "glass-card rounded-md overflow-hidden",
         className
       )}
       {...props}
@@ -27,7 +27,7 @@ export function CardHeader({
   return (
     <div
       className={clsx(
-        "px-3.5 sm:px-4 py-2.5 sm:py-3 border-b border-white/[0.07] bg-white/[0.02] backdrop-blur-md flex items-center justify-between",
+        "px-3.5 sm:px-4 py-2.5 sm:py-3 border-b border-[#35403b] bg-[#202824] flex items-center justify-between",
         className
       )}
       {...props}
@@ -45,7 +45,7 @@ export function CardTitle({
   return (
     <h3
       className={clsx(
-        "text-xs sm:text-sm font-semibold uppercase tracking-wider text-slate-200 font-mono flex items-center gap-2",
+        "text-xs sm:text-sm font-semibold text-slate-100 flex items-center gap-2",
         className
       )}
       {...props}

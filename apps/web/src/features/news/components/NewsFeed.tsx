@@ -101,7 +101,7 @@ function NewsItem({ article, index }: { article: NewsArticle; index: number }) {
         {article.symbols.slice(0, 3).map((sym) => (
           <span
             key={sym}
-            className="text-[9px] font-mono font-semibold text-cyan-400 bg-cyan-950/40 border border-cyan-800/30 px-1 py-0 rounded"
+            className="text-[9px] font-mono font-semibold text-[#ffb56d] bg-cyan-950/40 border border-cyan-800/30 px-1 py-0 rounded"
           >
             {sym}
           </span>
@@ -117,10 +117,10 @@ export function NewsFeed() {
   return (
     <div className="flex flex-col h-full font-mono select-none overflow-hidden min-h-0">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/[0.06] bg-white/[0.015] backdrop-blur-md shrink-0">
+      <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/[0.06] bg-[#19332c] shrink-0">
         <div className="flex items-center gap-2">
-          <Newspaper className="w-3.5 h-3.5 text-cyan-400" />
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-200 font-semibold">
+          <Newspaper className="w-3.5 h-3.5 text-[#ffb56d]" />
+          <span className="text-sm font-bold uppercase tracking-wide text-slate-200">
             Market Wire
           </span>
           {articles && (
@@ -132,7 +132,7 @@ export function NewsFeed() {
         <button
           onClick={() => refetch()}
           disabled={isFetching}
-          className="p-1 rounded-md hover:bg-white/[0.08] transition-colors cursor-pointer disabled:opacity-50"
+          className="min-h-10 min-w-10 flex items-center justify-center hover:bg-white/[0.08] transition-colors cursor-pointer disabled:opacity-50"
           title="Refresh news"
         >
           <RefreshCw
@@ -145,22 +145,22 @@ export function NewsFeed() {
       </div>
 
       {/* Feed Content — scrollable & bounded */}
-      <div className="flex-1 overflow-y-auto max-h-[380px] lg:max-h-none min-h-0">
+      <div className="flex-1 overflow-y-auto min-h-0">
         {isLoading ? (
           <NewsFeedSkeleton />
         ) : isError ? (
-          <div className="flex flex-col items-center justify-center py-8 gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-500" />
-            <span className="text-[11px] text-slate-500">Feed unavailable</span>
+          <div className="flex flex-col items-center justify-center p-8 gap-3 text-center">
+            <AlertTriangle className="w-6 h-6 text-amber-400" />
+            <span className="text-base text-slate-200">News unavailable</span>
             <button
               onClick={() => refetch()}
-              className="text-[10px] text-cyan-400 hover:underline cursor-pointer"
+              className="text-[10px] text-[#ffb56d] hover:underline cursor-pointer"
             >
               Retry
             </button>
           </div>
         ) : !articles || articles.length === 0 ? (
-          <div className="py-8 text-center text-xs text-slate-500 italic">
+          <div className="p-8 text-center text-base text-slate-300">
             No recent market news.
           </div>
         ) : (

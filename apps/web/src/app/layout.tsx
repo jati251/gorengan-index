@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
+import "@fontsource/press-start-2p/400.css";
+import "@fontsource/vt323/400.css";
 import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "Gorengan Terminal — Realtime Investment Dashboard",
+  title: "Gorengan Index | Markets and charts",
   description:
-    "Self-hosted personal market dashboard terminal with direct venue ingestion, real-time candlestick charts, and in-memory ticker streams.",
+    "Watch prices, charts, and market news in one workspace.",
 };
 
 export default function RootLayout({

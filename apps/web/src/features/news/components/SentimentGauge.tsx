@@ -7,10 +7,10 @@ import { useSentimentQuery } from "../api/useSentimentQuery";
 import { SentimentSkeleton } from "./NewsSkeletons";
 
 export function SentimentGauge({ compact = false }: { compact?: boolean }) {
-  const { data: sentiment, isLoading } = useSentimentQuery();
+  const { data: sentiment, isLoading, isError } = useSentimentQuery();
 
-  const value = sentiment?.value ?? 70;
-  const classification = sentiment?.classification ?? "Greed";
+  const value = sentiment?.value ?? 0;
+  const classification = sentiment?.classification ?? "Unavailable";
 
   const colorClass =
     value >= 75
@@ -37,10 +37,10 @@ export function SentimentGauge({ compact = false }: { compact?: boolean }) {
           "flex items-center gap-1.5 px-2 py-0.5 rounded border text-xs font-mono select-none transition-colors",
           colorClass
         )}
-        title={`Fear & Greed Index: ${value}/100 (${classification})`}
+        title={sentiment ? `Fear & Greed Index: ${value}/100 (${classification})` : "Sentiment unavailable"}
       >
         <Gauge className="w-3.5 h-3.5" />
-        <span className="font-bold tabular-nums">{isLoading ? "--" : value}</span>
+        <span className="font-bold tabular-nums">{sentiment ? value : "—"}</span>
         <span className="text-[10px] uppercase font-semibold hidden sm:inline">
           {classification}
         </span>
@@ -48,9 +48,8 @@ export function SentimentGauge({ compact = false }: { compact?: boolean }) {
     );
   }
 
-  if (isLoading && !compact) {
-    return <SentimentSkeleton />;
-  }
+  if (isLoading && !compact) return <SentimentSkeleton />;
+  if (!sentiment && !compact) return <div role="status" className="border border-[#4d6b5a] bg-[#20332e] p-4 text-sm text-slate-300">{isError ? "Sentiment is unavailable right now." : "No sentiment data yet."}</div>;
 
   return (
     <div className="flex flex-col gap-2 p-3.5 rounded-xl bg-white/[0.025] backdrop-blur-xl border border-white/[0.08] shadow-[0_4px_24px_rgba(0,0,0,0.3)] font-mono select-none relative overflow-hidden">
