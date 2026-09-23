@@ -227,7 +227,7 @@ mod tests {
 
     #[test]
     fn test_normalize_ticker_payload() {
-        let instruments = Instrument::default_universe();
+        let instruments = Instrument::test_fixtures();
         let normalizer = BinanceNormalizer::new(&instruments);
 
         let json = r#"{

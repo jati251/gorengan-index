@@ -219,15 +219,12 @@ flowchart TD
   - Columnar time-series storage optimized specifically for financial data.
   - Influx Line Protocol (ILP) streaming ingestion handling thousands of candles per second with high disk compression.
 
-### 4. Single Source of Truth (SSOT) Auto-Sync Engine
+### 4. Single Source of Truth (SSOT) Architecture
 
-To avoid maintaining thousands of duplicate lines of code across TypeScript and Rust:
-- **Rust Compile-Time Embedding**: [`crates/market-domain/src/instrument.rs`](crates/market-domain/src/instrument.rs) embeds the universe JSON directly via `include_str!("instruments.json")` and deserializes once via `LazyLock`. The Rust code was shrunk from **7,600+ lines to just 128 lines**.
-- **Dynamic Config**: [`crates/config/src/lib.rs`](crates/config/src/lib.rs) derives its universe directly from `market_domain::Instrument::default_universe()`.
-- **One-Command Synchronization**: Running `pnpm sync:instruments` (or `pnpm dev`) automatically:
-  1. Compiles `@gorengan/shared` TypeScript definitions.
-  2. Extracts and regenerates `crates/market-domain/src/instruments.json`.
-  3. Executes `cargo test -p market-domain` to guarantee backend integrity.
+All active financial market instruments are stored and managed in a single canonical PostgreSQL database table (`market_symbols`):
+- **Universal Dynamic Loading**: Both the TypeScript market server (`apps/market-server`) and the high-throughput Rust services (`apps/gateway`, `apps/collector`) load active symbols dynamically from PostgreSQL at startup via `DATABASE_URL`.
+- **Instant Activation**: Adding or updating symbols via `pnpm symbols:add <file.json>` instantly registers them in PostgreSQL without needing intermediate JSON files or code recompilation.
+- **Offline Determinism**: Rust unit tests and local mock environments use strongly-typed in-memory test fixtures (`Instrument::test_fixtures()`), ensuring `cargo test` remains fast and self-contained.
 
 ---
 

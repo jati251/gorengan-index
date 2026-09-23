@@ -21,11 +21,13 @@ pub struct AppConfig {
     pub candle_1s_retention_days: u32,
     pub binance_ws_url: String,
     pub binance_rest_url: String,
+    pub database_url: Option<String>,
 }
 
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
+            database_url: None,
             nats_url: "nats://127.0.0.1:4222".into(),
             questdb_ilp_host: "127.0.0.1".into(),
             questdb_ilp_port: 9009,
@@ -89,6 +91,9 @@ impl AppConfig {
         }
         if let Ok(v) = env::var("BINANCE_REST_URL") {
             cfg.binance_rest_url = v;
+        }
+        if let Ok(v) = env::var("DATABASE_URL") {
+            cfg.database_url = Some(v);
         }
         if let Ok(v) = env::var("UNIVERSE").or_else(|_| env::var("MARKET_UNIVERSE")) {
             cfg.universe = v.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();

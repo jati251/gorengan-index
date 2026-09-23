@@ -12,5 +12,8 @@ rust_decimal_macros = { workspace = true }
 chrono = { workspace = true }
 thiserror = { workspace = true }
 chrono-tz = "0.10.4"
+tokio = { workspace = true }
+tokio-postgres = { workspace = true }
 
 [dev-dependencies]
+dotenvy = { workspace = true }

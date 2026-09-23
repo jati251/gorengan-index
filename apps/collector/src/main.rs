@@ -36,13 +36,35 @@ async fn main() -> Result<()> {
     info!(binance_ws = %cfg.binance_ws_url, "Binance WebSocket gateway");
     info!("===============================================");
 
-    // Filter universe instruments to those enabled, configured, and handled by Binance
-    let all_instruments = Instrument::default_universe();
-    let universe_symbols: Vec<InstrumentId> = cfg.universe.iter().map(|s| InstrumentId::new(s.clone())).collect();
-    let active_instruments: Vec<Instrument> = all_instruments
-        .into_iter()
-        .filter(|inst| universe_symbols.contains(&inst.id) && inst.provider == provider)
-        .collect();
+    // Load dynamic instruments directly from PostgreSQL (SSOT)
+    let all_instruments = if let Some(ref db_url) = cfg.database_url {
+        match Instrument::load_from_connection_string(db_url).await {
+            Ok(instruments) => {
+                info!(count = instruments.len(), "Loaded dynamic market instruments directly from PostgreSQL");
+                instruments
+            }
+            Err(e) => {
+                warn!(err = %e, "Failed to load instruments from PostgreSQL; falling back to offline fixtures");
+                Instrument::test_fixtures()
+            }
+        }
+    } else {
+        info!("No DATABASE_URL configured; using offline fixtures");
+        Instrument::test_fixtures()
+    };
+
+    let active_instruments: Vec<Instrument> = if std::env::var("UNIVERSE").is_ok() || std::env::var("MARKET_UNIVERSE").is_ok() {
+        let universe_symbols: Vec<InstrumentId> = cfg.universe.iter().map(|s| InstrumentId::new(s.clone())).collect();
+        all_instruments
+            .into_iter()
+            .filter(|inst| inst.enabled && universe_symbols.contains(&inst.id) && inst.provider == provider)
+            .collect()
+    } else {
+        all_instruments
+            .into_iter()
+            .filter(|inst| inst.enabled && inst.provider == provider)
+            .collect()
+    };
 
     info!(
         count = active_instruments.len(),

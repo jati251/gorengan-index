@@ -1,6 +1,5 @@
 import fs from "fs";
 import path from "path";
-import { execSync } from "child_process";
 import { fileURLToPath } from "url";
 import pg from "pg";
 import dotenv from "dotenv";
@@ -59,13 +58,12 @@ if (args.includes("--template") || args.includes("-t")) {
   ];
   fs.writeFileSync(templatePath, JSON.stringify(sample, null, 2) + "\n", "utf8");
   console.log(`📄 Template created at: ${templatePath}`);
-  console.log(`💡 Edit the file and run: pnpm symbols:add symbols-template.json --sync`);
+  console.log(`💡 Edit the file and run: pnpm symbols:add symbols-template.json`);
   process.exit(0);
 }
 
 // 2. Resolve input file
 let inputPath = args.find((a) => !a.startsWith("-"));
-const shouldSync = args.includes("--sync") || args.includes("-s");
 
 if (!inputPath) {
   // Look for default file
@@ -75,8 +73,8 @@ if (!inputPath) {
   } else {
     console.error("❌ Error: No JSON file provided.");
     console.log("\nUsage:");
-    console.log("  node scripts/bulk-add-symbols.mjs <path-to-symbols.json> [--sync]");
-    console.log("  pnpm symbols:add <path-to-symbols.json> [--sync]");
+    console.log("  node scripts/bulk-add-symbols.mjs <path-to-symbols.json>");
+    console.log("  pnpm symbols:add <path-to-symbols.json>");
     console.log("  pnpm symbols:add --template   (generates sample JSON template)\n");
     process.exit(1);
   }
@@ -221,12 +219,5 @@ try {
   throw err;
 } finally {
   await client.end();
-}
-
-// 3. Optional auto-sync
-if (shouldSync) {
-  console.log("\n🔄 Auto-syncing to Rust instruments.json...");
-  execSync("pnpm sync:instruments", { cwd: rootDir, stdio: "inherit" });
-} else {
-  console.log("\n💡 Tip: Run 'pnpm sync:instruments' (or pass --sync) to update Rust instruments.json");
+  console.log("\n✨ Symbols are now live in PostgreSQL! All services will load them automatically.");
 }

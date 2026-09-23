@@ -3,11 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "pnpm sync:instruments && concurrently -k -p \"[{name}]\" -n \"SHARED,SERVER,WEB\" -c \"yellow,cyan,magenta\" \"pnpm --filter @gorengan/shared dev\" \"pnpm --filter @gorengan/market-server dev\" \"pnpm --filter web dev\"",
+    "dev": "concurrently -k -p \"[{name}]\" -n \"SHARED,SERVER,WEB\" -c \"yellow,cyan,magenta\" \"pnpm --filter @gorengan/shared dev\" \"pnpm --filter @gorengan/market-server dev\" \"pnpm --filter web dev\"",
     "dev:server": "pnpm --filter @gorengan/market-server dev",
     "dev:web": "pnpm --filter web dev",
     "build": "pnpm -r build",
-    "sync:instruments": "node scripts/sync-instruments.mjs",
     "symbols:add": "node scripts/bulk-add-symbols.mjs",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
