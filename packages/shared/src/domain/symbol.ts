@@ -6855,9 +6855,21 @@ export const DEFAULT_IDX_EQUITY_SYMBOLS: MarketSymbol[] = [
   },
 ];
 
-export const DEFAULT_SYMBOLS: MarketSymbol[] = [
+function deduplicateSymbols(list: MarketSymbol[]): MarketSymbol[] {
+  const seen = new Set<string>();
+  const unique: MarketSymbol[] = [];
+  for (const s of list) {
+    if (s && s.id && !seen.has(s.id)) {
+      seen.add(s.id);
+      unique.push(s);
+    }
+  }
+  return unique;
+}
+
+export const DEFAULT_SYMBOLS: MarketSymbol[] = deduplicateSymbols([
   ...DEFAULT_CRYPTO_SYMBOLS,
   ...DEFAULT_FX_SYMBOLS,
   ...DEFAULT_US_EQUITY_SYMBOLS,
   ...DEFAULT_IDX_EQUITY_SYMBOLS,
-];
+]);

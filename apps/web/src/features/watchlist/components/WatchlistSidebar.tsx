@@ -93,11 +93,24 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Guarantee absolute uniqueness of symbols by ID to protect React reconciliation keys
+  const uniqueSymbols = useMemo(() => {
+    const seen = new Set<string>();
+    const res: MarketSymbol[] = [];
+    for (const sym of symbols) {
+      if (sym && sym.id && !seen.has(sym.id)) {
+        seen.add(sym.id);
+        res.push(sym);
+      }
+    }
+    return res;
+  }, [symbols]);
+
   // Compute search suggestions across all symbols
   const suggestions = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return [];
-    return symbols
+    return uniqueSymbols
       .filter(
         (s) =>
           s.id.toLowerCase().includes(q) ||
@@ -105,7 +118,7 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
           s.base.toLowerCase().includes(q)
       )
       .slice(0, 6);
-  }, [symbols, search]);
+  }, [uniqueSymbols, search]);
   const setSelectedSymbol = useMarketStore((s) => s.setSelectedSymbol);
   const selectedCategory = useMarketStore((s) => s.selectedCategory);
   const setSelectedCategory = useMarketStore((s) => s.setSelectedCategory);
@@ -115,7 +128,7 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
 
   // 1. Filter symbols by category and search query (live search supported)
   const categoryMatchedSymbols = useMemo(() => {
-    return symbols.filter((sym) => {
+    return uniqueSymbols.filter((sym) => {
       // Category filter
       let matchesCategory = false;
       if (selectedCategory === "all") {

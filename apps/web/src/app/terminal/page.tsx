@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useSyncExternalStore } from "react";
-import { DEFAULT_SYMBOLS } from "@gorengan/shared";
+import { DEFAULT_SYMBOLS, type MarketSymbol } from "@gorengan/shared";
 import { clsx } from "clsx";
 import {
   MarketHeaderTicker,
@@ -37,17 +37,18 @@ export default function TerminalPage() {
   useMarketsQuery();
   const serverSymbols = symbolsData?.symbols;
   const symbols = React.useMemo(() => {
-    if (!serverSymbols || serverSymbols.length === 0) {
-      return DEFAULT_SYMBOLS;
-    }
-    const serverMap = new Map(serverSymbols.map((s) => [s.id, s]));
-    const merged = [...serverSymbols];
-    for (const defaultSym of DEFAULT_SYMBOLS) {
-      if (!serverMap.has(defaultSym.id)) {
-        merged.push(defaultSym);
+    const symbolMap = new Map<string, MarketSymbol>();
+    if (serverSymbols && serverSymbols.length > 0) {
+      for (const s of serverSymbols) {
+        if (s.id && !symbolMap.has(s.id)) symbolMap.set(s.id, s);
       }
     }
-    return merged;
+    for (const defaultSym of DEFAULT_SYMBOLS) {
+      if (defaultSym.id && !symbolMap.has(defaultSym.id)) {
+        symbolMap.set(defaultSym.id, defaultSym);
+      }
+    }
+    return Array.from(symbolMap.values());
   }, [serverSymbols]);
   const symbolIds = React.useMemo(() => symbols.map((symbol) => symbol.id), [symbols]);
   useTerminalWebSocket(symbolIds, { isThrottled: true, throttleMs: isCompact ? 250 : 100 });

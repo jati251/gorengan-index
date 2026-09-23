@@ -184,11 +184,24 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Guarantee absolute uniqueness of symbols by ID to protect React reconciliation keys
+  const uniqueSymbols = useMemo(() => {
+    const seen = new Set<string>();
+    const res: MarketSymbol[] = [];
+    for (const sym of symbols) {
+      if (sym && sym.id && !seen.has(sym.id)) {
+        seen.add(sym.id);
+        res.push(sym);
+      }
+    }
+    return res;
+  }, [symbols]);
+
   // Compute suggestions across all symbols
   const suggestions = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return [];
-    return symbols
+    return uniqueSymbols
       .filter(
         (s) =>
           s.id.toLowerCase().includes(q) ||
@@ -196,11 +209,11 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
           s.base.toLowerCase().includes(q)
       )
       .slice(0, 7);
-  }, [symbols, searchQuery]);
+  }, [uniqueSymbols, searchQuery]);
 
   // Filter symbols based on selectedCategory
   const categoryFilteredSymbols = useMemo(() => {
-    return symbols.filter((sym) => {
+    return uniqueSymbols.filter((sym) => {
       if (selectedCategory === "all") return true;
       if (selectedCategory === "us_stocks") {
         return sym.assetClass === "us_stocks" || isUsEquitySymbol(sym.id);
@@ -217,7 +230,7 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
       if (sym.assetClass === "idx_stocks" || isIdxEquitySymbol(sym.id)) return false;
       return sym.assetClass === "crypto" || sym.assetClass === "metal";
     });
-  }, [symbols, selectedCategory]);
+  }, [uniqueSymbols, selectedCategory]);
 
   // Live search filter applied to category symbols as user types, with fallback to committedSearch
   const displaySymbols = useMemo(() => {
