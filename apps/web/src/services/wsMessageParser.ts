@@ -35,6 +35,25 @@ export interface WsServerMessage {
   lastEventAt?: number;
 }
 
+/* ─── Helpers ─────────────────────────────────────────────────────── */
+
+function parseOptionalNumber(...values: unknown[]): number | undefined {
+  for (const v of values) {
+    if (v != null) {
+      const num = Number(v);
+      if (!Number.isNaN(num)) return num;
+    }
+  }
+  return undefined;
+}
+
+function parseOptionalString<T extends string = string>(...values: unknown[]): T | undefined {
+  for (const v of values) {
+    if (v != null && String(v).trim() !== "") return String(v) as T;
+  }
+  return undefined;
+}
+
 /* ─── Parsers ─────────────────────────────────────────────────────── */
 
 export function parseTicker(raw: Record<string, unknown>): MarketTicker {
@@ -43,31 +62,16 @@ export function parseTicker(raw: Record<string, unknown>): MarketTicker {
   const ask = raw.ask != null ? Number(raw.ask) : undefined;
   const mid = raw.mid != null ? Number(raw.mid) : undefined;
   const spread = raw.spread != null ? Number(raw.spread) : undefined;
-  const spreadPips =
-    raw.spreadPips != null
-      ? Number(raw.spreadPips)
-      : raw.spread_pips != null
-        ? Number(raw.spread_pips)
-        : undefined;
-  const sessionState =
-    raw.sessionState != null
-      ? (String(raw.sessionState) as MarketSessionState)
-      : raw.session_state != null
-        ? (String(raw.session_state) as MarketSessionState)
-        : undefined;
-  const assetClass =
-    raw.assetClass != null
-      ? (String(raw.assetClass) as AssetClass)
-      : raw.asset_class != null
-        ? (String(raw.asset_class) as AssetClass)
-        : undefined;
+  const spreadPips = parseOptionalNumber(raw.spreadPips, raw.spread_pips);
+  const sessionState = parseOptionalString<MarketSessionState>(raw.sessionState, raw.session_state);
+  const assetClass = parseOptionalString<AssetClass>(raw.assetClass, raw.asset_class);
 
-  const dataQuality = raw.dataQuality != null ? String(raw.dataQuality) : raw.data_quality != null ? String(raw.data_quality) : undefined;
-  const provenance = raw.provenance != null ? String(raw.provenance) : undefined;
-  const sessionSegment = raw.sessionSegment != null ? String(raw.sessionSegment) : raw.session_segment != null ? String(raw.session_segment) : undefined;
-  const market = raw.market != null ? String(raw.market) : undefined;
-  const currency = raw.currency != null ? String(raw.currency) : undefined;
-  const previousClose = raw.previousClose != null ? Number(raw.previousClose) : raw.previous_close != null ? Number(raw.previous_close) : undefined;
+  const dataQuality = parseOptionalString<MarketDataQuality>(raw.dataQuality, raw.data_quality);
+  const provenance = raw.provenance != null ? (raw.provenance as DataProvenance) : undefined;
+  const sessionSegment = parseOptionalString(raw.sessionSegment, raw.session_segment);
+  const market = parseOptionalString<"US" | "ID" | "CRYPTO" | "FX">(raw.market);
+  const currency = parseOptionalString(raw.currency);
+  const previousClose = parseOptionalNumber(raw.previousClose, raw.previous_close);
 
   return {
     symbol,
@@ -89,10 +93,10 @@ export function parseTicker(raw: Record<string, unknown>): MarketTicker {
     spreadPips,
     sessionState,
     assetClass,
-    dataQuality: dataQuality as MarketDataQuality | undefined,
-    provenance: provenance as DataProvenance | undefined,
+    dataQuality,
+    provenance,
     sessionSegment,
-    market: market as "US" | "ID" | "CRYPTO" | "FX" | undefined,
+    market,
     currency,
     previousClose,
   };
@@ -138,7 +142,7 @@ export function parseCandle(raw: Record<string, unknown>): Candle {
     : Number(raw.closeTime ?? Date.now());
 
   const priceBasis = (raw.priceBasis ?? raw.price_basis) as CandlePriceBasis | undefined;
-  const spreadClose = raw.spreadClose != null ? Number(raw.spreadClose) : raw.spread_close != null ? Number(raw.spread_close) : undefined;
+  const spreadClose = parseOptionalNumber(raw.spreadClose, raw.spread_close);
 
   return {
     symbol,

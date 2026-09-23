@@ -1,5 +1,11 @@
 import { FX_PAIRS } from "./fxPairs";
 
+function getFxDecimals(customDecimals?: number, symbol?: string): number {
+  if (customDecimals !== undefined) return customDecimals;
+  if (symbol && FX_PAIRS[symbol]) return FX_PAIRS[symbol].displayDecimals;
+  return 5;
+}
+
 export function formatFxPrice(
   price: number | undefined,
   symbol?: string,
@@ -7,12 +13,7 @@ export function formatFxPrice(
 ): string {
   if (price === undefined || isNaN(price)) return "—";
 
-  const decimals =
-    customDecimals !== undefined
-      ? customDecimals
-      : symbol && FX_PAIRS[symbol]
-        ? FX_PAIRS[symbol].displayDecimals
-        : 5;
+  const decimals = getFxDecimals(customDecimals, symbol);
 
   return price.toLocaleString("en-US", {
     minimumFractionDigits: decimals,

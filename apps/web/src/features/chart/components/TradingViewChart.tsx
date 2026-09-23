@@ -26,6 +26,18 @@ import {
 import { isFxSymbol, getFxMetadata } from "@/features/forex";
 import { isUsEquitySymbol, isIdxEquitySymbol } from "@/features/equities";
 
+function getChartPrecision(
+  isId: boolean,
+  isUs: boolean,
+  isFx: boolean,
+  fxDecimals?: number
+): number {
+  if (isId) return 0;
+  if (isUs) return 2;
+  if (isFx) return fxDecimals ?? 5;
+  return 2;
+}
+
 interface TradingViewChartProps {
   symbol: string;
   className?: string;
@@ -50,7 +62,7 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
   const fxMeta = getFxMetadata(symbol);
 
   // Precision: IDX stocks have 0 decimals (Rupiah integer), US stocks have 2 decimals, FX 3-5, Crypto 2
-  const precision = isId ? 0 : isUs ? 2 : isFx ? (fxMeta?.displayDecimals ?? 5) : 2;
+  const precision = getChartPrecision(isId, isUs, isFx, fxMeta?.displayDecimals);
   const minMove = precision === 0 ? 1 : 1 / Math.pow(10, precision);
 
   const { data: candlesData, isLoading, isError } = useCandlesQuery(symbol, selectedTimeframe);

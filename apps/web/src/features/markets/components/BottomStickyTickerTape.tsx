@@ -17,6 +17,32 @@ interface TapeItemProps {
   onSelect: (symbol: string) => void;
 }
 
+function formatTapePrice(
+  price: number | undefined,
+  symbolId: string,
+  isFx: boolean,
+  isId: boolean,
+  isUs: boolean
+): string {
+  if (price == null || !Number.isFinite(price) || price <= 0) return "--";
+  if (isFx) return formatFxPrice(price, symbolId);
+  if (isId) return formatEquityPrice(price, symbolId, "IDR");
+  if (isUs) return formatEquityPrice(price, symbolId, "USD");
+  return `$${formatPrice(price)}`;
+}
+
+function getTapeDirectionColor(direction?: "up" | "down" | "neutral"): string {
+  if (direction === "up") return "text-emerald-300 drop-shadow-[0_0_8px_rgba(63,223,151,0.95)]";
+  if (direction === "down") return "text-rose-300 drop-shadow-[0_0_8px_rgba(235,97,159,0.95)]";
+  return "text-white";
+}
+
+function getTapeArrowClass(direction?: "up" | "down" | "neutral"): string {
+  if (direction === "up") return "text-emerald-300 opacity-100 scale-100 drop-shadow-[0_0_6px_#3fdf97]";
+  if (direction === "down") return "text-rose-300 opacity-100 scale-100 drop-shadow-[0_0_6px_#eb619f]";
+  return "opacity-0 scale-50";
+}
+
 const TapeItem = React.memo(function TapeItem({
   symbol,
   ticker,
@@ -30,15 +56,7 @@ const TapeItem = React.memo(function TapeItem({
   const isUs = isUsEquitySymbol(symbol.id);
   const isId = isIdxEquitySymbol(symbol.id);
 
-  const priceFormatted = ticker && Number.isFinite(ticker.price) && ticker.price > 0
-    ? isFx
-      ? formatFxPrice(ticker.price, symbol.id)
-      : isId
-        ? formatEquityPrice(ticker.price, symbol.id, "IDR")
-        : isUs
-          ? formatEquityPrice(ticker.price, symbol.id, "USD")
-          : "$" + formatPrice(ticker.price)
-    : "--";
+  const priceFormatted = formatTapePrice(ticker?.price, symbol.id, isFx, isId, isUs);
 
   return (
     <button
@@ -66,9 +84,7 @@ const TapeItem = React.memo(function TapeItem({
       <span
         className={clsx(
           "w-[68px] min-w-[68px] max-w-[68px] font-semibold tabular-nums flex items-center justify-end gap-0.5 transition-colors duration-200",
-          direction === "up" ? "text-emerald-300 drop-shadow-[0_0_8px_rgba(63,223,151,0.95)]" :
-          direction === "down" ? "text-rose-300 drop-shadow-[0_0_8px_rgba(235,97,159,0.95)]" :
-          "text-white"
+          getTapeDirectionColor(direction)
         )}
       >
         <span className="truncate text-right">{priceFormatted}</span>
@@ -76,11 +92,7 @@ const TapeItem = React.memo(function TapeItem({
           aria-hidden="true"
           className={clsx(
             "w-2.5 h-2.5 inline-flex items-center justify-center shrink-0 text-[8px] font-black leading-none transition-all duration-300",
-            direction === "up"
-              ? "text-emerald-300 opacity-100 scale-100 drop-shadow-[0_0_6px_#3fdf97]"
-              : direction === "down"
-                ? "text-rose-300 opacity-100 scale-100 drop-shadow-[0_0_6px_#eb619f]"
-                : "opacity-0 scale-50"
+            getTapeArrowClass(direction)
           )}
         >
           {direction === "down" ? "▼" : "▲"}

@@ -28,24 +28,110 @@ import {
   isIdxEquitySymbol,
 } from "@/features/equities";
 import { Badge } from "@/components/ui/badge";
+import { useTranslation } from "@/features/i18n";
 
 interface MarketOverviewTableProps {
   symbols: MarketSymbol[];
   onSelectSymbol?: (symbolId: string) => void;
 }
 
-const CATEGORIES: { id: MarketCategory; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "crypto", label: "Crypto" },
-  { id: "fx", label: "Forex" },
-  { id: "us_stocks", label: "US Stocks" },
-  { id: "idx_stocks", label: "IDX Stocks" },
-];
-
 export type SortColumn = "symbol" | "price" | "change" | "range" | "high" | "low" | "volume";
 export type SortDirection = "asc" | "desc";
 
+function getTableRowClass(
+  isSelected: boolean,
+  isUs: boolean,
+  isId: boolean,
+  isFx: boolean,
+  isPositive: boolean
+): string {
+  if (isSelected) {
+    if (isUs) return "bg-cyan-500/[0.12] border-l-2 border-cyan-400 shadow-[inset_0_0_12px_rgba(38,166,172,0.12)]";
+    if (isId) return "bg-amber-500/[0.12] border-l-2 border-amber-400 shadow-[inset_0_0_12px_rgba(244,196,27,0.12)]";
+    if (isFx) return "bg-blue-500/[0.12] border-l-2 border-blue-400 shadow-[inset_0_0_12px_rgba(57,120,168,0.12)]";
+    return "bg-emerald-500/[0.12] border-l-2 border-emerald-400 shadow-[inset_0_0_12px_rgba(63,223,151,0.12)]";
+  }
+  if (isPositive) {
+    return "hover:bg-emerald-500/[0.04] border-l-2 border-transparent hover:border-emerald-500/50";
+  }
+  return "hover:bg-rose-500/[0.04] border-l-2 border-transparent hover:border-rose-500/50";
+}
+
+function getTableSymbolColor(
+  isSelected: boolean,
+  isUs: boolean,
+  isId: boolean,
+  isFx: boolean
+): string {
+  if (!isSelected) return "text-slate-100 group-hover:text-white";
+  if (isUs) return "text-cyan-400";
+  if (isId) return "text-amber-400";
+  if (isFx) return "text-blue-400";
+  return "text-emerald-400";
+}
+
+function TableAssetBadge({
+  isTokenizedMetal,
+  isUs,
+  isId,
+  isFx,
+}: {
+  isTokenizedMetal?: boolean;
+  isUs: boolean;
+  isId: boolean;
+  isFx: boolean;
+}) {
+  if (isTokenizedMetal) {
+    return (
+      <Badge variant="gold" className="text-[10px] py-0 px-1.5 font-mono">
+        Tokenized Gold
+      </Badge>
+    );
+  }
+  if (isUs) {
+    return (
+      <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-mono text-cyan-400 border-cyan-800/50 bg-cyan-950/40">
+        US EQUITIES
+      </Badge>
+    );
+  }
+  if (isId) {
+    return (
+      <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-mono text-amber-400 border-amber-800/50 bg-amber-950/40">
+        IDX EQUITIES
+      </Badge>
+    );
+  }
+  if (isFx) {
+    return (
+      <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-mono text-blue-400 border-blue-800/50 bg-blue-950/40">
+        FOREX
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-mono text-emerald-400 border-emerald-800/50 bg-emerald-950/40">
+      CRYPTO
+    </Badge>
+  );
+}
+
+function getTableDirectionArrowClass(direction?: "up" | "down" | "neutral"): string {
+  if (direction === "up") return "text-emerald-300 opacity-100 scale-100 drop-shadow-[0_0_6px_#3fdf97]";
+  if (direction === "down") return "text-rose-300 opacity-100 scale-100 drop-shadow-[0_0_6px_#eb619f]";
+  return "opacity-0 scale-50";
+}
+
 export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewTableProps) {
+  const { dict, interpolate, locale } = useTranslation();
+
+  const categories: { id: MarketCategory; label: string }[] = useMemo(() => [
+    { id: "all", label: dict.common.categories.all },
+    { id: "crypto", label: dict.common.categories.crypto },
+    { id: "fx", label: dict.common.categories.fx },
+    { id: "us_stocks", label: dict.common.categories.us_stocks },
+    { id: "idx_stocks", label: dict.common.categories.idx_stocks },
+  ], [dict]);
   const tickers = useMarketStore((s) => s.tickers);
   const priceDirections = useMarketStore((s) => s.priceDirections);
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
@@ -309,7 +395,7 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
       <div className="p-3 bg-[#3c3f5f]/70 border-b border-[#55607e]/60 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
         {/* Category Pills */}
         <div className="flex items-center gap-1 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
-          {CATEGORIES.map((cat) => {
+          {categories.map((cat) => {
             const isActive = selectedCategory === cat.id;
             return (
               <button
@@ -338,7 +424,7 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
             <Search className="w-3.5 h-3.5 absolute left-2.5 text-slate-400 pointer-events-none" />
             <input
               type="text"
-              placeholder={`Search ${symbols.length} markets...`}
+              placeholder={dict.marketTable.searchPlaceholder}
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
@@ -472,7 +558,7 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
                 className="py-2.5 px-3 cursor-pointer group/th hover:text-white transition-colors"
                 title="Sort by Symbol"
               >
-                Symbol {renderSortIcon("symbol")}
+                {dict.marketTable.columns.symbol} {renderSortIcon("symbol")}
               </th>
               <th className="py-2.5 px-3 hidden md:table-cell">Type</th>
               <th
@@ -480,42 +566,42 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
                 className="py-2.5 px-3 text-right cursor-pointer group/th hover:text-white transition-colors"
                 title="Sort by Last Price"
               >
-                Last Price {renderSortIcon("price")}
+                {dict.marketTable.columns.price} {renderSortIcon("price")}
               </th>
               <th
                 onClick={() => handleSort("change")}
                 className="py-2.5 px-3 text-right cursor-pointer group/th hover:text-white transition-colors"
                 title="Sort by 24h Change %"
               >
-                24h Change {renderSortIcon("change")}
+                {dict.marketTable.columns.change24h} {renderSortIcon("change")}
               </th>
               <th
                 onClick={() => handleSort("range")}
                 className="py-2.5 px-3 text-center hidden md:table-cell cursor-pointer group/th hover:text-white transition-colors"
                 title="Sort by 24h Range"
               >
-                24h Range {renderSortIcon("range")}
+                {dict.marketTable.columns.range} {renderSortIcon("range")}
               </th>
               <th
                 onClick={() => handleSort("high")}
                 className="py-2.5 px-3 text-right hidden lg:table-cell cursor-pointer group/th hover:text-white transition-colors"
                 title="Sort by 24h High"
               >
-                24h High {renderSortIcon("high")}
+                {dict.marketTable.columns.high24h} {renderSortIcon("high")}
               </th>
               <th
                 onClick={() => handleSort("low")}
                 className="py-2.5 px-3 text-right hidden lg:table-cell cursor-pointer group/th hover:text-white transition-colors"
                 title="Sort by 24h Low"
               >
-                24h Low {renderSortIcon("low")}
+                {dict.marketTable.columns.low24h} {renderSortIcon("low")}
               </th>
               <th
                 onClick={() => handleSort("volume")}
                 className="py-2.5 px-3 text-right hidden md:table-cell cursor-pointer group/th hover:text-white transition-colors"
                 title="Sort by 24h Volume / Spread"
               >
-                {selectedCategory === "fx" ? "Spread (Pips)" : "24h Volume"} {renderSortIcon("volume")}
+                {selectedCategory === "fx" ? "Spread" : dict.marketTable.columns.volume24h} {renderSortIcon("volume")}
               </th>
               <th className="py-2.5 px-3 text-center hidden md:table-cell">Source</th>
             </tr>
@@ -527,12 +613,12 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
                   <div className="flex flex-col items-center justify-center gap-2 font-mono text-slate-400">
                     <SearchX className="w-8 h-8 text-slate-500 mb-1" />
                     <span className="text-sm font-semibold text-slate-200">
-                      No matching markets found
+                      {dict.marketTable.empty.title}
                     </span>
                     <p className="text-xs text-slate-500 max-w-sm">
                       {committedSearch
-                        ? `No assets match "${committedSearch}" in the ${selectedCategory.toUpperCase()} category.`
-                        : "No assets match your current category and search filter."}
+                        ? interpolate(dict.watchlist.emptySearch.desc, { query: committedSearch })
+                        : dict.marketTable.empty.desc}
                     </p>
                     {committedSearch && (
                       <button
@@ -573,7 +659,7 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
                 }
 
                 const badgeInfo = isUs || isId
-                  ? getSessionBadgeInfo(ticker?.sessionState, ticker?.dataQuality, isUs)
+                  ? getSessionBadgeInfo(ticker?.sessionState, ticker?.dataQuality, isUs, locale)
                   : null;
 
                 return (
@@ -595,17 +681,7 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
                     }}
                     className={clsx(
                       "transition-all duration-150 cursor-pointer group select-none",
-                      isSelected
-                        ? isUs
-                          ? "bg-cyan-500/[0.12] border-l-2 border-cyan-400 shadow-[inset_0_0_12px_rgba(38,166,172,0.12)]"
-                          : isId
-                            ? "bg-amber-500/[0.12] border-l-2 border-amber-400 shadow-[inset_0_0_12px_rgba(244,196,27,0.12)]"
-                            : isFx
-                              ? "bg-blue-500/[0.12] border-l-2 border-blue-400 shadow-[inset_0_0_12px_rgba(57,120,168,0.12)]"
-                              : "bg-emerald-500/[0.12] border-l-2 border-emerald-400 shadow-[inset_0_0_12px_rgba(63,223,151,0.12)]"
-                        : isPositive
-                          ? "hover:bg-emerald-500/[0.04] border-l-2 border-transparent hover:border-emerald-500/50"
-                          : "hover:bg-rose-500/[0.04] border-l-2 border-transparent hover:border-rose-500/50"
+                      getTableRowClass(isSelected, isUs, isId, isFx, isPositive)
                     )}
                   >
                     {/* Star / Watchlist toggle */}
@@ -637,15 +713,7 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
                         <span
                           className={clsx(
                             "font-semibold text-xs sm:text-sm tracking-tight",
-                            isSelected
-                              ? isUs
-                                ? "text-cyan-400"
-                                : isId
-                                  ? "text-amber-400"
-                                  : isFx
-                                    ? "text-blue-400"
-                                    : "text-emerald-400"
-                              : "text-slate-100 group-hover:text-white"
+                            getTableSymbolColor(isSelected, isUs, isId, isFx)
                           )}
                         >
                           {symbol.id}
@@ -658,27 +726,12 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
 
                     {/* Asset Class Badge */}
                     <td className="py-3 px-3 hidden md:table-cell">
-                      {symbol.isTokenizedMetal ? (
-                        <Badge variant="gold" className="text-[10px] py-0 px-1.5 font-mono">
-                          Tokenized Gold
-                        </Badge>
-                      ) : isUs ? (
-                        <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-mono text-cyan-400 border-cyan-800/50 bg-cyan-950/40">
-                          US EQUITIES
-                        </Badge>
-                      ) : isId ? (
-                        <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-mono text-amber-400 border-amber-800/50 bg-amber-950/40">
-                          IDX EQUITIES
-                        </Badge>
-                      ) : isFx ? (
-                        <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-mono text-blue-400 border-blue-800/50 bg-blue-950/40">
-                          FOREX
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-mono text-emerald-400 border-emerald-800/50 bg-emerald-950/40">
-                          CRYPTO
-                        </Badge>
-                      )}
+                      <TableAssetBadge
+                        isTokenizedMetal={symbol.isTokenizedMetal}
+                        isUs={isUs}
+                        isId={isId}
+                        isFx={isFx}
+                      />
                     </td>
 
                     {/* Price with Animated Glow/Flash */}
@@ -697,11 +750,7 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
                           aria-hidden="true"
                           className={clsx(
                             "w-2.5 h-2.5 inline-flex items-center justify-center shrink-0 text-[9px] font-black leading-none transition-all duration-300",
-                            direction === "up"
-                              ? "text-emerald-300 opacity-100 scale-100 drop-shadow-[0_0_6px_#3fdf97]"
-                              : direction === "down"
-                                ? "text-rose-300 opacity-100 scale-100 drop-shadow-[0_0_6px_#eb619f]"
-                                : "opacity-0 scale-50"
+                            getTableDirectionArrowClass(direction)
                           )}
                         >
                           {direction === "down" ? "▼" : "▲"}
@@ -794,7 +843,10 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
         {/* ─── Infinite Scrolling Sentinel & Counter Status ─── */}
         <div ref={sentinelRef} className="py-3 px-4 bg-[#2a2839]/80 border-t border-white/[0.04] flex items-center justify-between text-[11px] font-mono text-slate-400">
           <span>
-            Showing <strong className="text-emerald-400">{Math.min(visibleCount, sortedRows.length)}</strong> of <strong className="text-white">{sortedRows.length}</strong> markets
+            {interpolate(dict.marketTable.showingCount, {
+              visible: Math.min(visibleCount, sortedRows.length),
+              total: sortedRows.length,
+            })}
             {sortColumn && (
               <span className="text-slate-400 ml-2">
                 (sorted by <span className="text-emerald-300 uppercase">{sortColumn}</span> {sortDirection.toUpperCase()})

@@ -17,27 +17,7 @@ import { useNewsQuery } from "../api/useNewsQuery";
 import { timeAgo } from "@/utils/formatters";
 import { NewsFeedSkeleton } from "./NewsSkeletons";
 import type { NewsArticle } from "../types";
-
-const sentimentConfig = {
-  BULLISH: {
-    icon: TrendingUp,
-    color: "text-emerald-400",
-    bg: "bg-emerald-950/50 border-emerald-800/40",
-    label: "BULL",
-  },
-  BEARISH: {
-    icon: TrendingDown,
-    color: "text-rose-400",
-    bg: "bg-rose-950/50 border-rose-800/40",
-    label: "BEAR",
-  },
-  NEUTRAL: {
-    icon: Minus,
-    color: "text-slate-400",
-    bg: "bg-slate-800/50 border-slate-700/40",
-    label: "NTRL",
-  },
-} as const;
+import { useTranslation } from "@/features/i18n";
 
 const impactConfig = {
   HIGH: "text-rose-400 bg-rose-950/40 border-rose-800/40",
@@ -46,8 +26,36 @@ const impactConfig = {
 } as const;
 
 function NewsItem({ article, index }: { article: NewsArticle; index: number }) {
-  const sentiment = sentimentConfig[article.sentiment];
-  const SentimentIcon = sentiment.icon;
+  const { dict, locale } = useTranslation();
+
+  const sentimentDetails = {
+    BULLISH: {
+      icon: TrendingUp,
+      color: "text-emerald-400",
+      bg: "bg-emerald-950/50 border-emerald-800/40",
+      label: dict.news.sentiment.bull,
+    },
+    BEARISH: {
+      icon: TrendingDown,
+      color: "text-rose-400",
+      bg: "bg-rose-950/50 border-rose-800/40",
+      label: dict.news.sentiment.bear,
+    },
+    NEUTRAL: {
+      icon: Minus,
+      color: "text-slate-400",
+      bg: "bg-slate-800/50 border-slate-700/40",
+      label: dict.news.sentiment.ntrl,
+    },
+  }[article.sentiment];
+
+  const SentimentIcon = sentimentDetails.icon;
+
+  const localizedImpact = {
+    HIGH: dict.news.impact.high,
+    MEDIUM: dict.news.impact.medium,
+    LOW: dict.news.impact.low,
+  }[article.impact];
 
   return (
     <motion.a
@@ -71,12 +79,12 @@ function NewsItem({ article, index }: { article: NewsArticle; index: number }) {
               impactConfig[article.impact]
             )}
           >
-            {article.impact}
+            {localizedImpact}
           </span>
         </div>
         <div className="flex items-center gap-1 text-[10px] text-slate-400 shrink-0">
           <Clock className="w-2.5 h-2.5" />
-          <span className="tabular-nums">{timeAgo(article.publishedAt)}</span>
+          <span className="tabular-nums">{timeAgo(article.publishedAt, locale)}</span>
         </div>
       </div>
 
@@ -91,12 +99,12 @@ function NewsItem({ article, index }: { article: NewsArticle; index: number }) {
         <span
           className={clsx(
             "inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded border backdrop-blur-xs",
-            sentiment.bg,
-            sentiment.color
+            sentimentDetails.bg,
+            sentimentDetails.color
           )}
         >
           <SentimentIcon className="w-2.5 h-2.5" />
-          {sentiment.label}
+          {sentimentDetails.label}
         </span>
         {article.symbols.slice(0, 3).map((sym) => (
           <span
@@ -112,6 +120,7 @@ function NewsItem({ article, index }: { article: NewsArticle; index: number }) {
 }
 
 export function NewsFeed() {
+  const { dict } = useTranslation();
   const { data: articles, isLoading, isError, refetch, isFetching } = useNewsQuery();
 
   return (
@@ -151,7 +160,7 @@ export function NewsFeed() {
         ) : isError ? (
           <div className="flex flex-col items-center justify-center p-8 gap-3 text-center">
             <AlertTriangle className="w-6 h-6 text-amber-400" />
-            <span className="text-base text-slate-200">News unavailable</span>
+            <span className="text-base text-slate-200">{dict.news.empty}</span>
             <button
               onClick={() => refetch()}
               className="text-[10px] text-[#f4c41b] hover:underline cursor-pointer"
@@ -161,7 +170,7 @@ export function NewsFeed() {
           </div>
         ) : !articles || articles.length === 0 ? (
           <div className="p-8 text-center text-base text-slate-300">
-            No recent market news.
+            {dict.news.empty}
           </div>
         ) : (
           <AnimatePresence initial={false}>

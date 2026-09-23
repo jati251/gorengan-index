@@ -18,6 +18,7 @@ import { useTerminalWebSocket } from "@/hooks/useTerminalWebSocket";
 import { useMarketStore } from "@/stores/marketStore";
 import { Card, CardContent } from "@/components/ui/card";
 import { MobileNavigationBar, type MobileTab } from "@/components/MobileNavigationBar";
+import { useTranslation } from "@/features/i18n";
 
 const compactQuery = "(max-width: 1279px)";
 const subscribeCompact = (callback: () => void) => {
@@ -29,6 +30,7 @@ const getCompact = () => window.matchMedia(compactQuery).matches;
 const getServerCompact = () => true;
 
 export default function TerminalPage() {
+  const { dict, interpolate } = useTranslation();
   const [mobileTab, setMobileTab] = useState<MobileTab>("chart");
   const isCompact = useSyncExternalStore(subscribeCompact, getCompact, getServerCompact);
   const { data: symbolsData } = useSymbolsQuery();
@@ -55,9 +57,11 @@ export default function TerminalPage() {
     <main className="terminal-shell">
       <MarketHeaderTicker />
       <div className="terminal-rail">
-        <span>GI / TERMINAL</span>
+        <span>{dict.terminal.railTitle}</span>
         <strong>{selectedSymbol}</strong>
-        <span className="terminal-rail-count">{symbols.length} MARKETS</span>
+        <span className="terminal-rail-count">
+          {interpolate(dict.terminal.marketsCount, { count: symbols.length })}
+        </span>
       </div>
 
       <div className="terminal-workspace">
@@ -66,29 +70,36 @@ export default function TerminalPage() {
         </aside>
 
         <section className={clsx("terminal-main-panel", mobileTab === "chart" ? "is-mobile-active" : "")} aria-label="Chart and market prices">
-          {(!isCompact || mobileTab === "chart") && <><Card className="terminal-card terminal-chart-card">
-            <ChartHeader />
-            <div className="terminal-chart-area">
-              <TradingViewChart key={selectedSymbol} symbol={selectedSymbol} className="w-full h-full" />
-            </div>
-          </Card>
+          {(!isCompact || mobileTab === "chart") && (
+            <>
+              <Card className="terminal-card terminal-chart-card">
+                <ChartHeader />
+                <div className="terminal-chart-area">
+                  <TradingViewChart key={selectedSymbol} symbol={selectedSymbol} className="w-full h-full" />
+                </div>
+              </Card>
 
-          <div className="terminal-mobile-stats">
-            <Card className="terminal-card p-3">
-              <div className="terminal-card-label">MARKET SNAPSHOT</div>
-              <MarketStats />
-            </Card>
-          </div>
+              <div className="terminal-mobile-stats">
+                <Card className="terminal-card p-3">
+                  <div className="terminal-card-label">{dict.terminal.workspace.marketSnapshot}</div>
+                  <MarketStats />
+                </Card>
+              </div>
 
-          <Card id="market-overview" className="terminal-card terminal-market-card">
-            <div className="terminal-market-heading">
-              <div><span>02 / BOARD</span><h2>Markets</h2></div>
-              <span>{symbols.length} symbols</span>
-            </div>
-            <CardContent className="p-0">
-              <MarketOverviewTable symbols={symbols} onSelectSymbol={() => setMobileTab("chart")} />
-            </CardContent>
-          </Card></>}
+              <Card id="market-overview" className="terminal-card terminal-market-card">
+                <div className="terminal-market-heading">
+                  <div>
+                    <span>{dict.terminal.workspace.boardLabel}</span>
+                    <h2>{dict.terminal.workspace.marketsHeading}</h2>
+                  </div>
+                  <span>{interpolate(dict.terminal.workspace.symbolsCount, { count: symbols.length })}</span>
+                </div>
+                <CardContent className="p-0">
+                  <MarketOverviewTable symbols={symbols} onSelectSymbol={() => setMobileTab("chart")} />
+                </CardContent>
+              </Card>
+            </>
+          )}
         </section>
 
         <aside className={clsx("terminal-intel-panel", mobileTab === "intel" ? "is-mobile-active" : "")} aria-label="Market statistics and news">

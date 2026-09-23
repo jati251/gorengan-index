@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, ArrowRight, AlertCircle } from "lucide-react";
+import { useTranslation, LanguageSwitcher } from "@/features/i18n";
 
 function GoogleIcon() {
   return (
@@ -31,12 +32,13 @@ function GoogleIcon() {
 }
 
 function LoginForm() {
+  const { dict } = useTranslation();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/terminal";
   const urlError = searchParams.get("error");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(
-    urlError ? "Authentication session expired or failed. Please try again." : null
+    urlError ? dict.login.errorExpired : null
   );
 
   const handleSignIn = async () => {
@@ -45,7 +47,7 @@ function LoginForm() {
     try {
       await signIn("google", { callbackUrl });
     } catch {
-      setError("Sign-in did not start. Please verify your connection and try again.");
+      setError(dict.login.errorStartFailed);
       setIsLoading(false);
     }
   };
@@ -54,10 +56,13 @@ function LoginForm() {
     <main className="login-page select-none">
       {/* Left panel: Auth shell */}
       <div className="login-shell">
-        <Link href="/" className="login-back hover:text-white transition-colors">
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Back to markets</span>
-        </Link>
+        <div className="flex items-center justify-between w-full">
+          <Link href="/" className="login-back hover:text-white transition-colors">
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>{dict.login.backToMarkets}</span>
+          </Link>
+          <LanguageSwitcher />
+        </div>
 
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -75,16 +80,16 @@ function LoginForm() {
           </div>
 
           <p className="eyebrow">
-            Your workspace
+            {dict.login.workspaceEyebrow}
           </p>
 
           <h1>
-            Pick up where<br />
-            <em>the market is.</em>
+            {dict.login.titleMain}<br />
+            <em>{dict.login.titleAccent}</em>
           </h1>
 
           <p className="login-description">
-            Sign in to open your watchlist, real-time charts, and market news in the institutional terminal.
+            {dict.login.description}
           </p>
 
           {/* Negative state: Error feedback banner */}
@@ -117,18 +122,18 @@ function LoginForm() {
               ) : (
                 <GoogleIcon />
               )}
-              <span>{isLoading ? "Connecting…" : "Continue with Google"}</span>
+              <span>{isLoading ? dict.login.connecting : dict.login.continueWithGoogle}</span>
             </div>
             <ArrowRight className="w-4 h-4 text-[#2a2839]/80" />
           </motion.button>
 
           <p className="login-footnote">
-            Authentication is securely verified through Google OAuth.
+            {dict.login.footnote}
           </p>
         </motion.div>
 
         <p className="login-bottom">
-          Gorengan Index · Market data for personal research
+          {dict.login.footerText}
         </p>
       </div>
 
@@ -140,14 +145,14 @@ function LoginForm() {
           transition={{ duration: 0.45, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
           className="login-aside-inner"
         >
-          <span>MARKET / 01</span>
+          <span>{dict.login.asideTag}</span>
           <p>
-            One place to watch<br />
-            what moves.
+            {dict.login.asideTitleMain}<br />
+            {dict.login.asideTitleAccent}
           </p>
           <div className="login-aside-rule" />
           <span className="login-aside-tags">
-            CHARTS &nbsp;·&nbsp; WATCHLIST &nbsp;·&nbsp; NEWS
+            {dict.login.asideKeywords}
           </span>
         </motion.div>
       </div>

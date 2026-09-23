@@ -1,7 +1,8 @@
 export function formatPrice(
   price: number | undefined | null,
   minDecimals = 2,
-  maxDecimals = 4
+  maxDecimals = 4,
+  locale: "en" | "id" = "en"
 ): string {
   if (price === undefined || price === null || isNaN(price)) return "—";
 
@@ -11,7 +12,8 @@ export function formatPrice(
     maxDecimals = 6;
   }
 
-  return new Intl.NumberFormat("en-US", {
+  const intlLocale = locale === "id" ? "id-ID" : "en-US";
+  return new Intl.NumberFormat(intlLocale, {
     minimumFractionDigits: minDecimals,
     maximumFractionDigits: maxDecimals,
   }).format(price);
@@ -76,18 +78,20 @@ export function getDeviceTimezoneOffset(): string {
 }
 
 /**
- * Formats a date string into a human-readable relative time (e.g. "5m ago", "2h ago").
+ * Formats a date string into a human-readable relative time (e.g. "5m ago" or "5m lalu").
  */
-export function timeAgo(dateStr: string): string {
+export function timeAgo(dateStr: string, locale: "en" | "id" = "en"): string {
   try {
     const diff = Date.now() - new Date(dateStr).getTime();
     const mins = Math.floor(diff / 60000);
-    if (mins < 1) return "just now";
-    if (mins < 60) return `${mins}m ago`;
+    const isId = locale === "id";
+
+    if (mins < 1) return isId ? "baru saja" : "just now";
+    if (mins < 60) return isId ? `${mins}m lalu` : `${mins}m ago`;
     const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
+    if (hrs < 24) return isId ? `${hrs}j lalu` : `${hrs}h ago`;
     const days = Math.floor(hrs / 24);
-    return `${days}d ago`;
+    return isId ? `${days}h lalu` : `${days}d ago`;
   } catch {
     return "—";
   }

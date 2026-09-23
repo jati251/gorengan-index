@@ -13,10 +13,23 @@ import { Card } from "@/components/ui/card";
 import RetroTerminalScene from "@/components/hero/RetroTerminalScene";
 import { useTerminalWebSocket } from "@/hooks/useTerminalWebSocket";
 import { useMarketStore } from "@/stores/marketStore";
+import { useTranslation, LanguageSwitcher } from "@/features/i18n";
+
+function getChangeClass(change: number | null | undefined): string {
+  if (change == null) return "";
+  return change >= 0 ? "price-up" : "price-down";
+}
+
+function formatChangeText(change: number | null | undefined, waitingText: string): string {
+  if (change == null) return waitingText;
+  const sign = change >= 0 ? "+" : "";
+  return `${sign}${change.toFixed(2)}%`;
+}
 
 export default function LandingPage() {
   const { status } = useSession();
   const isAuthenticated = status === "authenticated";
+  const { dict, interpolate, locale } = useTranslation();
   const { data: symbolsData } = useSymbolsQuery();
   useMarketsQuery();
   const serverSymbols = symbolsData?.symbols;
@@ -73,80 +86,129 @@ export default function LandingPage() {
             <span>Gorengan <strong>Index</strong></span>
           </Link>
           <nav aria-label="Main navigation" className="hidden sm:flex items-center gap-6 text-sm">
-            <a href="#market" className="hover:text-white">Market view</a>
-            <a href="#about" className="hover:text-white">About</a>
-            <a href="#faq" className="hover:text-white">FAQ</a>
+            <a href="#market" className="hover:text-white">{dict.landing.nav.marketView}</a>
+            <a href="#about" className="hover:text-white">{dict.landing.nav.about}</a>
+            <a href="#faq" className="hover:text-white">{dict.landing.nav.faq}</a>
           </nav>
-          <Link href="/terminal" className="site-header-action">
-            Terminal <ArrowUpRight className="size-4" aria-hidden="true" />
-          </Link>
+          <div className="flex items-center gap-3">
+            <LanguageSwitcher />
+            <Link href="/terminal" className="site-header-action">
+              {dict.landing.nav.terminal} <ArrowUpRight className="size-4" aria-hidden="true" />
+            </Link>
+          </div>
         </div>
       </header>
 
       <div className="site-container">
         <section className="home-hero" aria-labelledby="home-title">
           <div className="home-hero-copy">
-            <p className="eyebrow"><span className="eyebrow-line" /> GOR / INDEX  •  MARKET BOARD</p>
-            <h1 id="home-title">Check the<br /><em>board.</em></h1>
-            <p className="home-intro">Screener saham gorengan IDX, crypto, forex, and US stocks in one place. Real-time market board with live candlestick charts and financial intelligence.</p>
+            <p className="eyebrow"><span className="eyebrow-line" /> {dict.landing.hero.eyebrow}</p>
+            <h1 id="home-title">{dict.landing.hero.titleMain}<br /><em>{dict.landing.hero.titleAccent}</em></h1>
+            <p className="home-intro">{dict.landing.hero.intro}</p>
             <div className="home-actions">
-              <a href="#market" className="primary-action">Open board <ArrowRight className="size-4" aria-hidden="true" /></a>
-              <Link href="/terminal" className="secondary-action">Open terminal <ArrowUpRight className="size-4" aria-hidden="true" /></Link>
+              <a href="#market" className="primary-action">{dict.landing.hero.openBoard} <ArrowRight className="size-4" aria-hidden="true" /></a>
+              <Link href="/terminal" className="secondary-action">{dict.landing.hero.openTerminal} <ArrowUpRight className="size-4" aria-hidden="true" /></Link>
             </div>
-            {!isAuthenticated && <p className="home-note">Public view · prices sampled every 5 seconds.</p>}
+            {!isAuthenticated && <p className="home-note">{dict.landing.hero.publicNotice}</p>}
           </div>
           <div className="hero-model-wrap">
             <RetroTerminalScene />
           </div>
         </section>
 
-
-        <div className="tape-label"><span>THE BOARD</span><span>01 — {landingSymbols.length.toString().padStart(2, "0")} / {landingSymbols.length.toString().padStart(2, "0")}</span></div>
-          <div className="home-market-tape" aria-label="Market snapshot">
-            <div className="snapshot-head"><span>Featured Markets (2 per Category)</span><span>{landingSymbols.length} assets</span></div>
-            {landingSymbols.map((symbol) => {
-              const ticker = tickers[symbol.id];
-              const change = ticker?.changePercent24h;
-              return (
-                <div key={symbol.id} className="snapshot-row">
-                  <div><strong>{symbol.id}</strong><span>{symbol.name}</span></div>
-                  <div className="snapshot-value">
-                    <strong>{ticker?.price ? ticker.price.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—"}</strong>
-                    <span className={change == null ? "" : change >= 0 ? "price-up" : "price-down"}>
-                      {change == null ? "Waiting for price" : `${change >= 0 ? "+" : ""}${change.toFixed(2)}%`}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-
+        <div className="tape-label">
+          <span>{dict.landing.tape.boardLabel}</span>
+          <span>01 — {landingSymbols.length.toString().padStart(2, "0")} / {landingSymbols.length.toString().padStart(2, "0")}</span>
+        </div>
+        <div className="home-market-tape" aria-label="Market snapshot">
+          <div className="snapshot-head">
+            <span>{dict.landing.tape.featuredTitle}</span>
+            <span>{interpolate(dict.landing.tape.assetsCount, { count: landingSymbols.length })}</span>
           </div>
+          {landingSymbols.map((symbol) => {
+            const ticker = tickers[symbol.id];
+            const change = ticker?.changePercent24h;
+            return (
+              <div key={symbol.id} className="snapshot-row">
+                <div><strong>{symbol.id}</strong><span>{symbol.name}</span></div>
+                <div className="snapshot-value">
+                  <strong>
+                    {ticker?.price
+                      ? ticker.price.toLocaleString(locale === "id" ? "id-ID" : "en-US", { maximumFractionDigits: 2 })
+                      : "—"}
+                  </strong>
+                  <span className={getChangeClass(change)}>
+                    {formatChangeText(change, dict.landing.tape.waitingForPrice)}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
         <section id="market" className="market-section" aria-labelledby="market-title">
           <div className="section-heading">
-            <div><p className="eyebrow">Market view</p><h2 id="market-title">On the board</h2></div>
-            <p>{isAuthenticated ? "Your market workspace is ready." : "Public quotes sampled every 5 seconds."}</p>
+            <div>
+              <p className="eyebrow">{dict.landing.market.eyebrow}</p>
+              <h2 id="market-title">{dict.landing.market.title}</h2>
+            </div>
+            <p>{isAuthenticated ? dict.landing.market.authSubtitle : dict.landing.market.publicSubtitle}</p>
           </div>
           <div className="preview-shell">
             <div className="preview-toolbar">
               <div role="tablist" aria-label="Market view" className="preview-tabs">
-                <button type="button" role="tab" aria-selected={activeTab === "chart"} onClick={() => setActiveTab("chart")} className={clsx(activeTab === "chart" && "is-active")}>Chart</button>
-                <button type="button" role="tab" aria-selected={activeTab === "markets"} onClick={() => setActiveTab("markets")} className={clsx(activeTab === "markets" && "is-active")}>Markets</button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === "chart"}
+                  onClick={() => setActiveTab("chart")}
+                  className={clsx(activeTab === "chart" && "is-active")}
+                >
+                  {dict.landing.market.tabChart}
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === "markets"}
+                  onClick={() => setActiveTab("markets")}
+                  className={clsx(activeTab === "markets" && "is-active")}
+                >
+                  {dict.landing.market.tabMarkets}
+                </button>
               </div>
-              <span className="preview-status"><span className="status-dot" /> {isAuthenticated ? "Live stream" : "5s updates"}</span>
+              <span className="preview-status">
+                <span className="status-dot" />{" "}
+                {isAuthenticated ? dict.landing.market.liveStream : dict.landing.market.sampleUpdates}
+              </span>
             </div>
             <div className="preview-content">
               {activeTab === "chart" ? (
                 <div className="preview-grid">
-                  <Card className="preview-chart"><ChartHeader /><div className="h-[350px] sm:h-[450px]"><TradingViewChart key={selectedSymbol} symbol={selectedSymbol} className="h-full w-full" /></div></Card>
-                  <aside className="preview-aside" aria-label="Market statistics"><div className="preview-aside-title"><BarChart3 className="size-4" /> Market snapshot</div><MarketStats /></aside>
+                  <Card className="preview-chart">
+                    <ChartHeader />
+                    <div className="h-[350px] sm:h-[450px]">
+                      <TradingViewChart key={selectedSymbol} symbol={selectedSymbol} className="h-full w-full" />
+                    </div>
+                  </Card>
+                  <aside className="preview-aside" aria-label="Market statistics">
+                    <div className="preview-aside-title">
+                      <BarChart3 className="size-4" /> {dict.landing.market.marketSnapshot}
+                    </div>
+                    <MarketStats />
+                  </aside>
                 </div>
               ) : (
                 <div className="flex flex-col gap-3">
-                  <Card className="preview-table"><MarketOverviewTable symbols={landingSymbols} /></Card>
+                  <Card className="preview-table">
+                    <MarketOverviewTable symbols={landingSymbols} />
+                  </Card>
                   <div className="flex items-center justify-between px-2 py-1 text-xs font-mono text-slate-400">
-                    <span>Showing 2 featured assets per asset class ({landingSymbols.length} total)</span>
-                    <Link href="/terminal" className="text-emerald-400 hover:text-emerald-300 inline-flex items-center gap-1 font-semibold transition-colors cursor-pointer">
-                      Open Terminal for all {symbols.length} markets <ArrowRight className="size-3.5" />
+                    <span>{interpolate(dict.landing.market.showingFeatured, { count: landingSymbols.length })}</span>
+                    <Link
+                      href="/terminal"
+                      className="text-emerald-400 hover:text-emerald-300 inline-flex items-center gap-1 font-semibold transition-colors cursor-pointer"
+                    >
+                      {interpolate(dict.landing.market.openTerminalAll, { count: symbols.length })} <ArrowRight className="size-3.5" />
                     </Link>
                   </div>
                 </div>
@@ -156,57 +218,49 @@ export default function LandingPage() {
         </section>
 
         <section id="about" className="about-section" aria-labelledby="about-title">
-          <div><p className="eyebrow">The workspace</p><h2 id="about-title">Keep your eye on the board.</h2></div>
-          <div className="about-copy"><p>Pin the symbols you follow. Check the chart. Read the news. Then get back to your day.</p><p>The board is open to everyone. Sign in to keep a watchlist and open the full terminal.</p>{isAuthenticated ? <Link href="/terminal" className="text-action">Open your terminal <ArrowRight className="size-4" /></Link> : <button type="button" onClick={() => signIn("google", { callbackUrl: "/terminal" })} className="text-action">Continue with Google <ArrowRight className="size-4" /></button>}</div>
+          <div>
+            <p className="eyebrow">{dict.landing.about.eyebrow}</p>
+            <h2 id="about-title">{dict.landing.about.title}</h2>
+          </div>
+          <div className="about-copy">
+            <p>{dict.landing.about.desc1}</p>
+            <p>{dict.landing.about.desc2}</p>
+            {isAuthenticated ? (
+              <Link href="/terminal" className="text-action">
+                {dict.landing.about.openTerminal} <ArrowRight className="size-4" />
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={() => signIn("google", { callbackUrl: "/terminal" })}
+                className="text-action"
+              >
+                {dict.landing.about.continueWithGoogle} <ArrowRight className="size-4" />
+              </button>
+            )}
+          </div>
         </section>
 
         <section id="faq" className="faq-section" aria-labelledby="faq-title">
           <div>
-            <p className="eyebrow">Tanya Jawab • Knowledge Base</p>
-            <h2 id="faq-title">Pertanyaan Umum (FAQ)</h2>
+            <p className="eyebrow">{dict.landing.faq.eyebrow}</p>
+            <h2 id="faq-title">{dict.landing.faq.title}</h2>
           </div>
           <div className="faq-grid">
-            <details className="faq-item" open>
-              <summary className="faq-summary">Apa itu Gorengan Index?</summary>
-              <div className="faq-answer">
-                Gorengan Index adalah platform screener dan terminal pasar finansial real-time yang dirancang khusus untuk memantau pergerakan saham-saham aktif &amp; volatil di Bursa Efek Indonesia (IDX / IHSG), aset kripto global (Bitcoin, Ethereum, Solana), serta pasangan mata uang forex dalam satu antarmuka retro arcade berkecepatan tinggi.
-              </div>
-            </details>
-
-            <details className="faq-item">
-              <summary className="faq-summary">Apa yang dimaksud dengan saham gorengan dan cara screening-nya?</summary>
-              <div className="faq-answer">
-                &apos;Saham gorengan&apos; adalah istilah pasar modal Indonesia untuk saham lapis dua atau tiga (small/mid cap) dengan volatilitas harga dan likuiditas transaksi harian yang sangat tinggi. Gorengan Index memantau lonjakan volume harian, perubahan persentase 24 jam, dan dinamika orderbook live untuk mempermudah trader dan scalper mendeteksi momentum pasar.
-              </div>
-            </details>
-
-            <details className="faq-item">
-              <summary className="faq-summary">Apakah data harga di Gorengan Index disajikan secara real-time?</summary>
-              <div className="faq-answer">
-                Ya! Data pasar dialirkan secara langsung menggunakan WebSocket berkecepatan tinggi. Mode publik memperbarui kuotasi pasar setiap 5 detik, sementara pengguna terotentikasi mendapatkan streaming live tanpa jeda langsung dari feed pasar.
-              </div>
-            </details>
-
-            <details className="faq-item">
-              <summary className="faq-summary">Instrumen finansial apa saja yang didukung?</summary>
-              <div className="faq-answer">
-                Gorengan Index mendukung multi-aset terlengkap: Saham Indonesia (IDX tickers seperti BBCA, BBRI, GOTO, BUMI, CUAN, PTRO, dll.), Cryptocurrency (BTC/USDT, ETH/USDT, SOL/USDT, PEPE, DOGE), Valuta Asing / Forex (USD/IDR, EUR/USD, GBP/USD), serta Saham Global Amerika (US Equities seperti AAPL, NVDA, TSLA).
-              </div>
-            </details>
-
-            <details className="faq-item">
-              <summary className="faq-summary">Apakah platform Gorengan Index gratis digunakan?</summary>
-              <div className="faq-answer">
-                Ya, Gorengan Index 100% gratis digunakan untuk riset pasar dan pemantauan harga harian. Anda dapat membuka Market Board, melihat chart TradingView, dan menggunakan terminal trading tanpa biaya berlangganan.
-              </div>
-            </details>
+            {dict.landing.faq.items.map((item, idx) => (
+              <details key={idx} className="faq-item" open={idx === 0}>
+                <summary className="faq-summary">{item.question}</summary>
+                <div className="faq-answer">{item.answer}</div>
+              </details>
+            ))}
           </div>
         </section>
       </div>
+
       <footer className="site-footer">
         <div className="site-container">
-          <span>Gorengan Index — Screener Saham IDX, Crypto &amp; FX Real-Time</span>
-          <span>Market data for personal research</span>
+          <span>{dict.landing.footer.brandTagline}</span>
+          <span>{dict.landing.footer.disclaimer}</span>
         </div>
       </footer>
     </main>

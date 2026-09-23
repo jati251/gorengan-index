@@ -20,8 +20,218 @@ import {
   getEquityMetadata,
 } from "@/features/equities";
 import { TimeframeSelector } from "./TimeframeSelector";
+import { useTranslation } from "@/features/i18n";
+
+interface AssetBadgesProps {
+  isUs: boolean;
+  isId: boolean;
+  isFx: boolean;
+  eqMeta?: { exchange?: string };
+  fxMeta?: { venueLabel?: string };
+  tickerProvider?: string;
+  equityBadgeInfo: { label: string; colorClass: string } | null;
+}
+
+function AssetBadges({
+  isUs,
+  isId,
+  isFx,
+  eqMeta,
+  fxMeta,
+  tickerProvider,
+  equityBadgeInfo,
+}: AssetBadgesProps) {
+  if (isUs) {
+    return (
+      <>
+        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-cyan-950/70 text-cyan-400 border border-cyan-800/50">
+          US
+        </span>
+        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-800/80 text-cyan-300 border border-slate-700/50">
+          {eqMeta?.exchange ?? "NASDAQ"}
+        </span>
+        {equityBadgeInfo && (
+          <span className={clsx("text-[9px] font-bold px-1.5 py-0.5 rounded border tracking-wider", equityBadgeInfo.colorClass)}>
+            {equityBadgeInfo.label}
+          </span>
+        )}
+      </>
+    );
+  }
+
+  if (isId) {
+    return (
+      <>
+        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-950/70 text-amber-400 border border-amber-800/50">
+          IDX
+        </span>
+        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-800/80 text-amber-300 border border-slate-700/50">
+          JAKARTA
+        </span>
+        {equityBadgeInfo && (
+          <span className={clsx("text-[9px] font-bold px-1.5 py-0.5 rounded border tracking-wider", equityBadgeInfo.colorClass)}>
+            {equityBadgeInfo.label}
+          </span>
+        )}
+      </>
+    );
+  }
+
+  if (isFx) {
+    return (
+      <>
+        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-950/70 text-blue-400 border border-blue-800/50">
+          FOREX
+        </span>
+        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-800/80 text-cyan-400 border border-slate-700/50">
+          MID
+        </span>
+        <span className="hidden sm:inline-flex text-[9px] font-medium px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800">
+          {fxMeta?.venueLabel ?? tickerProvider ?? "Interbank"}
+        </span>
+      </>
+    );
+  }
+
+  return (
+    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-800/80 text-emerald-400 border border-slate-700/50">
+      SPOT
+    </span>
+  );
+}
+
+function getDirectionIndicatorClass(direction?: "up" | "down" | "neutral"): string {
+  if (direction === "up") return "text-emerald-300 opacity-100 scale-100 drop-shadow-[0_0_6px_#3fdf97]";
+  if (direction === "down") return "text-rose-300 opacity-100 scale-100 drop-shadow-[0_0_6px_#eb619f]";
+  return "opacity-0 scale-50";
+}
+
+interface DynamicStatsHeaderProps {
+  isEquity: boolean;
+  isFx: boolean;
+  isId: boolean;
+  selectedSymbol: string;
+  ticker?: {
+    previousClose?: number;
+    open24h?: number;
+    high24h?: number;
+    low24h?: number;
+    volume24h?: number;
+    sessionSegment?: string;
+    bid?: number;
+    ask?: number;
+    sessionState?: string;
+  };
+  fxMeta?: { displayDecimals?: number };
+  spreadDisplay: string;
+  dict: ReturnType<typeof useTranslation>["dict"];
+}
+
+function DynamicStatsHeader({
+  isEquity,
+  isFx,
+  isId,
+  selectedSymbol,
+  ticker,
+  fxMeta,
+  spreadDisplay,
+  dict,
+}: DynamicStatsHeaderProps) {
+  if (isEquity) {
+    return (
+      <div className="hidden xl:flex items-center gap-4 text-xs text-slate-400 border-l border-slate-800/80 pl-4">
+        <div>
+          <span className="text-slate-500">{dict.chart.metrics.prevClose} </span>
+          <span className="text-slate-200 font-medium tabular-nums">
+            {formatEquityPrice(ticker?.previousClose ?? ticker?.open24h, selectedSymbol, isId ? "IDR" : "USD")}
+          </span>
+        </div>
+        <div>
+          <span className="text-slate-500">{dict.chart.metrics.dayHigh} </span>
+          <span className="text-slate-200 font-medium tabular-nums">
+            {formatEquityPrice(ticker?.high24h, selectedSymbol, isId ? "IDR" : "USD")}
+          </span>
+        </div>
+        <div>
+          <span className="text-slate-500">{dict.chart.metrics.dayLow} </span>
+          <span className="text-slate-200 font-medium tabular-nums">
+            {formatEquityPrice(ticker?.low24h, selectedSymbol, isId ? "IDR" : "USD")}
+          </span>
+        </div>
+        <div>
+          <span className="text-slate-500">{dict.chart.metrics.vol} </span>
+          <span className="text-slate-200 font-medium tabular-nums">
+            {formatEquityVolume(ticker?.volume24h)}
+          </span>
+        </div>
+        {ticker?.sessionSegment && (
+          <div className="flex items-center gap-1.5 pl-1">
+            <span className="text-[10px] text-cyan-400 font-semibold px-1.5 py-0.5 rounded bg-cyan-950/60 border border-cyan-800/40 uppercase">
+              {ticker.sessionSegment}
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (isFx) {
+    return (
+      <div className="hidden xl:flex items-center gap-4 text-xs text-slate-400 border-l border-slate-800/80 pl-4">
+        <div>
+          <span className="text-slate-500">{dict.chart.metrics.bid} </span>
+          <span className="text-slate-200 font-medium tabular-nums">
+            {formatFxPrice(ticker?.bid, selectedSymbol, fxMeta?.displayDecimals)}
+          </span>
+        </div>
+        <div>
+          <span className="text-slate-500">{dict.chart.metrics.ask} </span>
+          <span className="text-slate-200 font-medium tabular-nums">
+            {formatFxPrice(ticker?.ask, selectedSymbol, fxMeta?.displayDecimals)}
+          </span>
+        </div>
+        <div>
+          <span className="text-slate-500">{dict.chart.metrics.spread} </span>
+          <span className="text-amber-400 font-semibold tabular-nums">
+            {spreadDisplay}
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5 pl-1">
+          <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-[10px] text-emerald-400 uppercase font-bold tracking-wider">
+            {ticker?.sessionState ?? "LIVE"}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="hidden xl:flex items-center gap-4 text-xs text-slate-400 border-l border-slate-800/80 pl-4">
+      <div>
+        <span className="text-slate-500">{dict.chart.metrics.high24h} </span>
+        <span className="text-slate-200 font-medium tabular-nums">
+          ${formatPrice(ticker?.high24h)}
+        </span>
+      </div>
+      <div>
+        <span className="text-slate-500">{dict.chart.metrics.low24h} </span>
+        <span className="text-slate-200 font-medium tabular-nums">
+          ${formatPrice(ticker?.low24h)}
+        </span>
+      </div>
+      <div>
+        <span className="text-slate-500">{dict.marketTable.columns.volume24h}: </span>
+        <span className="text-slate-200 font-medium tabular-nums">
+          {formatVolume(ticker?.volume24h)}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 export function ChartHeader() {
+  const { dict, locale } = useTranslation();
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
   const ticker = useMarketStore((s) => s.tickers[s.selectedSymbol]);
   const direction = useMarketStore((s) => s.priceDirections[s.selectedSymbol]);
@@ -58,7 +268,7 @@ export function ChartHeader() {
     : formatPips(ticker?.spread, pipSize);
 
   const equityBadgeInfo = isEquity
-    ? getSessionBadgeInfo(ticker?.sessionState, ticker?.dataQuality, isUs)
+    ? getSessionBadgeInfo(ticker?.sessionState, ticker?.dataQuality, isUs, locale)
     : null;
 
   return (
@@ -69,52 +279,15 @@ export function ChartHeader() {
           <span className="text-base font-bold text-slate-100 tracking-tight">
             {selectedSymbol}
           </span>
-
-          {isUs ? (
-            <>
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-cyan-950/70 text-cyan-400 border border-cyan-800/50">
-                US
-              </span>
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-800/80 text-cyan-300 border border-slate-700/50">
-                {eqMeta?.exchange ?? "NASDAQ"}
-              </span>
-              {equityBadgeInfo && (
-                <span className={clsx("text-[9px] font-bold px-1.5 py-0.5 rounded border tracking-wider", equityBadgeInfo.colorClass)}>
-                  {equityBadgeInfo.label}
-                </span>
-              )}
-            </>
-          ) : isId ? (
-            <>
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-950/70 text-amber-400 border border-amber-800/50">
-                IDX
-              </span>
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-800/80 text-amber-300 border border-slate-700/50">
-                JAKARTA
-              </span>
-              {equityBadgeInfo && (
-                <span className={clsx("text-[9px] font-bold px-1.5 py-0.5 rounded border tracking-wider", equityBadgeInfo.colorClass)}>
-                  {equityBadgeInfo.label}
-                </span>
-              )}
-            </>
-          ) : isFx ? (
-            <>
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-950/70 text-blue-400 border border-blue-800/50">
-                FOREX
-              </span>
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-800/80 text-cyan-400 border border-slate-700/50">
-                MID
-              </span>
-              <span className="hidden sm:inline-flex text-[9px] font-medium px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800">
-                {fxMeta?.venueLabel ?? ticker?.provider ?? "Interbank"}
-              </span>
-            </>
-          ) : (
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-800/80 text-emerald-400 border border-slate-700/50">
-              SPOT
-            </span>
-          )}
+          <AssetBadges
+            isUs={isUs}
+            isId={isId}
+            isFx={isFx}
+            eqMeta={eqMeta}
+            fxMeta={fxMeta}
+            tickerProvider={ticker?.provider}
+            equityBadgeInfo={equityBadgeInfo}
+          />
         </div>
 
         {/* Animated Live Price */}
@@ -143,11 +316,7 @@ export function ChartHeader() {
               aria-hidden="true"
               className={clsx(
                 "w-3 h-3 inline-flex items-center justify-center shrink-0 text-[10px] font-black leading-none transition-all duration-300",
-                direction === "up"
-                  ? "text-emerald-300 opacity-100 scale-100 drop-shadow-[0_0_6px_#3fdf97]"
-                  : direction === "down"
-                    ? "text-rose-300 opacity-100 scale-100 drop-shadow-[0_0_6px_#eb619f]"
-                    : "opacity-0 scale-50"
+                getDirectionIndicatorClass(direction)
               )}
             >
               {direction === "down" ? "▼" : "▲"}
@@ -172,89 +341,16 @@ export function ChartHeader() {
         </div>
 
         {/* Dynamic Asset-Specific Stats Header */}
-        {isEquity ? (
-          <div className="hidden xl:flex items-center gap-4 text-xs text-slate-400 border-l border-slate-800/80 pl-4">
-            <div>
-              <span className="text-slate-500">PREV CLOSE: </span>
-              <span className="text-slate-200 font-medium tabular-nums">
-                {formatEquityPrice(ticker?.previousClose ?? ticker?.open24h, selectedSymbol, isId ? "IDR" : "USD")}
-              </span>
-            </div>
-            <div>
-              <span className="text-slate-500">DAY HIGH: </span>
-              <span className="text-slate-200 font-medium tabular-nums">
-                {formatEquityPrice(ticker?.high24h, selectedSymbol, isId ? "IDR" : "USD")}
-              </span>
-            </div>
-            <div>
-              <span className="text-slate-500">DAY LOW: </span>
-              <span className="text-slate-200 font-medium tabular-nums">
-                {formatEquityPrice(ticker?.low24h, selectedSymbol, isId ? "IDR" : "USD")}
-              </span>
-            </div>
-            <div>
-              <span className="text-slate-500">VOL: </span>
-              <span className="text-slate-200 font-medium tabular-nums">
-                {formatEquityVolume(ticker?.volume24h)}
-              </span>
-            </div>
-            {ticker?.sessionSegment && (
-              <div className="flex items-center gap-1.5 pl-1">
-                <span className="text-[10px] text-cyan-400 font-semibold px-1.5 py-0.5 rounded bg-cyan-950/60 border border-cyan-800/40 uppercase">
-                  {ticker.sessionSegment}
-                </span>
-              </div>
-            )}
-          </div>
-        ) : isFx ? (
-          <div className="hidden xl:flex items-center gap-4 text-xs text-slate-400 border-l border-slate-800/80 pl-4">
-            <div>
-              <span className="text-slate-500">BID: </span>
-              <span className="text-slate-200 font-medium tabular-nums">
-                {formatFxPrice(ticker?.bid, selectedSymbol, fxMeta?.displayDecimals)}
-              </span>
-            </div>
-            <div>
-              <span className="text-slate-500">ASK: </span>
-              <span className="text-slate-200 font-medium tabular-nums">
-                {formatFxPrice(ticker?.ask, selectedSymbol, fxMeta?.displayDecimals)}
-              </span>
-            </div>
-            <div>
-              <span className="text-slate-500">SPREAD: </span>
-              <span className="text-amber-400 font-semibold tabular-nums">
-                {spreadDisplay}
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5 pl-1">
-              <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-[10px] text-emerald-400 uppercase font-bold tracking-wider">
-                {ticker?.sessionState ?? "LIVE"}
-              </span>
-            </div>
-          </div>
-        ) : (
-          <div className="hidden xl:flex items-center gap-4 text-xs text-slate-400 border-l border-slate-800/80 pl-4">
-            <div>
-              <span className="text-slate-500">24h High: </span>
-              <span className="text-slate-200 font-medium tabular-nums">
-                ${formatPrice(ticker?.high24h)}
-              </span>
-            </div>
-            <div>
-              <span className="text-slate-500">24h Low: </span>
-              <span className="text-slate-200 font-medium tabular-nums">
-                ${formatPrice(ticker?.low24h)}
-              </span>
-            </div>
-            <div>
-              <span className="text-slate-500">24h Vol: </span>
-              <span className="text-slate-200 font-medium tabular-nums">
-                {formatVolume(ticker?.volume24h)}
-              </span>
-            </div>
-          </div>
-        )}
+        <DynamicStatsHeader
+          isEquity={isEquity}
+          isFx={isFx}
+          isId={isId}
+          selectedSymbol={selectedSymbol}
+          ticker={ticker}
+          fxMeta={fxMeta}
+          spreadDisplay={spreadDisplay}
+          dict={dict}
+        />
       </div>
 
       {/* Controls: Indicators + Resolution Selector + Timezone Pill */}

@@ -5,11 +5,13 @@ import Image from "next/image";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { ChevronDown, LogOut } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "@/features/i18n";
 
 export function UserNav() {
   const { data: session, status } = useSession();
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const { dict } = useTranslation();
 
   useEffect(() => {
     if (!isOpen) return;
@@ -27,18 +29,38 @@ export function UserNav() {
     };
   }, [isOpen]);
 
-  if (status === "loading") return <span className="user-nav-loading" aria-label="Loading account">…</span>;
+  if (status === "loading") {
+    return (
+      <span className="user-nav-loading" aria-label={dict.common.loadingAccount}>
+        …
+      </span>
+    );
+  }
   if (!session?.user) {
-    return <button type="button" className="user-nav-signin" onClick={() => signIn("google")}>Sign in</button>;
+    return (
+      <button type="button" className="user-nav-signin" onClick={() => signIn("google")}>
+        {dict.common.signIn}
+      </button>
+    );
   }
 
   const user = session.user;
   const initial = user.name?.charAt(0).toUpperCase() || "U";
   return (
     <div className="user-nav" ref={menuRef}>
-      <button type="button" className="user-nav-trigger" aria-expanded={isOpen} aria-haspopup="menu" onClick={() => setIsOpen((value) => !value)}>
-        {user.image ? <Image src={user.image} alt="" width={28} height={28} className="user-nav-avatar" /> : <span className="user-nav-initial">{initial}</span>}
-        <span className="user-nav-name">{user.name?.split(" ")[0] || "Account"}</span>
+      <button
+        type="button"
+        className="user-nav-trigger"
+        aria-expanded={isOpen}
+        aria-haspopup="menu"
+        onClick={() => setIsOpen((value) => !value)}
+      >
+        {user.image ? (
+          <Image src={user.image} alt="" width={28} height={28} className="user-nav-avatar" />
+        ) : (
+          <span className="user-nav-initial">{initial}</span>
+        )}
+        <span className="user-nav-name">{user.name?.split(" ")[0] || dict.common.account}</span>
         <ChevronDown className="size-4" aria-hidden="true" />
       </button>
       <AnimatePresence>
@@ -52,11 +74,11 @@ export function UserNav() {
             role="menu"
           >
             <div className="user-nav-profile">
-              <strong>{user.name || "Account"}</strong>
+              <strong>{user.name || dict.common.account}</strong>
               {user.email && <span>{user.email}</span>}
             </div>
             <button type="button" role="menuitem" onClick={() => signOut({ callbackUrl: "/login" })}>
-              <LogOut className="size-4" /> Sign out
+              <LogOut className="size-4" /> {dict.common.signOut}
             </button>
           </motion.div>
         )}

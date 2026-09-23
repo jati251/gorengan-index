@@ -17,26 +17,66 @@ import {
   isIdxEquitySymbol,
 } from "@/features/equities";
 
+import { useTranslation } from "@/features/i18n";
+
 interface WatchlistSidebarProps {
   symbols: MarketSymbol[];
   onSelectSymbol?: (symbolId: string) => void;
 }
 
-const CATEGORIES: { id: MarketCategory; label: string; icon: string }[] = [
-  { id: "all", label: "ALL", icon: "•" },
-  { id: "crypto", label: "CRYPTO", icon: "•" },
-  { id: "fx", label: "FOREX", icon: "•" },
-  { id: "us_stocks", label: "US", icon: "•" },
-  { id: "idx_stocks", label: "IDX", icon: "•" },
-];
+const CATEGORY_ACTIVE_COLORS: Record<string, string> = {
+  all: "text-emerald-400",
+  crypto: "text-emerald-400",
+  fx: "text-blue-400",
+  us_stocks: "text-cyan-400",
+  idx_stocks: "text-amber-400",
+};
+
+function getWatchlistItemClass(isSelected: boolean, isUs: boolean, isId: boolean, isFx: boolean): string {
+  if (!isSelected) return "hover:bg-white/[0.035] border-l-2 border-transparent";
+  if (isUs) return "bg-cyan-500/[0.12] border-l-2 border-cyan-400 ";
+  if (isId) return "bg-amber-500/[0.12] border-l-2 border-amber-400 ";
+  if (isFx) return "bg-blue-500/[0.12] border-l-2 border-blue-400 ";
+  return "bg-emerald-500/[0.12] border-l-2 border-emerald-400 ";
+}
+
+function getWatchlistSymbolColor(isSelected: boolean, isUs: boolean, isId: boolean, isFx: boolean): string {
+  if (!isSelected) return "text-slate-200 group-hover:text-white";
+  if (isUs) return "text-cyan-400";
+  if (isId) return "text-amber-400";
+  if (isFx) return "text-blue-400";
+  return "text-emerald-400";
+}
+
+function getCategoryBadgeInfo(isUs: boolean, isId: boolean, isFx: boolean) {
+  if (isUs) return { label: "US", colorClass: "bg-cyan-950/60 text-cyan-400 border-cyan-800/40" };
+  if (isId) return { label: "IDX", colorClass: "bg-amber-950/60 text-amber-400 border-amber-800/40" };
+  if (isFx) return { label: "FX", colorClass: "bg-blue-950/60 text-blue-400 border-blue-800/40" };
+  return { label: "CRYPTO", colorClass: "bg-emerald-950/60 text-emerald-400 border-emerald-800/40" };
+}
+
+function getWatchlistDirectionArrowClass(direction?: "up" | "down" | "neutral"): string {
+  if (direction === "up") return "text-emerald-300 opacity-100 scale-100 drop-shadow-[0_0_6px_#3fdf97]";
+  if (direction === "down") return "text-rose-300 opacity-100 scale-100 drop-shadow-[0_0_6px_#eb619f]";
+  return "opacity-0 scale-50";
+}
 
 export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarProps) {
+  const { dict, interpolate, locale } = useTranslation();
   const [search, setSearch] = useState("");
   const [committedSearch, setCommittedSearch] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState<"favorites" | "all">("favorites");
   const [trendFilter, setTrendFilter] = useState<"all" | "gainers" | "losers">("all");
+
+  const categories: { id: MarketCategory; label: string }[] = useMemo(() => [
+    { id: "all", label: dict.watchlist.categories.all },
+    { id: "crypto", label: dict.watchlist.categories.crypto },
+    { id: "fx", label: dict.watchlist.categories.fx },
+    { id: "us_stocks", label: dict.watchlist.categories.us },
+    { id: "idx_stocks", label: dict.watchlist.categories.idx },
+  ], [dict]);
 
   const tickers = useMarketStore((s) => s.tickers);
   const priceDirections = useMarketStore((s) => s.priceDirections);
@@ -137,24 +177,24 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
   const searchPlaceholder = useMemo(() => {
     switch (selectedCategory) {
       case "us_stocks":
-        return "Search US stocks";
+        return `${dict.watchlist.categories.us}...`;
       case "idx_stocks":
-        return "Search IDX stocks";
+        return `${dict.watchlist.categories.idx}...`;
       case "fx":
-        return "Search FX pairs";
+        return `${dict.watchlist.categories.fx}...`;
       case "crypto":
-        return "Search crypto";
+        return `${dict.watchlist.categories.crypto}...`;
       default:
-        return "Search markets";
+        return dict.watchlist.searchPlaceholder;
     }
-  }, [selectedCategory]);
+  }, [selectedCategory, dict]);
 
   return (
     <div className="terminal-watchlist flex flex-col h-full bg-[#3c3f5f] font-mono select-none overflow-hidden min-h-0">
       {/* 1. Category Switcher (ALL | CRYPTO | FOREX | US | IDX) */}
       <div className="p-2.5 sm:p-3 border-b border-white/[0.06] bg-white/[0.01] space-y-2.5 shrink-0">
         <div className="grid grid-cols-5 gap-0.5 bg-[#2a2839] p-0.5 rounded-lg border border-white/[0.07] text-[10px] ">
-          {CATEGORIES.map((cat) => {
+          {categories.map((cat) => {
             const isActive = selectedCategory === cat.id;
             return (
               <button
@@ -163,15 +203,7 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
                 className={clsx(
                   "relative py-1.5 px-0.5 rounded-md transition-colors cursor-pointer flex items-center justify-center font-bold tracking-tight text-center",
                   isActive
-                    ? cat.id === "all"
-                      ? "text-emerald-400"
-                      : cat.id === "crypto"
-                        ? "text-emerald-400"
-                        : cat.id === "fx"
-                          ? "text-blue-400"
-                          : cat.id === "us_stocks"
-                            ? "text-cyan-400"
-                            : "text-amber-400"
+                    ? (CATEGORY_ACTIVE_COLORS[cat.id] ?? "text-emerald-400")
                     : "text-slate-400 hover:text-slate-200"
                 )}
               >
@@ -313,7 +345,7 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
             )}
             <span className="relative z-10 flex items-center gap-1.5">
               <Star className="w-3 h-3 fill-current text-yellow-400" />
-              Watchlist ({categoryFavorites.length})
+              {dict.watchlist.tabs.favorites} ({categoryFavorites.length})
             </span>
           </button>
 
@@ -331,7 +363,7 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
                 transition={{ type: "spring", stiffness: 450, damping: 35 }}
               />
             )}
-            <span className="relative z-10">All markets ({categoryMatchedSymbols.length})</span>
+            <span className="relative z-10">{dict.watchlist.tabs.all} ({categoryMatchedSymbols.length})</span>
           </button>
         </div>
 
@@ -347,7 +379,7 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
                 : "text-slate-400 border-transparent hover:text-slate-200 hover:bg-white/[0.03]"
             )}
           >
-            All ({baseSymbols.length})
+            {dict.watchlist.trendFilters.all} ({baseSymbols.length})
           </button>
           <button
             type="button"
@@ -360,7 +392,7 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
             )}
           >
             <TrendingUp className="w-2.5 h-2.5 text-emerald-400" />
-            <span>Gainers ({gainersCount})</span>
+            <span>{dict.watchlist.trendFilters.gainers} ({gainersCount})</span>
           </button>
           <button
             type="button"
@@ -373,7 +405,7 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
             )}
           >
             <TrendingDown className="w-2.5 h-2.5 text-rose-400" />
-            <span>Losers ({losersCount})</span>
+            <span>{dict.watchlist.trendFilters.losers} ({losersCount})</span>
           </button>
         </div>
       </div>
@@ -385,17 +417,17 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
             <div className="p-6 text-center text-xs flex flex-col items-center justify-center gap-2 text-slate-400">
               <Star className="w-8 h-8 text-yellow-400/25 stroke-1" />
               <p className="font-semibold text-slate-300">
-                No saved markets here
+                {dict.watchlist.emptyFavorites.title}
               </p>
               <p className="text-[11px] text-slate-500 max-w-[200px]">
-                Use the star to save a market.
+                {dict.watchlist.emptyFavorites.desc}
               </p>
               {categoryMatchedSymbols.length > 0 && (
                 <button
                   onClick={() => setTab("all")}
                   className="mt-1 px-3 py-1 bg-white/[0.06] hover:bg-white/[0.1] text-emerald-400 rounded-md text-[11px] font-semibold transition-colors cursor-pointer border border-white/[0.09]"
                 >
-                  Browse markets ({categoryMatchedSymbols.length})
+                  {dict.watchlist.tabs.all} ({categoryMatchedSymbols.length})
                 </button>
               )}
             </div>
@@ -403,10 +435,12 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
             <div className="p-6 text-center text-xs flex flex-col items-center justify-center gap-2 text-slate-400 font-mono">
               <SearchX className="w-8 h-8 text-slate-500 mb-1" />
               <p className="font-semibold text-slate-300">
-                No markets found
+                {dict.watchlist.emptySearch.title}
               </p>
               <p className="text-[11px] text-slate-500 max-w-[200px]">
-                {committedSearch ? `No symbols match "${committedSearch}"` : "No markets match current filters."}
+                {committedSearch
+                  ? interpolate(dict.watchlist.emptySearch.desc, { query: committedSearch })
+                  : dict.marketTable.empty.desc}
               </p>
               {committedSearch && (
                 <button
@@ -445,7 +479,7 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
 
               const badgeInfo =
                 isUs || isId
-                  ? getSessionBadgeInfo(ticker?.sessionState, ticker?.dataQuality, isUs)
+                  ? getSessionBadgeInfo(ticker?.sessionState, ticker?.dataQuality, isUs, locale)
                   : null;
 
               return (
@@ -468,15 +502,7 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
                   }}
                   className={clsx(
                     "p-3 flex items-center justify-between cursor-pointer transition-all duration-150 group",
-                    isSelected
-                      ? isUs
-                        ? "bg-cyan-500/[0.12] border-l-2 border-cyan-400 "
-                        : isId
-                          ? "bg-amber-500/[0.12] border-l-2 border-amber-400 "
-                          : isFx
-                            ? "bg-blue-500/[0.12] border-l-2 border-blue-400 "
-                            : "bg-emerald-500/[0.12] border-l-2 border-emerald-400 "
-                      : "hover:bg-white/[0.035] border-l-2 border-transparent"
+                    getWatchlistItemClass(isSelected, isUs, isId, isFx)
                   )}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
@@ -486,7 +512,7 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
                         e.stopPropagation();
                         toggleWatchlist(sym.id);
                       }}
-                      aria-label={`${isStarred ? "Remove" : "Add"} ${sym.id} ${isStarred ? "from" : "to"} watchlist`}
+                      aria-label={`${isStarred ? dict.watchlist.favoriteActions.remove : dict.watchlist.favoriteActions.add}: ${sym.id}`}
                       aria-pressed={isStarred}
                       className="cursor-pointer text-slate-400 hover:text-yellow-400 shrink-0 min-w-8 min-h-8 flex items-center justify-center"
                     >
@@ -505,37 +531,26 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
                         <span
                           className={clsx(
                             "font-semibold text-xs truncate",
-                            isSelected
-                              ? isUs
-                                ? "text-cyan-400"
-                                : isId
-                                  ? "text-amber-400"
-                                  : isFx
-                                    ? "text-blue-400"
-                                    : "text-emerald-400"
-                              : "text-slate-200 group-hover:text-white"
+                            getWatchlistSymbolColor(isSelected, isUs, isId, isFx)
                           )}
                         >
                           {sym.id}
                         </span>
 
                         {/* Category badge in ALL mode */}
-                        {selectedCategory === "all" && (
-                          <span
-                            className={clsx(
-                              "text-[8px] font-bold px-1 py-0.2 rounded border",
-                              isUs
-                                ? "bg-cyan-950/60 text-cyan-400 border-cyan-800/40"
-                                : isId
-                                  ? "bg-amber-950/60 text-amber-400 border-amber-800/40"
-                                  : isFx
-                                    ? "bg-blue-950/60 text-blue-400 border-blue-800/40"
-                                    : "bg-emerald-950/60 text-emerald-400 border-emerald-800/40"
-                            )}
-                          >
-                            {isUs ? "US" : isId ? "IDX" : isFx ? "FX" : "CRYPTO"}
-                          </span>
-                        )}
+                        {selectedCategory === "all" && (() => {
+                          const catBadge = getCategoryBadgeInfo(isUs, isId, isFx);
+                          return (
+                            <span
+                              className={clsx(
+                                "text-[8px] font-bold px-1 py-0.2 rounded border",
+                                catBadge.colorClass
+                              )}
+                            >
+                              {catBadge.label}
+                            </span>
+                          );
+                        })()}
 
                         {sym.isTokenizedMetal && (
                           <span className="text-[9px] px-1 py-0.2 rounded bg-yellow-950/70 text-yellow-400 border border-yellow-800/40">
@@ -576,11 +591,7 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
                         aria-hidden="true"
                         className={clsx(
                           "w-2.5 h-2.5 inline-flex items-center justify-center shrink-0 text-[8px] font-black leading-none transition-all duration-300",
-                          direction === "up"
-                            ? "text-emerald-300 opacity-100 scale-100 drop-shadow-[0_0_6px_#3fdf97]"
-                            : direction === "down"
-                              ? "text-rose-300 opacity-100 scale-100 drop-shadow-[0_0_6px_#eb619f]"
-                              : "opacity-0 scale-50"
+                          getWatchlistDirectionArrowClass(direction)
                         )}
                       >
                         {direction === "down" ? "▼" : "▲"}

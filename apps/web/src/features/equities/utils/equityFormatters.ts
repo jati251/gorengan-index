@@ -31,13 +31,15 @@ export function formatEquityVolume(volume: number | undefined): string {
 export function getSessionBadgeInfo(
   sessionState?: string,
   dataQuality?: string,
-  isUs?: boolean
+  isUs?: boolean,
+  locale: "en" | "id" = "en"
 ): { label: string; colorClass: string; isLive: boolean } {
   const normState = sessionState?.toLowerCase() ?? "closed";
+  const isId = locale === "id";
 
   if (normState === "closed") {
     return {
-      label: "CLOSED",
+      label: isId ? "TUTUP" : "CLOSED",
       colorClass: "bg-slate-800 text-slate-400 border-slate-700/60",
       isLive: false,
     };
@@ -45,7 +47,7 @@ export function getSessionBadgeInfo(
 
   if (normState === "holiday") {
     return {
-      label: "HOLIDAY",
+      label: isId ? "LIBUR" : "HOLIDAY",
       colorClass: "bg-amber-950/70 text-amber-400 border-amber-800/50",
       isLive: false,
     };
@@ -53,7 +55,7 @@ export function getSessionBadgeInfo(
 
   if (normState === "break") {
     return {
-      label: "BREAK",
+      label: isId ? "ISTIRAHAT" : "BREAK",
       colorClass: "bg-amber-950/60 text-amber-300 border-amber-700/50",
       isLive: false,
     };
@@ -61,7 +63,7 @@ export function getSessionBadgeInfo(
 
   if (normState === "pre_market" || normState === "premarket") {
     return {
-      label: "PRE-MARKET",
+      label: isId ? "PRA-PASAR" : "PRE-MARKET",
       colorClass: "bg-purple-950/70 text-purple-400 border-purple-800/50",
       isLive: true,
     };
@@ -69,7 +71,7 @@ export function getSessionBadgeInfo(
 
   if (normState === "after_hours" || normState === "afterhours") {
     return {
-      label: "AFTER-HOURS",
+      label: isId ? "PASCA-PASAR" : "AFTER-HOURS",
       colorClass: "bg-indigo-950/70 text-indigo-400 border-indigo-800/50",
       isLive: true,
     };
@@ -85,7 +87,7 @@ export function getSessionBadgeInfo(
   }
 
   return {
-    label: "DELAYED",
+    label: isId ? "DELAY" : "DELAYED",
     colorClass: "bg-sky-950/70 text-sky-400 border-sky-800/50",
     isLive: true,
   };

@@ -5,6 +5,7 @@ import { useMarketStore } from "@/stores/marketStore";
 import { MarketStatusBadge } from "./MarketStatusBadge";
 import { DeviceClock } from "./DeviceClock";
 import { UserNav } from "@/features/auth";
+import { LanguageSwitcher } from "@/features/i18n";
 
 export function MarketHeaderTicker() {
   const status = useMarketStore((state) => state.providerStatus);
@@ -18,6 +19,7 @@ export function MarketHeaderTicker() {
       <div className="terminal-header-actions">
         <DeviceClock />
         <MarketStatusBadge status={status} />
+        <LanguageSwitcher />
         <UserNav />
       </div>
     </header>

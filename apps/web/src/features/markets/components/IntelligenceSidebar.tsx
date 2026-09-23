@@ -8,6 +8,8 @@ import { MarketStats } from "./MarketStats";
 import { SentimentGauge, NewsFeed } from "@/features/news";
 import { useMarketStore } from "@/stores/marketStore";
 
+import { useTranslation } from "@/features/i18n";
+
 export type IntelligenceTab = "pulse" | "news";
 
 interface IntelligenceSidebarProps {
@@ -16,6 +18,7 @@ interface IntelligenceSidebarProps {
 }
 
 export function IntelligenceSidebar({ className, initialTab = "pulse" }: IntelligenceSidebarProps) {
+  const { dict } = useTranslation();
   const [activeTab, setActiveTab] = useState<IntelligenceTab>(initialTab);
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
 
@@ -40,7 +43,7 @@ export function IntelligenceSidebar({ className, initialTab = "pulse" }: Intelli
               />
             )}
             <Activity className="w-3.5 h-3.5 text-amber-400 relative z-10" />
-            <span className="relative z-10">Market stats</span>
+            <span className="relative z-10">{dict.intelligence.tabs.stats}</span>
           </button>
 
           <button
@@ -59,7 +62,7 @@ export function IntelligenceSidebar({ className, initialTab = "pulse" }: Intelli
               />
             )}
             <Newspaper className="w-3.5 h-3.5 text-cyan-400 relative z-10" />
-            <span className="relative z-10">News</span>
+            <span className="relative z-10">{dict.intelligence.tabs.news}</span>
           </button>
         </div>
       </div>
@@ -79,8 +82,7 @@ export function IntelligenceSidebar({ className, initialTab = "pulse" }: Intelli
               {/* Active Symbol Header Pill */}
               <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-white/[0.02] border border-white/[0.06] text-[11px] text-slate-400">
                 <span className="flex items-center gap-1.5">
-
-                  <span>Selected market</span>
+                  <span>{dict.intelligence.selectedMarket}</span>
                 </span>
                 <span className="font-bold text-white font-mono bg-white/[0.06] px-2 py-0.5 rounded border border-white/[0.08]">
                   {selectedSymbol}
@@ -95,7 +97,7 @@ export function IntelligenceSidebar({ className, initialTab = "pulse" }: Intelli
               {/* Fear & Greed / AI Sentiment Gauge */}
               <div className="pt-3">
                 <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-2 flex items-center gap-1.5">
-                  <span>Sentiment Index</span>
+                  <span>{dict.intelligence.sentimentTitle}</span>
                 </div>
                 <SentimentGauge />
               </div>
