@@ -253,11 +253,7 @@ export function useTerminalWebSocket(
   useEffect(() => {
     symbolsRef.current = subscribedSymbols;
     syncSubscriptions();
-  }, [symbolsKey, subscribedSymbols, syncSubscriptions]);
-
-  useEffect(() => {
-    syncSubscriptions();
-  }, [selectedSymbol, selectedTimeframe, syncSubscriptions]);
+  }, [symbolsKey, subscribedSymbols, selectedSymbol, selectedTimeframe, syncSubscriptions]);
 
   return { sendMessage };
 }

@@ -163,11 +163,7 @@ export function BottomStickyTickerTape() {
   return (
     <div
       aria-label="Real-time Market Ticker Tape"
-      className="fixed bottom-[calc(70px+env(safe-area-inset-bottom,0px))] xl:bottom-0 left-0 right-0 z-40 h-9 bg-[#3c3f5f] border-t border-white/[0.08] flex items-center font-mono select-none overflow-hidden"
-      style={{
-        WebkitTransform: "translateZ(0)",
-        transform: "translateZ(0)",
-      }}
+      className="fixed bottom-[calc(70px+env(safe-area-inset-bottom,0px))] xl:bottom-0 left-0 right-0 z-40 h-9 bg-[#3c3f5f] border-t border-white/[0.08] flex items-center font-mono select-none overflow-hidden transform-gpu [transform:translateZ(0)]"
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
       onTouchStart={() => setIsPaused(true)}

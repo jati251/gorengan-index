@@ -221,6 +221,9 @@ export class YahooMarketProvider extends EventEmitter implements MarketProvider 
     for (let i = 0; i < symbolsToPoll.length; i += chunkSize) {
       const chunk = symbolsToPoll.slice(i, i + chunkSize);
       await Promise.allSettled(chunk.map((sym) => this.pollSingleSymbol(sym)));
+      if (i + chunkSize < symbolsToPoll.length) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
     }
   }
 

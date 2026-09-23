@@ -57,8 +57,11 @@ export class BinanceProvider extends EventEmitter implements MarketProvider {
       return;
     }
 
-    const wsUrl = `${config.BINANCE_WS_URL}/stream?streams=${streams.join("/")}`;
-    logger.info({ streamsCount: streams.length }, "Connecting to Binance WebSocket stream");
+    const wsUrl = config.BINANCE_WS_URL.endsWith("/stream")
+      ? config.BINANCE_WS_URL.replace(/\/stream$/, "/ws")
+      : `${config.BINANCE_WS_URL}/ws`;
+
+    logger.info({ streamsCount: streams.length }, "Connecting to Binance WebSocket endpoint");
 
     try {
       this.ws = new WebSocket(wsUrl);
@@ -71,6 +74,20 @@ export class BinanceProvider extends EventEmitter implements MarketProvider {
         this.lastEventAt = Date.now();
         this.setStatus("LIVE");
         this.startHeartbeat();
+
+        // Subscribe via JSON-RPC in chunks of 50 to adhere to payload limits
+        const chunkSize = 50;
+        let reqId = 1;
+        for (let i = 0; i < streams.length; i += chunkSize) {
+          const chunk = streams.slice(i, i + chunkSize);
+          this.ws?.send(
+            JSON.stringify({
+              method: "SUBSCRIBE",
+              params: chunk,
+              id: reqId++,
+            })
+          );
+        }
       });
 
       this.ws.on("message", (data: WebSocket.Data) => {

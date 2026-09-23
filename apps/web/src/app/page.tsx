@@ -3,11 +3,10 @@
 import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import { signIn, useSession } from "next-auth/react";
-import { DEFAULT_SYMBOLS, type MarketSymbol } from "@gorengan/shared";
 import { ArrowRight, ArrowUpRight, BarChart3 } from "lucide-react";
 import { clsx } from "clsx";
 
-import { useMarketsQuery, useSymbolsQuery, MarketOverviewTable, MarketStats } from "@/features/markets";
+import { useMarketsQuery, useResolvedSymbols, MarketOverviewTable, MarketStats } from "@/features/markets";
 import { ChartHeader, TradingViewChart } from "@/features/chart";
 import { Card } from "@/components/ui/card";
 import RetroTerminalScene from "@/components/hero/RetroTerminalScene";
@@ -30,23 +29,8 @@ export default function LandingPage() {
   const { status } = useSession();
   const isAuthenticated = status === "authenticated";
   const { dict, interpolate, locale } = useTranslation();
-  const { data: symbolsData } = useSymbolsQuery();
+  const { symbols, symbolIds } = useResolvedSymbols();
   useMarketsQuery();
-  const serverSymbols = symbolsData?.symbols;
-  const symbols = useMemo(() => {
-    const symbolMap = new Map<string, MarketSymbol>();
-    if (serverSymbols && serverSymbols.length > 0) {
-      for (const s of serverSymbols) {
-        if (s.id && !symbolMap.has(s.id)) symbolMap.set(s.id, s);
-      }
-    }
-    for (const defaultSym of DEFAULT_SYMBOLS) {
-      if (defaultSym.id && !symbolMap.has(defaultSym.id)) {
-        symbolMap.set(defaultSym.id, defaultSym);
-      }
-    }
-    return Array.from(symbolMap.values());
-  }, [serverSymbols]);
 
   // Curate 8 representative items for hero snapshot tape
   const featuredTapeSymbols = useMemo(() => {
@@ -71,7 +55,6 @@ export default function LandingPage() {
     return result.length > 0 ? result : symbols.slice(0, 8);
   }, [symbols]);
 
-  const symbolIds = useMemo(() => symbols.map((symbol) => symbol.id), [symbols]);
   useTerminalWebSocket(symbolIds, { isThrottled: !isAuthenticated, throttleMs: 5000 });
 
   const selectedSymbol = useMarketStore((state) => state.selectedSymbol);

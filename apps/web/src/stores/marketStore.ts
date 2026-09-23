@@ -104,16 +104,16 @@ export const useMarketStore = create<MarketStore>((set, get) => ({
       sessions: { ...state.sessions, [session.market.toUpperCase()]: session },
     })),
 
-  setSelectedCategory: (category) =>
-    set((state) => {
-      if (category === "all") {
-        return { selectedCategory: "all" };
-      }
-      return {
+  setSelectedCategory: (category) => {
+    if (category === "all") {
+      set({ selectedCategory: "all" });
+    } else {
+      set({
         selectedCategory: category,
         selectedAssetClass: category as AssetClass,
-      };
-    }),
+      });
+    }
+  },
 
   setSelectedAssetClass: (assetClass) => {
     get().setSelectedCategory(assetClass as MarketCategory);

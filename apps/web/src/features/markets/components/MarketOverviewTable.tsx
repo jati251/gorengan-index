@@ -23,12 +23,18 @@ import { formatFxPrice, isFxSymbol } from "@/features/forex";
 import {
   formatEquityPrice,
   getSessionBadgeInfo,
-  isEquitySymbol,
   isUsEquitySymbol,
   isIdxEquitySymbol,
 } from "@/features/equities";
 import { Badge } from "@/components/ui/badge";
 import { useTranslation } from "@/features/i18n";
+import { useClickOutside } from "@/hooks/useClickOutside";
+import {
+  deduplicateMarketSymbols,
+  matchesMarketCategory,
+  filterSymbolsByQuery,
+  getSymbolSearchSuggestions,
+} from "../utils/filterSymbols";
 
 interface MarketOverviewTableProps {
   symbols: MarketSymbol[];
@@ -174,75 +180,28 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
   };
 
   // Click outside to close suggestion dropdown
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
-        setIsDropdownOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  useClickOutside(searchContainerRef, () => setIsDropdownOpen(false), isDropdownOpen);
 
   // Guarantee absolute uniqueness of symbols by ID to protect React reconciliation keys
-  const uniqueSymbols = useMemo(() => {
-    const seen = new Set<string>();
-    const res: MarketSymbol[] = [];
-    for (const sym of symbols) {
-      if (sym && sym.id && !seen.has(sym.id)) {
-        seen.add(sym.id);
-        res.push(sym);
-      }
-    }
-    return res;
-  }, [symbols]);
+  const uniqueSymbols = useMemo(() => deduplicateMarketSymbols(symbols), [symbols]);
 
   // Compute suggestions across all symbols
-  const suggestions = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return [];
-    return uniqueSymbols
-      .filter(
-        (s) =>
-          s.id.toLowerCase().includes(q) ||
-          s.name.toLowerCase().includes(q) ||
-          s.base.toLowerCase().includes(q)
-      )
-      .slice(0, 7);
-  }, [uniqueSymbols, searchQuery]);
+  const suggestions = useMemo(
+    () => getSymbolSearchSuggestions(uniqueSymbols, searchQuery, 7),
+    [uniqueSymbols, searchQuery]
+  );
 
   // Filter symbols based on selectedCategory
-  const categoryFilteredSymbols = useMemo(() => {
-    return uniqueSymbols.filter((sym) => {
-      if (selectedCategory === "all") return true;
-      if (selectedCategory === "us_stocks") {
-        return sym.assetClass === "us_stocks" || isUsEquitySymbol(sym.id);
-      }
-      if (selectedCategory === "idx_stocks") {
-        return sym.assetClass === "idx_stocks" || isIdxEquitySymbol(sym.id);
-      }
-      if (selectedCategory === "fx") {
-        return sym.assetClass === "fx" || isFxSymbol(sym.id);
-      }
-      // Strict crypto & metal check — never match fx or equity
-      if (sym.assetClass === "fx" || isFxSymbol(sym.id)) return false;
-      if (sym.assetClass === "us_stocks" || isUsEquitySymbol(sym.id)) return false;
-      if (sym.assetClass === "idx_stocks" || isIdxEquitySymbol(sym.id)) return false;
-      return sym.assetClass === "crypto" || sym.assetClass === "metal";
-    });
-  }, [uniqueSymbols, selectedCategory]);
+  const categoryFilteredSymbols = useMemo(
+    () => uniqueSymbols.filter((sym) => matchesMarketCategory(sym, selectedCategory)),
+    [uniqueSymbols, selectedCategory]
+  );
 
   // Live search filter applied to category symbols as user types, with fallback to committedSearch
-  const displaySymbols = useMemo(() => {
-    const q = (searchQuery.trim() || committedSearch.trim()).toLowerCase();
-    if (!q) return categoryFilteredSymbols;
-    return categoryFilteredSymbols.filter(
-      (sym) =>
-        sym.id.toLowerCase().includes(q) ||
-        sym.name.toLowerCase().includes(q) ||
-        sym.base.toLowerCase().includes(q)
-    );
-  }, [categoryFilteredSymbols, searchQuery, committedSearch]);
+  const displaySymbols = useMemo(
+    () => filterSymbolsByQuery(categoryFilteredSymbols, searchQuery.trim() || committedSearch.trim()),
+    [categoryFilteredSymbols, searchQuery, committedSearch]
+  );
 
   // Compute table rows during render (no useEffect)
   const rows = useMemo(() => {

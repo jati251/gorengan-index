@@ -116,7 +116,8 @@ export function createHttpServer(
 
         const from = fromStr ? parseInt(fromStr, 10) : undefined;
         const to = toStr ? parseInt(toStr, 10) : undefined;
-        const limit = limitStr ? parseInt(limitStr, 10) : 500;
+        const parsedLimit = limitStr ? parseInt(limitStr, 10) : 500;
+        const limit = Number.isNaN(parsedLimit) ? 500 : Math.min(Math.max(parsedLimit, 1), 2000);
 
         let candles = repository.getCandles(symbol, timeframe, from, to, limit);
 

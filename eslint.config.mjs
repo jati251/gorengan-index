@@ -21,6 +21,9 @@ const eslintConfig = defineConfig([
       next: {
         rootDir: ["apps/web/"],
       },
+      react: {
+        version: "19.0",
+      },
     },
     rules: {
       "@next/next/no-html-link-for-pages": "off",

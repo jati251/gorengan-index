@@ -1,6 +1,5 @@
 import { config } from "../config/index.js";
 import { logger } from "../utils/logger.js";
-import { DEFAULT_SYMBOLS, type MarketSymbol } from "@gorengan/shared";
 
 export interface QuestDbExecResponse<T = unknown[]> {
   query: string;

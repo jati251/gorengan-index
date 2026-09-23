@@ -6,11 +6,22 @@ export { DeviceClock } from "./components/DeviceClock";
 export { MarketStats } from "./components/MarketStats";
 export { IntelligenceSidebar } from "./components/IntelligenceSidebar";
 export { BottomStickyTickerTape } from "./components/BottomStickyTickerTape";
-export { TableSkeleton, MarketStatsSkeleton } from "./components/MarketSkeletons";
+
+// Hooks
+export { useResolvedSymbols } from "./hooks/useResolvedSymbols";
 
 // API Hooks
 export { useMarketsQuery } from "./api/useMarketsQuery";
 export { useSymbolsQuery } from "./api/useSymbolsQuery";
 
+// Utils
+export {
+  deduplicateMarketSymbols,
+  matchesMarketCategory,
+  filterSymbolsByQuery,
+  getSymbolSearchSuggestions,
+} from "./utils/filterSymbols";
+
 // Types
 export type { StatCardProps } from "./types";
+

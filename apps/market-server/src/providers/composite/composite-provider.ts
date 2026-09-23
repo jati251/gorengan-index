@@ -11,16 +11,17 @@ export class CompositeMarketProvider extends EventEmitter implements MarketProvi
 
   private binanceProvider: BinanceProvider;
   private yahooProvider: YahooMarketProvider;
+  private allSymbols: MarketSymbol[];
 
   constructor(symbols?: MarketSymbol[]) {
     super();
-    const allSymbols = symbols || DEFAULT_SYMBOLS;
+    this.allSymbols = symbols || DEFAULT_SYMBOLS;
 
-    const cryptoSymbols = allSymbols
+    const cryptoSymbols = this.allSymbols
       .filter((s) => s.assetClass === "crypto" || s.assetClass === "metal" || s.provider === "binance")
       .map((s) => s.id);
 
-    const nonCryptoSymbols = allSymbols.filter(
+    const nonCryptoSymbols = this.allSymbols.filter(
       (s) => s.assetClass !== "crypto" && s.assetClass !== "metal" && s.provider !== "binance"
     );
 
@@ -56,7 +57,7 @@ export class CompositeMarketProvider extends EventEmitter implements MarketProvi
   }
 
   public async getSymbols(): Promise<MarketSymbol[]> {
-    return DEFAULT_SYMBOLS;
+    return this.allSymbols;
   }
 
   public async subscribe(symbols: string[]): Promise<void> {

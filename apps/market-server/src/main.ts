@@ -1,6 +1,7 @@
 import { config } from "./config/index.js";
 import { logger } from "./utils/logger.js";
 import { getDatabase, closeDatabase } from "./persistence/database.js";
+import { closePostgres } from "./persistence/postgres.js";
 import { CandleRepository } from "./persistence/candle-repository.js";
 import { MarketState } from "./market/market-state.js";
 import { CandleEngine } from "./market/candle-engine.js";
@@ -15,9 +16,10 @@ async function bootstrap() {
   logger.info({ port: config.PORT, host: config.HOST }, "Bootstrapping market-server");
   logger.info("==================================================");
 
-  // 1. Initialize QuestDB storage
+  // 1. Initialize QuestDB storage and load symbols
   const db = getDatabase();
   const repository = new CandleRepository(db);
+  await repository.loadSymbolsFromDatabase();
 
   // 2. Initialize in-memory state and engines
   const marketState = new MarketState();
@@ -114,6 +116,7 @@ async function bootstrap() {
       wsGateway.close();
       httpServer.close();
       closeDatabase();
+      await closePostgres();
       logger.info("Graceful shutdown complete");
       process.exit(0);
     } catch (err) {

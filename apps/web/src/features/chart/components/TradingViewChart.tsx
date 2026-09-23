@@ -204,15 +204,9 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
   // Sync indicator visibility
   useEffect(() => {
     ema20SeriesRef.current?.applyOptions({ visible: showEma20 });
-  }, [showEma20]);
-
-  useEffect(() => {
     ema50SeriesRef.current?.applyOptions({ visible: showEma50 });
-  }, [showEma50]);
-
-  useEffect(() => {
     volumeSeriesRef.current?.applyOptions({ visible: !isFx && showVolume });
-  }, [isFx, showVolume]);
+  }, [showEma20, showEma50, showVolume, isFx]);
 
   // Update chart historical data whenever TanStack query resolves
   useEffect(() => {

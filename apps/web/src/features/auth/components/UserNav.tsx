@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import Image from "next/image";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { ChevronDown, LogOut } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "@/features/i18n";
+import { useClickOutside } from "@/hooks/useClickOutside";
 
 export function UserNav() {
   const { data: session, status } = useSession();
@@ -13,21 +14,7 @@ export function UserNav() {
   const menuRef = useRef<HTMLDivElement>(null);
   const { dict } = useTranslation();
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const closeOutside = (event: MouseEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) setIsOpen(false);
-    };
-    const closeEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setIsOpen(false);
-    };
-    document.addEventListener("mousedown", closeOutside);
-    document.addEventListener("keydown", closeEscape);
-    return () => {
-      document.removeEventListener("mousedown", closeOutside);
-      document.removeEventListener("keydown", closeEscape);
-    };
-  }, [isOpen]);
+  useClickOutside(menuRef, () => setIsOpen(false), isOpen);
 
   if (status === "loading") {
     return (

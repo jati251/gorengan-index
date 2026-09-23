@@ -102,7 +102,7 @@ impl MarketCalendar for UsMarketCalendar {
 
         // Advance in 1-minute steps up to 7 days to find state change
         for _ in 0..(7 * 24 * 60) {
-            check = check + chrono::Duration::minutes(1);
+            check += chrono::Duration::minutes(1);
             if self.state_at(check) != initial_state {
                 // Round to minute
                 let naive = check.naive_utc();
@@ -212,7 +212,7 @@ impl MarketCalendar for IdxMarketCalendar {
         let initial_state = self.state_at(check);
 
         for _ in 0..(7 * 24 * 60) {
-            check = check + chrono::Duration::minutes(1);
+            check += chrono::Duration::minutes(1);
             if self.state_at(check) != initial_state {
                 let naive = check.naive_utc();
                 let rounded = naive

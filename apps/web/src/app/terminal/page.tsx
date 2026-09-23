@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useSyncExternalStore } from "react";
-import { DEFAULT_SYMBOLS, type MarketSymbol } from "@gorengan/shared";
 import { clsx } from "clsx";
 import {
   MarketHeaderTicker,
@@ -9,7 +8,7 @@ import {
   MarketStats,
   IntelligenceSidebar,
   BottomStickyTickerTape,
-  useSymbolsQuery,
+  useResolvedSymbols,
   useMarketsQuery,
 } from "@/features/markets";
 import { TradingViewChart, ChartHeader } from "@/features/chart";
@@ -33,24 +32,8 @@ export default function TerminalPage() {
   const { dict, interpolate } = useTranslation();
   const [mobileTab, setMobileTab] = useState<MobileTab>("chart");
   const isCompact = useSyncExternalStore(subscribeCompact, getCompact, getServerCompact);
-  const { data: symbolsData } = useSymbolsQuery();
+  const { symbols, symbolIds } = useResolvedSymbols();
   useMarketsQuery();
-  const serverSymbols = symbolsData?.symbols;
-  const symbols = React.useMemo(() => {
-    const symbolMap = new Map<string, MarketSymbol>();
-    if (serverSymbols && serverSymbols.length > 0) {
-      for (const s of serverSymbols) {
-        if (s.id && !symbolMap.has(s.id)) symbolMap.set(s.id, s);
-      }
-    }
-    for (const defaultSym of DEFAULT_SYMBOLS) {
-      if (defaultSym.id && !symbolMap.has(defaultSym.id)) {
-        symbolMap.set(defaultSym.id, defaultSym);
-      }
-    }
-    return Array.from(symbolMap.values());
-  }, [serverSymbols]);
-  const symbolIds = React.useMemo(() => symbols.map((symbol) => symbol.id), [symbols]);
   useTerminalWebSocket(symbolIds, { isThrottled: true, throttleMs: isCompact ? 250 : 100 });
   const selectedSymbol = useMarketStore((state) => state.selectedSymbol);
   const selectedCategory = useMarketStore((state) => state.selectedCategory);

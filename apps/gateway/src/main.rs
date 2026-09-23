@@ -55,10 +55,11 @@ async fn main() -> Result<()> {
 
     let cfg = AppConfig::load().context("Failed to load application config")?;
     let all_instruments = Instrument::default_universe();
-    let universe_symbols: Vec<InstrumentId> = cfg.universe.iter().map(|s| InstrumentId::new(s.clone())).collect();
+    let universe_set: HashSet<InstrumentId> =
+        cfg.universe.iter().map(|s| InstrumentId::new(s.clone())).collect();
     let active_instruments: Vec<Instrument> = all_instruments
         .into_iter()
-        .filter(|inst| universe_symbols.contains(&inst.id))
+        .filter(|inst| universe_set.contains(&inst.id))
         .collect();
 
     let (broadcast_tx, _) = broadcast::channel(10_000);
@@ -1351,7 +1352,7 @@ async fn handle_candles(
                 "1w" => "1w",
                 _ => "1m",
             };
-            let warmup_limit = limit.max(100).min(300);
+            let warmup_limit = limit.clamp(100, 300);
             let url = format!(
                 "https://data-api.binance.vision/api/v3/klines?symbol={}&interval={}&limit={}",
                 binance_symbol, binance_interval, warmup_limit

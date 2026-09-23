@@ -1,6 +1,7 @@
 import type { Candle, Timeframe, MarketSymbol } from "@gorengan/shared";
 import { DEFAULT_SYMBOLS, timeframeToMs } from "@gorengan/shared";
 import { getDatabase, type QuestDbClient } from "./database.js";
+import { getPostgresPool } from "./postgres.js";
 import { logger } from "../utils/logger.js";
 
 export class CandleRepository {
@@ -13,6 +14,50 @@ export class CandleRepository {
   }
 
   public getSymbols(): MarketSymbol[] {
+    return this.symbols;
+  }
+
+  public setSymbols(symbols: MarketSymbol[]): void {
+    this.symbols = symbols;
+  }
+
+  public async loadSymbolsFromDatabase(): Promise<MarketSymbol[]> {
+    const pool = getPostgresPool();
+    if (!pool) {
+      logger.info("DATABASE_URL not configured, using fallback default symbols");
+      return this.symbols;
+    }
+
+    try {
+      const res = await pool.query(
+        "SELECT * FROM market_symbols WHERE enabled = true ORDER BY asset_class, id ASC"
+      );
+
+      if (res.rows.length > 0) {
+        const loaded: MarketSymbol[] = res.rows.map((row) => ({
+          id: row.id,
+          base: row.base,
+          quote: row.quote,
+          assetClass: row.asset_class,
+          provider: row.provider,
+          providerSymbol: row.provider_symbol,
+          name: row.name,
+          enabled: row.enabled,
+          isTokenizedMetal: row.is_tokenized_metal ?? false,
+          pipSize: row.pip_size != null ? Number(row.pip_size) : undefined,
+          displayDecimals: row.display_decimals != null ? Number(row.display_decimals) : undefined,
+          candlePriceBasis: row.candle_price_basis ?? "trade",
+          exchange: row.exchange ?? undefined,
+          country: row.country ?? undefined,
+          timezone: row.timezone ?? undefined,
+        }));
+        this.symbols = loaded;
+        logger.info({ count: loaded.length }, "Loaded dynamic market symbols from PostgreSQL");
+        return this.symbols;
+      }
+    } catch (err) {
+      logger.warn({ err: (err as Error).message }, "Could not load symbols from PostgreSQL, using fallback default symbols");
+    }
     return this.symbols;
   }
 

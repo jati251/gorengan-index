@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useRef } from "react";
 import { Search, Star, TrendingUp, TrendingDown, X, SearchX } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { clsx } from "clsx";
@@ -12,12 +12,18 @@ import { formatFxPrice, isFxSymbol } from "@/features/forex";
 import {
   formatEquityPrice,
   getSessionBadgeInfo,
-  isEquitySymbol,
   isUsEquitySymbol,
   isIdxEquitySymbol,
 } from "@/features/equities";
 
 import { useTranslation } from "@/features/i18n";
+import { useClickOutside } from "@/hooks/useClickOutside";
+import {
+  deduplicateMarketSymbols,
+  matchesMarketCategory,
+  filterSymbolsByQuery,
+  getSymbolSearchSuggestions,
+} from "@/features/markets";
 
 interface WatchlistSidebarProps {
   symbols: MarketSymbol[];
@@ -83,42 +89,16 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
 
   // Close suggestion dropdown on click outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
-        setIsDropdownOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  useClickOutside(searchContainerRef, () => setIsDropdownOpen(false), isDropdownOpen);
 
   // Guarantee absolute uniqueness of symbols by ID to protect React reconciliation keys
-  const uniqueSymbols = useMemo(() => {
-    const seen = new Set<string>();
-    const res: MarketSymbol[] = [];
-    for (const sym of symbols) {
-      if (sym && sym.id && !seen.has(sym.id)) {
-        seen.add(sym.id);
-        res.push(sym);
-      }
-    }
-    return res;
-  }, [symbols]);
+  const uniqueSymbols = useMemo(() => deduplicateMarketSymbols(symbols), [symbols]);
 
   // Compute search suggestions across all symbols
-  const suggestions = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return [];
-    return uniqueSymbols
-      .filter(
-        (s) =>
-          s.id.toLowerCase().includes(q) ||
-          s.name.toLowerCase().includes(q) ||
-          s.base.toLowerCase().includes(q)
-      )
-      .slice(0, 6);
-  }, [uniqueSymbols, search]);
+  const suggestions = useMemo(
+    () => getSymbolSearchSuggestions(uniqueSymbols, search, 6),
+    [uniqueSymbols, search]
+  );
   const setSelectedSymbol = useMarketStore((s) => s.setSelectedSymbol);
   const selectedCategory = useMarketStore((s) => s.selectedCategory);
   const setSelectedCategory = useMarketStore((s) => s.setSelectedCategory);
@@ -128,37 +108,9 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
 
   // 1. Filter symbols by category and search query (live search supported)
   const categoryMatchedSymbols = useMemo(() => {
-    return uniqueSymbols.filter((sym) => {
-      // Category filter
-      let matchesCategory = false;
-      if (selectedCategory === "all") {
-        matchesCategory = true;
-      } else if (selectedCategory === "us_stocks") {
-        matchesCategory = sym.assetClass === "us_stocks" || isUsEquitySymbol(sym.id);
-      } else if (selectedCategory === "idx_stocks") {
-        matchesCategory = sym.assetClass === "idx_stocks" || isIdxEquitySymbol(sym.id);
-      } else if (selectedCategory === "fx") {
-        matchesCategory = sym.assetClass === "fx" || isFxSymbol(sym.id);
-      } else {
-        // Strict crypto & metals — never match fx or equity
-        if (sym.assetClass === "fx" || isFxSymbol(sym.id)) return false;
-        if (sym.assetClass === "us_stocks" || isUsEquitySymbol(sym.id)) return false;
-        if (sym.assetClass === "idx_stocks" || isIdxEquitySymbol(sym.id)) return false;
-        matchesCategory = sym.assetClass === "crypto" || sym.assetClass === "metal";
-      }
-
-      if (!matchesCategory) return false;
-
-      // Search query filter (applies live as user types or on committed search)
-      const q = (search.trim() || committedSearch.trim()).toLowerCase();
-      if (!q) return true;
-      return (
-        sym.id.toLowerCase().includes(q) ||
-        sym.name.toLowerCase().includes(q) ||
-        sym.base.toLowerCase().includes(q)
-      );
-    });
-  }, [symbols, search, committedSearch, selectedCategory]);
+    const matched = uniqueSymbols.filter((sym) => matchesMarketCategory(sym, selectedCategory));
+    return filterSymbolsByQuery(matched, search.trim() || committedSearch.trim());
+  }, [uniqueSymbols, search, committedSearch, selectedCategory]);
 
   // 2. Favorites subset for this active category/search
   const categoryFavorites = useMemo(() => {
