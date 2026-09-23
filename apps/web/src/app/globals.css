@@ -213,86 +213,89 @@ button { cursor: pointer; }
 
 .login-page { height: 100dvh; max-height: 100dvh; min-height: 100dvh; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr); background: #2a2839; color: #c3e6eb; font-family: "VT323", monospace; user-select: none; }
 .login-shell { display: flex; flex-direction: column; justify-content: space-between; height: 100%; max-height: 100dvh; overflow: hidden; padding: clamp(1.2rem, 3vh, 2.5rem) clamp(1.5rem, 5vw, 4rem); }
-.login-back { display: inline-flex; align-items: center; gap: .6rem; align-self: flex-start; min-height: 36px; color: #c3e6eb; font-family: "Press Start 2P", monospace; font-size: .62rem; text-transform: uppercase; letter-spacing: .06em; transition: color .15s ease; }
+.login-back { display: inline-flex; align-items: center; gap: .6rem; align-self: flex-start; min-height: 36px; color: #c3e6eb; font-family: "Press Start 2P", monospace; font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; transition: color .15s ease; }
 .login-back:hover { color: #f4c41b; }
-.login-content { width: min(100%, 430px); margin: auto; padding-block: 0; }
-.login-identity { display: flex; align-items: center; gap: .75rem; margin-bottom: 1rem; font-family: "Press Start 2P", monospace; font-size: .72rem; letter-spacing: -.02em; text-transform: uppercase; }
+.login-content { width: min(100%, 460px); margin: auto; padding-block: 0; }
+.login-identity { display: flex; align-items: center; gap: .8rem; margin-bottom: 1.2rem; font-family: "Press Start 2P", monospace; font-size: .82rem; letter-spacing: -.02em; text-transform: uppercase; }
 .login-identity strong { color: #f4c41b; font-weight: 400; }
-.login-identity .brand-mark { width: 34px; height: 34px; border: 2px solid #f4c41b; color: #f4c41b; font-family: "Press Start 2P", monospace; font-size: .75rem; box-shadow: 3px 3px 0 #757e8a; display: grid; place-items: center; border-radius: 0; }
+.login-identity .brand-mark { width: 38px; height: 38px; border: 2px solid #f4c41b; color: #f4c41b; font-family: "Press Start 2P", monospace; font-size: .85rem; box-shadow: 3px 3px 0 #757e8a; display: grid; place-items: center; border-radius: 0; }
 .login-identity .brand-mark span { color: #c3e6eb; }
-.login-content .eyebrow { color: #3fdf97; font-family: "Press Start 2P", monospace; font-size: .56rem; letter-spacing: .06em; text-transform: uppercase; margin-bottom: .6rem; }
-.login-content h1 { margin: 0; font-family: "Press Start 2P", monospace; font-size: clamp(1.15rem, 2.2vh, 1.45rem); line-height: 1.45; letter-spacing: -.03em; font-weight: 400; color: #c3e6eb; text-transform: uppercase; }
+.login-content .eyebrow { color: #3fdf97; font-family: "Press Start 2P", monospace; font-size: .65rem; letter-spacing: .06em; text-transform: uppercase; margin-bottom: .75rem; }
+.login-content h1 { margin: 0; font-family: "Press Start 2P", monospace; font-size: clamp(1.3rem, 2.7vh, 1.7rem); line-height: 1.45; letter-spacing: -.03em; font-weight: 400; color: #c3e6eb; text-transform: uppercase; }
 .login-content h1 em { color: #f4c41b; font-weight: 400; font-style: normal; }
-.login-description { max-width: 400px; margin: .75rem 0 1.25rem; color: #c3e6eb; opacity: .88; font-family: "VT323", monospace; font-size: 1.35rem; line-height: 1.25; }
-.login-google { display: flex; align-items: center; justify-content: space-between; gap: 1rem; width: 100%; min-height: 48px; padding: .75rem 1.15rem; background: #f4c41b; color: #2a2839; font-weight: 400; font-size: .64rem; border: 3px solid #f4c41b; box-shadow: 4px 4px 0 #c66616; font-family: "Press Start 2P", monospace; text-transform: uppercase; letter-spacing: .02em; transition: background .15s ease, transform .1s ease, box-shadow .1s ease; }
-.login-google:hover { background: #ffd748; border-color: #ffd748; transform: translate(-1px, -1px); box-shadow: 5px 5px 0 #c66616; }
+.login-description { max-width: 440px; margin: 1rem 0 1.5rem; color: #c3e6eb; opacity: .88; font-family: "VT323", monospace; font-size: 1.55rem; line-height: 1.3; }
+.login-google { display: flex; align-items: center; justify-content: space-between; gap: 1rem; width: 100%; min-height: 52px; padding: .85rem 1.3rem; background: #f4c41b; color: #2a2839; font-weight: 400; font-size: .74rem; border: 3px solid #f4c41b; box-shadow: 5px 5px 0 #c66616; font-family: "Press Start 2P", monospace; text-transform: uppercase; letter-spacing: .02em; transition: background .15s ease, transform .1s ease, box-shadow .1s ease; }
+.login-google:hover { background: #ffd748; border-color: #ffd748; transform: translate(-1px, -1px); box-shadow: 6px 6px 0 #c66616; }
 .login-google:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 #c66616; }
 .login-google:disabled { opacity: .65; cursor: wait; transform: none; }
-.login-error { display: flex; align-items: center; gap: .5rem; padding: .5rem .75rem; margin-bottom: .85rem; border: 2px solid #eb619f; background: rgba(235, 97, 159, .15); color: #eb619f; font-family: "VT323", monospace; font-size: 1.2rem; }
-.login-footnote { margin-top: .75rem; color: #c3e6eb; opacity: .6; font-family: "VT323", monospace; font-size: 1.1rem; }
-.login-bottom { margin: 0; color: #c3e6eb; opacity: .45; font-family: "VT323", monospace; font-size: 1.15rem; }
+.login-error { display: flex; align-items: center; gap: .5rem; padding: .6rem .85rem; margin-bottom: .85rem; border: 2px solid #eb619f; background: rgba(235, 97, 159, .15); color: #eb619f; font-family: "VT323", monospace; font-size: 1.3rem; }
+.login-footnote { margin-top: .85rem; color: #c3e6eb; opacity: .6; font-family: "VT323", monospace; font-size: 1.25rem; }
+.login-bottom { margin: 0; color: #c3e6eb; opacity: .45; font-family: "VT323", monospace; font-size: 1.25rem; }
 .login-aside { display: flex; align-items: center; justify-content: center; height: 100%; max-height: 100dvh; overflow: hidden; padding: clamp(2rem, 5vw, 4.5rem); background: #3c3f5f; border-left: 3px solid #757e8a; }
-.login-aside-inner { width: 100%; max-width: 460px; }
-.login-aside-inner > span { color: #f4c41b; font-family: "Press Start 2P", monospace; font-size: .62rem; font-weight: 400; letter-spacing: .12em; text-transform: uppercase; }
-.login-aside-inner p { max-width: 460px; margin: 1.1rem 0 1.6rem; font-family: "Press Start 2P", monospace; font-size: clamp(1.2rem, 2.6vh, 1.65rem); line-height: 1.45; letter-spacing: -.03em; color: #c3e6eb; text-transform: uppercase; }
-.login-aside-rule { height: 2px; margin-bottom: 1.25rem; background: #757e8a; }
-.login-aside-tags { font-family: "Press Start 2P", monospace; font-size: .54rem; letter-spacing: .12em; color: #c3e6eb; opacity: .7; text-transform: uppercase; }
+.login-aside-inner { width: 100%; max-width: 480px; }
+.login-aside-inner > span { color: #f4c41b; font-family: "Press Start 2P", monospace; font-size: .72rem; font-weight: 400; letter-spacing: .12em; text-transform: uppercase; }
+.login-aside-inner p { max-width: 480px; margin: 1.2rem 0 1.8rem; font-family: "Press Start 2P", monospace; font-size: clamp(1.4rem, 3.2vh, 2rem); line-height: 1.45; letter-spacing: -.03em; color: #c3e6eb; text-transform: uppercase; }
+.login-aside-rule { height: 2px; margin-bottom: 1.4rem; background: #757e8a; }
+.login-aside-tags { font-family: "Press Start 2P", monospace; font-size: .62rem; letter-spacing: .12em; color: #c3e6eb; opacity: .7; text-transform: uppercase; }
 @media (max-width: 850px) { .login-page { grid-template-columns: 1fr; } .login-aside { display: none; } .login-shell { height: 100dvh; padding: 1.25rem 1.5rem; } }
 
 
 /* Dark pixel board */
 .site-home { background: #2a2839; color: #c3e6eb; }
-.site-home { font-family: "VT323", monospace; font-size: 1.45rem; }
-.site-header { background: #2a2839; border-bottom: 3px solid #757e8a; }
+.site-home { font-family: "VT323", monospace; font-size: 1.65rem; }
+.site-header { background: #2a2839; border-bottom: 3px solid #757e8a; min-height: 68px; }
 .site-header nav, .brand-link, .site-header-action, .eyebrow, .primary-action, .secondary-action, .home-note, .hero-model-caption, .tape-label, .preview-tabs button, .preview-status, .text-action, .site-footer { font-family: "Press Start 2P", monospace; }
-.site-header nav { color: #c3e6eb; font-size: .59rem; }
+.site-header nav { color: #c3e6eb; font-size: .74rem; gap: 1.5rem; }
 .site-header nav a:hover { color: #f4c41b; }
-.brand-link { color: #c3e6eb; font-size: .67rem; }
+.brand-link { color: #c3e6eb; font-size: .8rem; gap: .8rem; }
 .brand-link strong { color: #f4c41b; }
-.brand-mark { width: 40px; height: 40px; border: 3px solid #f4c41b; color: #f4c41b; font-family: "Press Start 2P", monospace; font-size: .9rem; box-shadow: 4px 4px 0 #757e8a; }
+.brand-mark { width: 44px; height: 44px; border: 3px solid #f4c41b; color: #f4c41b; font-family: "Press Start 2P", monospace; font-size: 1rem; box-shadow: 4px 4px 0 #757e8a; }
 .brand-mark span { color: #c3e6eb; }
-.site-header-action { color: #c3e6eb; border-left: 2px solid #757e8a; font-size: .6rem; }
+.site-header-action { color: #c3e6eb; border-left: 2px solid #757e8a; font-size: .74rem; padding-inline: 1.2rem; min-height: 46px; }
 .site-header-action:hover, .text-action:hover { color: #f4c41b; }
-.home-hero { min-height: 590px; }
-.eyebrow { color: #f4c41b; font-size: .6rem; line-height: 1.8; letter-spacing: .03em; }
+.home-hero { min-height: 620px; padding-block: clamp(3.5rem, 6vw, 6rem); }
+.eyebrow { color: #f4c41b; font-size: .72rem; line-height: 1.8; letter-spacing: .05em; }
 .home-hero h1, .section-heading h2, .about-section h2 { font-family: "Press Start 2P", monospace; font-weight: 400; font-style: normal; text-transform: uppercase; }
-.home-hero h1 { color: #c3e6eb; font-size: clamp(2.15rem, 4vw, 3.9rem); line-height: 1.45; letter-spacing: -.055em; }
+.home-hero h1 { color: #c3e6eb; font-size: clamp(2.7rem, 5.2vw, 4.5rem); line-height: 1.35; letter-spacing: -.04em; }
 .home-hero h1 em { color: #f4c41b; font-style: normal; }
-.home-intro { max-width: 500px; color: #c3e6eb; font-size: 1.45rem; line-height: 1.28; }
-.primary-action, .secondary-action { border: 3px solid #c8df79; font-size: .61rem; line-height: 1.6; }
+.home-intro { max-width: 580px; color: #c3e6eb; font-size: 1.8rem; line-height: 1.35; margin-top: 1.5rem; }
+.primary-action, .secondary-action { border: 3px solid #c8df79; font-size: .78rem; min-height: 52px; padding: .85rem 1.4rem; line-height: 1.4; }
 .primary-action { background: #f4c41b; border-color: #f4c41b; color: #2a2839; box-shadow: 5px 5px 0 #c66616; }
 .primary-action:hover { background: #f4c41b; }
 .secondary-action { background: #3c3f5f; color: #c3e6eb; }
 .secondary-action:hover { background: #3978a8; }
-.home-note { color: #c3e6eb; font-size: .53rem; line-height: 1.7; }
-.hero-model-wrap { min-height: 500px; border: 3px solid #3fdf97; background: #3c3f5f; box-shadow: 10px 10px 0 #613e7b; }
-.hero-model-wrap::before { background: radial-gradient(#55607e 1px, transparent 1px); background-size: 8px 8px; opacity: .45; }
-.hero-model-wrap::after { inset: 14px; border: 2px dashed rgba(149, 201, 168, .36); }
-.retro-scene canvas { image-rendering: pixelated; }
-.retro-scene[data-webgl="unavailable"]::before { content: "★ ◼ ◆"; color: #f4c41b; font-family: "Press Start 2P", monospace; font-size: 3rem; }
-.hero-model-caption { color: #c3e6eb; font-size: .48rem; line-height: 1.6; }
-.tape-label { color: #c3e6eb; border-top: 3px solid #757e8a; font-size: .54rem; }
-.home-market-tape { border: 3px solid #757e8a; background: #3c3f5f; }
-.home-market-tape .snapshot-row { border-right-color: #757e8a; }
-.home-market-tape .snapshot-row strong { color: #c3e6eb; font-family: "Press Start 2P", monospace; font-size: .56rem; }
-.home-market-tape .snapshot-row span { color: #c3e6eb; font-size: 1.03rem; }
+.home-note { color: #c3e6eb; font-size: .68rem; line-height: 1.8; margin-top: 1.2rem; }
+.hero-model-wrap { position: relative; overflow: hidden; min-height: 520px; border: 3px solid #3fdf97; background: #3c3f5f; box-shadow: 10px 10px 0 #613e7b; }
+.hero-model-wrap::before { content: ""; position: absolute; inset: 0; background: radial-gradient(#55607e 1px, transparent 1px); background-size: 8px 8px; opacity: .45; }
+.hero-model-wrap::after { content: ""; position: absolute; inset: 14px; border: 2px dashed rgba(149, 201, 168, .36); pointer-events: none; }
+.retro-scene { position: absolute; inset: 0; z-index: 1; }
+.retro-scene canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+.retro-scene[data-webgl="unavailable"]::before { content: "★ ◼ ◆"; color: #f4c41b; font-family: "Press Start 2P", monospace; font-size: 3rem; position: absolute; top: 42%; left: 50%; transform: translate(-50%, -50%); }
+.hero-model-caption { position: absolute; z-index: 2; right: 25px; bottom: 24px; left: 25px; display: flex; justify-content: space-between; gap: 1rem; color: #c3e6eb; font-size: .62rem; line-height: 1.6; text-transform: uppercase; letter-spacing: .07em; }
+.tape-label { display: flex; justify-content: space-between; gap: 1rem; color: #c3e6eb; border-top: 3px solid #757e8a; font-size: .68rem; padding-block: .85rem; font-weight: 700; letter-spacing: .08em; }
+.home-market-tape { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 3px solid #757e8a; background: #3c3f5f; }
+.home-market-tape .snapshot-head, .home-market-tape .snapshot-foot { display: none; }
+.home-market-tape .snapshot-row { min-width: 0; padding: 1rem 1.15rem; border: 0; border-right: 1px solid #757e8a; }
+.home-market-tape .snapshot-row:last-of-type { border-right: 0; }
+.home-market-tape .snapshot-row strong { color: #c3e6eb; font-family: "Press Start 2P", monospace; font-size: .72rem; }
+.home-market-tape .snapshot-row span { color: #c3e6eb; font-size: 1.25rem; }
 .home-market-tape .snapshot-row .price-up { color: #3fdf97; }
 .home-market-tape .snapshot-row .price-down { color: #eb619f; }
-.section-heading h2, .about-section h2 { color: #c3e6eb; font-size: clamp(1.3rem, 2.4vw, 2rem); line-height: 1.6; letter-spacing: -.06em; }
-.section-heading > p, .about-copy { color: #c3e6eb; font-family: "VT323", monospace; font-size: 1.35rem; line-height: 1.25; }
+.section-heading h2, .about-section h2 { color: #c3e6eb; font-size: clamp(1.6rem, 3.2vw, 2.6rem); line-height: 1.5; letter-spacing: -.05em; }
+.section-heading > p, .about-copy { color: #c3e6eb; font-family: "VT323", monospace; font-size: 1.65rem; line-height: 1.3; }
 .preview-shell { border: 3px solid #757e8a; box-shadow: 9px 9px 0 #c66616; }
 .preview-toolbar { background: #3c3f5f; }
-.preview-tabs button { color: #c3e6eb; font-size: .59rem; }
+.preview-tabs button { color: #c3e6eb; font-size: .74rem; min-height: 44px; padding: .65rem 1.25rem; }
 .preview-tabs button.is-active { background: #f4c41b; color: #2a2839; }
-.preview-status { color: #c3e6eb; font-size: .5rem; }
+.preview-status { color: #c3e6eb; font-size: .64rem; }
 .status-dot { background: #f4c41b; }
 .about-section { border-top: 3px solid #757e8a; }
-.text-action { color: #f4c41b; font-size: .56rem; }
-.site-footer { color: #c3e6eb; border-top: 3px solid #757e8a; font-size: .52rem; }
+.text-action { color: #f4c41b; font-size: .72rem; }
+.site-footer { color: #c3e6eb; border-top: 3px solid #757e8a; font-size: .66rem; padding-block: 2rem; }
 .terminal-shell { background: #2a2839; }
 .terminal-shell .font-mono { font-family: "VT323", monospace; letter-spacing: .015em; }
 @media (max-width: 1000px) { .home-hero { min-height: 0; } }
-@media (max-width: 700px) { .home-hero h1 { font-size: clamp(1.8rem, 7.5vw, 2.55rem); line-height: 1.5; } .home-intro { font-size: 1.36rem; } .hero-model-wrap { min-height: 370px; box-shadow: 6px 6px 0 #613e7b; } .home-market-tape .snapshot-row:nth-of-type(-n+3) { border-bottom-color: #757e8a; } .hero-model-caption { font-size: .4rem; } .preview-status { display: none; } }
+@media (max-width: 700px) { .home-hero h1 { font-size: clamp(2rem, 8vw, 3rem); line-height: 1.4; } .home-intro { font-size: 1.5rem; } .hero-model-wrap { min-height: 370px; box-shadow: 6px 6px 0 #613e7b; } .home-market-tape .snapshot-row:nth-of-type(-n+3) { border-bottom-color: #757e8a; } .hero-model-caption { font-size: .52rem; } .preview-status { display: none; } }
 
 /* Terminal workspace */
 .terminal-shell { min-height: 100dvh; padding-bottom: 36px; background: #2a2839; color: #c3e6eb; }
