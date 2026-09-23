@@ -158,23 +158,27 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  // Handle column header click for sorting
+  // Handle column header click for sorting (3-state cycle: primary -> secondary -> clear)
   const handleSort = (col: SortColumn) => {
-    if (sortColumn === col) {
-      if (sortDirection === "desc") {
-        setSortDirection("asc");
+    if (sortColumn !== col) {
+      setSortColumn(col);
+      // Alphabetical defaults to asc (A-Z), numeric metrics default to desc (highest first)
+      setSortDirection(col === "symbol" ? "asc" : "desc");
+    } else {
+      const defaultDir: SortDirection = col === "symbol" ? "asc" : "desc";
+      const secondaryDir: SortDirection = defaultDir === "asc" ? "desc" : "asc";
+
+      if (sortDirection === defaultDir) {
+        setSortDirection(secondaryDir);
       } else {
-        // Toggle back to unsorted default
+        // Third click clears sort back to default
         setSortColumn(null);
         setSortDirection("desc");
       }
-    } else {
-      setSortColumn(col);
-      // Alphabetical defaults to asc, numerical metrics default to desc
-      setSortDirection(col === "symbol" ? "asc" : "desc");
     }
     setVisibleCount(25);
   };
+
 
 
 
@@ -247,11 +251,13 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
       const isId = sym.assetClass === "idx_stocks" || isIdxEquitySymbol(sym.id);
       const isFx = !isUs && !isId && (sym.assetClass === "fx" || isFxSymbol(sym.id));
 
-      const price = ticker?.price ?? 0;
+      const price = ticker?.price;
       const high = ticker?.high24h ?? price;
       const low = ticker?.low24h ?? price;
       const rangePercent =
-        high > low ? Math.min(100, Math.max(0, ((price - low) / (high - low)) * 100)) : 50;
+        price != null && high != null && low != null && high > low
+          ? Math.min(100, Math.max(0, ((price - low) / (high - low)) * 100))
+          : undefined;
 
       return {
         symbol: sym,
@@ -271,15 +277,15 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
   const sortedRows = useMemo(() => {
     if (!sortColumn) return rows;
     return [...rows].sort((a, b) => {
-      let valA: number | string | undefined | null;
-      let valB: number | string | undefined | null;
+      if (sortColumn === "symbol") {
+        const cmp = a.symbol.id.localeCompare(b.symbol.id);
+        return sortDirection === "asc" ? cmp : -cmp;
+      }
+
+      let valA: number | undefined | null;
+      let valB: number | undefined | null;
 
       switch (sortColumn) {
-        case "symbol":
-          return sortDirection === "asc"
-            ? a.symbol.id.localeCompare(b.symbol.id)
-            : b.symbol.id.localeCompare(a.symbol.id);
-
         case "price":
           valA = a.ticker?.price;
           valB = b.ticker?.price;
@@ -307,15 +313,19 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
 
         case "volume":
           // Forex symbols sort by spread/spreadPips instead of volume24h
-          valA = a.isFx ? (a.ticker?.spread ?? a.ticker?.spreadPips) : a.ticker?.volume24h;
-          valB = b.isFx ? (b.ticker?.spread ?? b.ticker?.spreadPips) : b.ticker?.volume24h;
+          valA = a.isFx ? (a.ticker?.spreadPips ?? a.ticker?.spread) : a.ticker?.volume24h;
+          valB = b.isFx ? (b.ticker?.spreadPips ?? b.ticker?.spread) : b.ticker?.volume24h;
           break;
       }
 
       // Null-safety: always push undefined/null/non-finite values to the bottom
-      const aNull = valA == null || !Number.isFinite(valA as number);
-      const bNull = valB == null || !Number.isFinite(valB as number);
-      if (aNull && bNull) return a.symbol.id.localeCompare(b.symbol.id);
+      const aNull = valA == null || !Number.isFinite(valA);
+      const bNull = valB == null || !Number.isFinite(valB);
+
+      if (aNull && bNull) {
+        const cmp = a.symbol.id.localeCompare(b.symbol.id);
+        return sortDirection === "asc" ? cmp : -cmp;
+      }
       if (aNull) return 1;
       if (bNull) return -1;
 
@@ -678,9 +688,9 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
               visibleRows.map(({ symbol, ticker, direction, isStarred, isSelected, rangePercent, isFx, isUs, isId }) => {
                 const isPositive = (ticker?.changePercent24h ?? 0) >= 0;
 
-                let formattedPrice = `$${formatPrice(ticker?.price)}`;
-                let highFormatted = `$${formatPrice(ticker?.high24h)}`;
-                let lowFormatted = `$${formatPrice(ticker?.low24h)}`;
+                let formattedPrice = ticker?.price != null ? `$${formatPrice(ticker.price)}` : "—";
+                let highFormatted = ticker?.high24h != null ? `$${formatPrice(ticker.high24h)}` : "—";
+                let lowFormatted = ticker?.low24h != null ? `$${formatPrice(ticker.low24h)}` : "—";
 
                 if (isFx) {
                   formattedPrice = formatFxPrice(ticker?.price, symbol.id, symbol.displayDecimals);
@@ -826,7 +836,7 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
                                 ? "bg-gradient-to-r from-emerald-500 to-emerald-400 shadow-[0_0_8px_rgba(63,223,151,0.4)]"
                                 : "bg-gradient-to-r from-rose-500 to-rose-400 shadow-[0_0_8px_rgba(235,97,159,0.4)]"
                             )}
-                            style={{ width: `${rangePercent}%` }}
+                            style={{ width: `${rangePercent ?? 50}%` }}
                           />
                         </div>
                         <div className="flex justify-between text-[9px] text-slate-500 font-mono">
