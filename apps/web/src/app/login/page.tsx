@@ -66,18 +66,15 @@ function LoginForm() {
           className="login-content"
         >
           <div className="login-identity">
-            <span
-              className="inline-flex items-center justify-center font-serif font-bold text-base border-2 border-[#c3e6eb] text-[#c3e6eb] w-8 h-8 rounded-sm"
-              aria-hidden="true"
-            >
-              G<span className="text-[#f4c41b]">.</span>
+            <span className="brand-mark" aria-hidden="true">
+              G<span>.</span>
             </span>
             <span>
               Gorengan <strong>Index</strong>
             </span>
           </div>
 
-          <p className="eyebrow text-xs uppercase tracking-widest text-[#f4c41b] font-mono mb-1.5">
+          <p className="eyebrow">
             Your workspace
           </p>
 
@@ -149,7 +146,7 @@ function LoginForm() {
             what moves.
           </p>
           <div className="login-aside-rule" />
-          <span className="text-[11px] text-[#c3e6eb]/70 tracking-wider">
+          <span className="login-aside-tags">
             CHARTS &nbsp;·&nbsp; WATCHLIST &nbsp;·&nbsp; NEWS
           </span>
         </motion.div>
