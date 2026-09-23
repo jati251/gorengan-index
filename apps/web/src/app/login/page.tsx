@@ -53,20 +53,20 @@ function LoginForm() {
   return (
     <main className="login-page h-[100dvh] max-h-[100dvh] w-full overflow-hidden select-none">
       {/* Left panel: Auth shell */}
-      <div className="login-shell flex flex-col justify-between h-full max-h-[100dvh] overflow-hidden py-4 sm:py-6 px-6 sm:px-10 md:px-14">
-        <Link href="/" className="login-back hover:text-white transition-colors self-start">
-          <ArrowLeft className="w-4 h-4" />
+      <div className="login-shell flex flex-col justify-between h-full max-h-[100dvh] overflow-hidden py-3 sm:py-5 px-5 sm:px-8 md:px-12">
+        <Link href="/" className="login-back hover:text-white transition-colors self-start inline-flex items-center gap-1.5 text-xs">
+          <ArrowLeft className="w-3.5 h-3.5" />
           <span>Back to markets</span>
         </Link>
 
         <motion.div
-          initial={{ opacity: 0, y: 12 }}
+          initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-          className="login-content my-auto mx-auto w-full max-w-[410px] flex flex-col justify-center"
+          className="login-content my-auto mx-auto w-full max-w-[430px] flex flex-col justify-center"
         >
-          <div className="login-identity mb-2.5 sm:mb-4">
-            <span className="brand-mark inline-flex items-center justify-center font-bold text-base border border-current mr-2 w-7 h-7 rounded-sm" aria-hidden="true">
+          <div className="login-identity mb-2 sm:mb-3">
+            <span className="brand-mark inline-flex items-center justify-center font-bold text-sm border border-current mr-2 w-6 h-6 rounded-sm" aria-hidden="true">
               G<span className="text-[#f4c41b]">.</span>
             </span>
             <span className="text-sm sm:text-base font-bold tracking-tight">
@@ -74,16 +74,16 @@ function LoginForm() {
             </span>
           </div>
 
-          <p className="eyebrow text-[11px] sm:text-xs uppercase tracking-widest text-[#f4c41b] font-mono mb-1">
+          <p className="eyebrow text-[11px] uppercase tracking-widest text-[#f4c41b] font-mono mb-1">
             Your workspace
           </p>
 
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-normal leading-[1.04] tracking-tight text-[#c3e6eb] mb-2">
+          <h1 className="font-normal tracking-tight text-[#c3e6eb] mb-1.5">
             Pick up where<br />
             <em className="text-[#f4c41b] not-italic">the market is.</em>
           </h1>
 
-          <p className="login-description text-xs sm:text-sm text-[#c3e6eb]/80 leading-normal my-2 sm:my-3 max-w-[370px]">
+          <p className="login-description text-xs sm:text-sm text-[#c3e6eb]/80 leading-snug my-1.5 sm:my-2 max-w-[380px]">
             Sign in to open your watchlist, real-time charts, and market news in the institutional terminal.
           </p>
 
@@ -94,7 +94,7 @@ function LoginForm() {
                 initial={{ opacity: 0, height: 0, y: -4 }}
                 animate={{ opacity: 1, height: "auto", y: 0 }}
                 exit={{ opacity: 0, height: 0, y: -4 }}
-                className="mb-2.5 p-2 rounded bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-mono flex items-center gap-2"
+                className="mb-2 p-1.5 rounded bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-mono flex items-center gap-2"
                 role="alert"
               >
                 <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-400" />
@@ -109,7 +109,7 @@ function LoginForm() {
             disabled={isLoading}
             whileHover={{ scale: 1.01 }}
             whileTap={{ scale: 0.99 }}
-            className="login-google cursor-pointer transition-colors shadow-sm disabled:cursor-wait mt-1 w-full"
+            className="login-google cursor-pointer transition-transform disabled:cursor-wait mt-1 w-full"
           >
             <div className="flex items-center gap-2.5">
               {isLoading ? (
@@ -117,11 +117,11 @@ function LoginForm() {
               ) : (
                 <GoogleIcon />
               )}
-              <span className="font-semibold text-sm">
-                {isLoading ? "Connecting to Google…" : "Continue with Google"}
+              <span>
+                {isLoading ? "Connecting…" : "Continue with Google"}
               </span>
             </div>
-            <ArrowRight className="w-4 h-4 text-[#2a2839]/70" />
+            <ArrowRight className="w-3.5 h-3.5 text-[#2a2839]/80" />
           </motion.button>
 
           <p className="login-footnote text-[10px] sm:text-[11px] text-[#c3e6eb]/60 font-mono mt-2">
@@ -135,20 +135,21 @@ function LoginForm() {
       </div>
 
       {/* Right panel: Editorial aside split */}
-      <div className="login-aside flex items-center justify-center p-6 lg:p-12 bg-[#3c3f5f] border-l border-[#55607e] overflow-hidden" aria-hidden="true">
+      <div className="login-aside flex items-center justify-center p-5 lg:p-10 bg-[#3c3f5f] border-l border-[#55607e] overflow-hidden" aria-hidden="true">
         <motion.div
-          initial={{ opacity: 0, x: 16 }}
+          initial={{ opacity: 0, x: 14 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.45, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
-          className="login-aside-inner w-full max-w-[460px]"
+          className="login-aside-inner w-full max-w-[440px]"
         >
-          <span className="text-[#f4c41b] text-xs font-bold font-mono tracking-widest block">
+          <span className="text-[#f4c41b] text-[11px] font-bold font-mono tracking-widest block">
             MARKET / 01
           </span>
-          <p className="text-2xl lg:text-4xl leading-[1.06] text-[#c3e6eb] my-3 lg:my-5">
-            One place to watch what moves.
+          <p className="text-[#c3e6eb]">
+            One place to watch<br />
+            what moves.
           </p>
-          <div className="login-aside-rule h-px bg-[#757e8a] mb-3.5" />
+          <div className="login-aside-rule h-px bg-[#757e8a]" />
           <span className="text-[10px] sm:text-[11px] text-[#c3e6eb]/70 font-mono tracking-wider">
             CHARTS &nbsp;·&nbsp; WATCHLIST &nbsp;·&nbsp; NEWS
           </span>
