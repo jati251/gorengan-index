@@ -35,21 +35,50 @@ const TapeItem = React.memo(function TapeItem({ ticker, direction, selected, cop
       tabIndex={copy === 0 ? 0 : -1}
       onClick={() => onSelect(ticker.symbol)}
       className={clsx(
-        "flex items-center gap-2 px-2.5 py-1 rounded-md text-[11px] cursor-pointer shrink-0 border",
-        direction === "up" ? "bg-emerald-500/25 border-emerald-400" :
-        direction === "down" ? "bg-rose-500/25 border-rose-400" :
-        selected ? "bg-emerald-500/15 border-emerald-500/50 text-emerald-300 font-bold" :
-        "bg-white/[0.025] hover:bg-white/[0.08] border-white/[0.06] hover:border-white/[0.18] text-slate-300"
+        "relative flex items-center gap-2 px-2.5 py-1 rounded-md text-[11px] cursor-pointer shrink-0 border font-mono transition-[background,border-color,box-shadow,color] duration-300",
+        direction === "up" && "tape-glow-up",
+        direction === "down" && "tape-glow-down",
+        direction === "neutral" && (
+          selected
+            ? "bg-emerald-500/15 border-emerald-500/50 text-emerald-300 font-bold shadow-[0_0_12px_rgba(63,223,151,0.25)]"
+            : "bg-white/[0.03] hover:bg-white/[0.08] border-white/[0.06] hover:border-white/[0.18] text-slate-300"
+        )
       )}
       title={"Select " + ticker.symbol}
     >
       <span className="font-semibold text-slate-200">{ticker.symbol}</span>
-      <span key={ticker.price} data-direction={direction} className={clsx("price-pixel-flash font-medium tabular-nums flex items-center gap-0.5 px-1", direction === "up" ? "font-bold" : direction === "down" ? "font-bold" : "text-white")}>
-        {price}
-        {direction === "up" && <span className="text-[9px] text-emerald-300 font-extrabold">▲</span>}
-        {direction === "down" && <span className="text-[9px] text-rose-300 font-extrabold">▼</span>}
+      <span
+        className={clsx(
+          "font-semibold tabular-nums flex items-center gap-1 transition-colors duration-200",
+          direction === "up" ? "text-emerald-300 drop-shadow-[0_0_8px_rgba(63,223,151,0.95)]" :
+          direction === "down" ? "text-rose-300 drop-shadow-[0_0_8px_rgba(235,97,159,0.95)]" :
+          "text-white"
+        )}
+      >
+        <span>{price}</span>
+        {/* Fixed-width arrow slot: width is permanently stable so card width NEVER shifts */}
+        <span
+          aria-hidden="true"
+          className={clsx(
+            "w-2.5 h-2.5 inline-flex items-center justify-center shrink-0 text-[8px] font-black leading-none transition-all duration-300",
+            direction === "up"
+              ? "text-emerald-300 opacity-100 scale-100 drop-shadow-[0_0_6px_#3fdf97]"
+              : direction === "down"
+                ? "text-rose-300 opacity-100 scale-100 drop-shadow-[0_0_6px_#eb619f]"
+                : "opacity-0 scale-50"
+          )}
+        >
+          {direction === "down" ? "▼" : "▲"}
+        </span>
       </span>
-      <span className={clsx("font-semibold tabular-nums text-[10px] px-1.5 py-0.2 rounded border", isPositive ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/25" : "text-rose-400 bg-rose-500/10 border-rose-500/25")}>
+      <span
+        className={clsx(
+          "font-semibold tabular-nums text-[10px] px-1.5 py-0.2 rounded border transition-colors duration-200",
+          isPositive
+            ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/25"
+            : "text-rose-400 bg-rose-500/10 border-rose-500/25"
+        )}
+      >
         {formatPercent(ticker.changePercent24h)}
       </span>
     </button>
@@ -93,24 +122,42 @@ export function BottomStickyTickerTape() {
     const content = contentRef.current;
     if (!content || tickerList.length === 0) return;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+    const updateWidth = () => {
+      const half = content.scrollWidth / 2;
+      if (half > 0 && Math.abs(widthRef.current - half) > 1) {
+        widthRef.current = half;
+      }
+    };
+
+    updateWidth();
     const observer = new ResizeObserver(() => {
-      widthRef.current = content.scrollWidth / 2;
-      if (widthRef.current > 0) offsetRef.current %= widthRef.current;
+      updateWidth();
     });
     observer.observe(content);
-    widthRef.current = content.scrollWidth / 2;
+
     let frame = 0;
     let previousTime = 0;
+    const SPEED = 36; // px per second
+
     const animate = (time: number) => {
       if (previousTime && !pausedRef.current && !document.hidden && !reducedMotion.matches && widthRef.current > 0) {
-        offsetRef.current = (offsetRef.current + 36 * Math.min((time - previousTime) / 1000, 0.05)) % widthRef.current;
+        const delta = Math.min((time - previousTime) / 1000, 0.05);
+        offsetRef.current += SPEED * delta;
+        if (offsetRef.current >= widthRef.current) {
+          offsetRef.current -= widthRef.current;
+        }
         content.style.transform = `translate3d(${-offsetRef.current}px, 0, 0)`;
       }
       previousTime = time;
       frame = requestAnimationFrame(animate);
     };
+
     frame = requestAnimationFrame(animate);
-    return () => { cancelAnimationFrame(frame); observer.disconnect(); };
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
   }, [tickerList.length]);
 
   return (

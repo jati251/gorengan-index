@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
-import { Search, Star, TrendingUp, TrendingDown } from "lucide-react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
+import { Search, Star, TrendingUp, TrendingDown, X } from "lucide-react";
 import { motion } from "framer-motion";
 import { clsx } from "clsx";
 import type { MarketSymbol } from "@gorengan/shared";
@@ -32,12 +32,39 @@ const CATEGORIES: { id: MarketCategory; label: string; icon: string }[] = [
 
 export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarProps) {
   const [search, setSearch] = useState("");
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState<"favorites" | "all">("favorites");
   const [trendFilter, setTrendFilter] = useState<"all" | "gainers" | "losers">("all");
 
   const tickers = useMarketStore((s) => s.tickers);
   const priceDirections = useMarketStore((s) => s.priceDirections);
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
+
+  // Close suggestion dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Compute search suggestions across all symbols
+  const suggestions = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return [];
+    return symbols
+      .filter(
+        (s) =>
+          s.id.toLowerCase().includes(q) ||
+          s.name.toLowerCase().includes(q) ||
+          s.base.toLowerCase().includes(q)
+      )
+      .slice(0, 6);
+  }, [symbols, search]);
   const setSelectedSymbol = useMarketStore((s) => s.setSelectedSymbol);
   const selectedCategory = useMarketStore((s) => s.selectedCategory);
   const setSelectedCategory = useMarketStore((s) => s.setSelectedCategory);
@@ -162,16 +189,85 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
           })}
         </div>
 
-        {/* Search Input */}
-        <div className="relative">
-          <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
+        {/* Search Input with Suggestion Dropdown */}
+        <div ref={searchContainerRef} className="relative">
+          <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400 pointer-events-none" />
           <input
             type="text"
             placeholder={searchPlaceholder}
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-[#2a2839] border border-white/[0.08] focus:border-emerald-500/50 rounded-lg px-2.5 py-1.5 pl-8 text-xs text-slate-100 placeholder-slate-500 focus:outline-hidden  transition-all "
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setIsDropdownOpen(true);
+            }}
+            onFocus={() => {
+              if (search.trim().length > 0) setIsDropdownOpen(true);
+            }}
+            className="w-full bg-[#2a2839] border border-white/[0.08] focus:border-emerald-500/50 rounded-lg px-2.5 py-1.5 pl-8 pr-7 text-xs text-slate-100 placeholder-slate-500 focus:outline-hidden transition-all"
           />
+          {search && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearch("");
+                setIsDropdownOpen(false);
+              }}
+              className="absolute right-2 top-2 text-slate-400 hover:text-white"
+              title="Clear"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          {/* Suggestion Dropdown */}
+          {isDropdownOpen && search.trim().length > 0 && (
+            <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-[#2a2839] border border-white/[0.14] rounded-lg shadow-2xl backdrop-blur-xl overflow-hidden font-mono text-left">
+              <div className="px-2.5 py-1 bg-[#3c3f5f]/90 border-b border-white/[0.08] text-[9px] uppercase tracking-wider text-slate-400 font-semibold flex items-center justify-between">
+                <span>Matching Markets</span>
+                <span>{suggestions.length} results</span>
+              </div>
+              {suggestions.length === 0 ? (
+                <div className="p-2.5 text-center text-xs text-slate-400 italic">
+                  No matching symbol
+                </div>
+              ) : (
+                <div className="max-h-[220px] overflow-y-auto divide-y divide-white/[0.04]">
+                  {suggestions.map((sym) => {
+                    const ticker = tickers[sym.id];
+                    const isPositive = (ticker?.changePercent24h ?? 0) >= 0;
+                    return (
+                      <button
+                        key={sym.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedSymbol(sym.id);
+                          onSelectSymbol?.(sym.id);
+                          setIsDropdownOpen(false);
+                          setSearch("");
+                        }}
+                        className="w-full text-left px-2.5 py-1.5 flex items-center justify-between gap-1.5 hover:bg-white/[0.06] transition-colors cursor-pointer"
+                      >
+                        <div className="min-w-0">
+                          <div className="font-bold text-xs text-emerald-300">{sym.id}</div>
+                          <div className="text-[10px] text-slate-400 truncate">{sym.name}</div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span
+                            className={clsx(
+                              "text-[10px] px-1 py-0.2 rounded font-semibold tabular-nums",
+                              isPositive ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
+                            )}
+                          >
+                            {formatPercent(ticker?.changePercent24h)}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Watchlist & All Tabs with accurate independent counts */}

@@ -60,7 +60,7 @@
 
 **Gorengan Index** adalah platform terminal pasar finansial *real-time* berskala institusional yang dirancang untuk performa tinggi, latensi sub-detik, dan kemandirian infrastruktur (*self-hosted*). 
 
-Sistem ini melacak **72 instrumen finansial lintas kelas aset** (Cryptocurrency, Foreign Exchange / Forex, Tokenized Commodities/Metals, US Blue-Chip Equities, dan Saham Bursa Efek Indonesia / IDX) dengan pembaruan grafik hingga resolusi **1 detik (1-second OHLCV)**.
+Sistem ini melacak **108 instrumen finansial lintas kelas aset** (Cryptocurrency, Foreign Exchange / Forex, Tokenized Commodities/Metals, US Blue-Chip Equities, dan Saham Bursa Efek Indonesia / IDX) dengan pembaruan grafik hingga resolusi **1 detik (1-second OHLCV)**.
 
 ### Prinsip Desain:
 1. **Zero-SaaS-Cost Dependency**: Mengonsumsi langsung umpan data pasar (*native exchange feeds*) tanpa bergantung pada produk SaaS berbayar atau kuota bulanan berbatas (seperti CoinGecko, CoinMarketCap, TwelveData, Polygon, atau Alpha Vantage).
@@ -106,7 +106,7 @@ Antarmuka Gorengan Index dirancang dengan standar estetika profesional (*Cyberpu
 ## 🚀 Fitur Utama
 
 - **Real-Time Candlestick Charting**: Visualisasi candlestick interaktif berkecepatan tinggi menggunakan TradingView Lightweight Charts v5 dengan timeframe **1 detik (1s)**, 1m, 5m, 15m, 1h, dan 1d.
-- **Multi-Asset Universe Coverage**: 72 instrumen mencakup Kripto, Forex mayor/minor, Emas tokenisasi, Saham AS (S&P 500 & Nasdaq-100), serta Saham Indonesia (LQ45 & Blue Chip IDX).
+- **Multi-Asset Universe Coverage**: 108 instrumen mencakup Kripto, Forex mayor/minor, Emas tokenisasi, Saham AS (S&P 500 & Nasdaq-100), serta Saham Indonesia (LQ45 & Blue Chip IDX).
 - **Market Breadth & Realtime Intelligence**:
   - Pelacak rasio kenaikan/penurunan pasar (*Advancers, Decliners, Unchanged*).
   - Statistik volume harian dan volatilitas harga 24 jam.
@@ -123,17 +123,17 @@ Antarmuka Gorengan Index dirancang dengan standar estetika profesional (*Cyberpu
 
 ---
 
-## 🌐 Universe Instrumen (72 Assets)
+## 🌐 Universe Instrumen (108 Assets)
 
-Platform melacak 72 instrumen pasar terverifikasi dengan data kanonikal:
+Platform melacak 108 instrumen pasar terverifikasi dengan data kanonikal:
 
 | Kelas Aset | Total Simbol | Simbol Contoh | Format Simbol | Basis Harga Candle | Provider Asal |
 |---|---|---|---|---|---|
-| **Cryptocurrency** | 20 | Bitcoin, Ethereum, Solana, BNB, XRP, Dogecoin, Cardano, Sui, Avalanche, Chainlink | `BTC-USDT`, `ETH-USDT`, `SOL-USDT` | Trade Price | Binance Native WebSocket |
-| **Foreign Exchange (Forex)** | 16 | USD/IDR, EUR/USD, USD/JPY, GBP/USD, AUD/USD, USD/CAD, USD/CHF, EUR/GBP, EUR/JPY, GBP/JPY | `USD/IDR`, `EUR/USD`, `USD/JPY` | Mid Price (Bid/Ask) | Interbank FX Feed / Yahoo Finance |
+| **Cryptocurrency** | 24 | Bitcoin, Ethereum, Solana, BNB, XRP, Dogecoin, Cardano, Sui, Avalanche, Chainlink, Arbitrum, Optimism, Render, Injective, Celestia, Aave | `BTC-USDT`, `ETH-USDT`, `SOL-USDT`, `ARB-USDT` | Trade Price | Binance Native WebSocket |
+| **Foreign Exchange (Forex)** | 24 | USD/IDR, EUR/USD, USD/JPY, GBP/USD, AUD/USD, USD/CAD, USD/CHF, EUR/GBP, GBP/CHF, EUR/CHF, NZD/JPY, USD/SGD, USD/MYR, EUR/AUD | `USD/IDR`, `EUR/USD`, `USD/JPY`, `USD/SGD` | Mid Price (Bid/Ask) | Interbank FX Feed / Yahoo Finance |
 | **Tokenized Metals** | 2 | Paxos Gold, Tether Gold | `PAXG-USDT`, `XAUT-USDT` | Trade Price | Binance Spot Stream |
-| **US Equities** | 16 | Apple, Microsoft, NVIDIA, Amazon, Alphabet, Meta, Tesla, AMD, Netflix, Intel | `US:AAPL`, `US:NVDA`, `US:MSFT` | Trade Price | US Consolidated Tape / Alpaca IEX |
-| **Indonesian Equities (IDX)** | 18 | Bank Central Asia, Bank Rakyat Indonesia, Bank Mandiri, Telkom, Astra, Indofood, GoTo, Amman Mineral | `ID:BBCA`, `ID:BBRI`, `ID:GOTO` | Trade Price | Bursa Efek Indonesia (IDX Delayed Feed) |
+| **US Equities** | 30 | Apple, Microsoft, NVIDIA, Amazon, Alphabet, Meta, Tesla, AMD, Netflix, Intel, Palantir, Super Micro, Disney, Uber, TSMC, Adobe, Salesforce | `US:AAPL`, `US:NVDA`, `US:MSFT`, `US:PLTR` | Trade Price | US Consolidated Tape / Alpaca IEX |
+| **Indonesian Equities (IDX)** | 28 | Bank Central Asia, Bank Rakyat Indonesia, Bank Mandiri, Telkom, Astra, Indofood, GoTo, Amman Mineral, PGAS, Antam, Medco, Semen ID, UNTR | `ID:BBCA`, `ID:BBRI`, `ID:GOTO`, `ID:ANTM` | Trade Price | Bursa Efek Indonesia (IDX Delayed Feed) |
 
 ---
 

@@ -217,7 +217,6 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
     // Deduplicate by second timestamp to satisfy Lightweight Charts strict monotonic ordering
     const uniqueCandles = new Map<number, CandlestickData<Time>>();
     const uniqueVolumes = new Map<number, HistogramData<Time>>();
-    const closeData: { time: Time; close: number }[] = [];
 
     for (const c of sorted) {
       const time = toLocalChartTime(c.openTime);
@@ -234,8 +233,6 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
         value: c.volume,
         color: c.close >= c.open ? CHART_COLORS.volumeUp : CHART_COLORS.volumeDown,
       });
-
-      closeData.push({ time: time as Time, close: c.close });
     }
 
     const formattedCandles = Array.from(uniqueCandles.values()).sort(
@@ -244,6 +241,12 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
     const formattedVolumes = Array.from(uniqueVolumes.values()).sort(
       (a, b) => Number(a.time) - Number(b.time)
     );
+
+    // Derived from strictly sorted and unique candle list to guarantee monotonic EMA times
+    const closeData = formattedCandles.map((c) => ({
+      time: c.time,
+      close: c.close,
+    }));
 
     try {
       candleSeriesRef.current.setData(formattedCandles);
@@ -257,23 +260,28 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
         ema50SeriesRef.current.setData(calculateEMA(closeData, 50));
       }
 
-      // Prevent single fat candle stretching:
-      // If we have >= 30 candles, fit content; otherwise maintain standard barSpacing
+      // Prevent single fat candle stretching while keeping candles centered and in view
       if (formattedCandles.length >= 30) {
         chartRef.current?.timeScale().fitContent();
       } else {
-        chartRef.current?.timeScale().applyOptions({ barSpacing: 9 });
+        chartRef.current?.timeScale().applyOptions({ barSpacing: 12 });
       }
+      chartRef.current?.timeScale().scrollToPosition(0, false);
     } catch (err) {
       console.warn("Error setting candle data:", err);
     }
   }, [candlesData]);
 
-  // Dynamically toggle secondsVisible when switching to sub-minute timeframes
+  // Dynamically toggle secondsVisible and re-align view when switching to sub-minute timeframes
   useEffect(() => {
     if (!chartRef.current) return;
     chartRef.current.timeScale().applyOptions({
       secondsVisible: isSubMinuteTimeframe(selectedTimeframe),
+    });
+    // Immediately fit and scroll to real time so 1s chart does not appear empty/off-screen
+    requestAnimationFrame(() => {
+      chartRef.current?.timeScale().fitContent();
+      chartRef.current?.timeScale().scrollToPosition(0, false);
     });
   }, [selectedTimeframe]);
 

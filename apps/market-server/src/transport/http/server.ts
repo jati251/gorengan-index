@@ -8,6 +8,7 @@ import type {
   CandlesResponse,
   Timeframe,
 } from "@gorengan/shared";
+import { timeframeToMs } from "@gorengan/shared";
 import type { CandleRepository } from "../../persistence/candle-repository.js";
 import type { MarketState } from "../../market/market-state.js";
 import type { CandleEngine } from "../../market/candle-engine.js";
@@ -23,7 +24,7 @@ export function createHttpServer(
 ): http.Server {
   const startTime = Date.now();
 
-  const server = http.createServer((req: IncomingMessage, res: ServerResponse) => {
+  const server = http.createServer(async (req: IncomingMessage, res: ServerResponse) => {
     // CORS headers
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
@@ -117,7 +118,30 @@ export function createHttpServer(
         const to = toStr ? parseInt(toStr, 10) : undefined;
         const limit = limitStr ? parseInt(limitStr, 10) : 500;
 
-        const candles = repository.getCandles(symbol, timeframe, from, to, limit);
+        let candles = repository.getCandles(symbol, timeframe, from, to, limit);
+
+        // Fallback for sub-minute timeframes (1s, 5s, 15s) when repository has few candles
+        if (
+          candles.length < 30 &&
+          (timeframe === "1s" || timeframe === "5s" || timeframe === "15s" || timeframe === "30s")
+        ) {
+          try {
+            const now = Date.now();
+            const dur = timeframeToMs(timeframe);
+            const fallbackFrom = from ?? (now - limit * dur);
+            const liveKlines = await provider.getHistoricalCandles({
+              symbol,
+              timeframe: "1s",
+              from: fallbackFrom,
+              to: to ?? now,
+            });
+            if (liveKlines.length > 0) {
+              candles = liveKlines.slice(-limit);
+            }
+          } catch (err) {
+            logger.warn({ err, symbol }, "Could not fetch fallback 1s klines from provider");
+          }
+        }
 
         const body: CandlesResponse = {
           symbol,

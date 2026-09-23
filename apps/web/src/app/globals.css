@@ -470,6 +470,44 @@ button { cursor: pointer; }
   55% { opacity: 1; transform: translateY(-2px); }
   100% { opacity: 0; transform: translateY(-5px); }
 }
+
+/* Spectacular Neon Cyber Glow for Bottom Ticker Tape */
+@keyframes tape-beacon-up {
+  0% {
+    box-shadow: 0 0 10px rgba(63, 223, 151, 0.5), inset 0 0 8px rgba(63, 223, 151, 0.25);
+  }
+  40% {
+    box-shadow: 0 0 18px rgba(63, 223, 151, 0.8), 0 0 32px rgba(63, 223, 151, 0.4), inset 0 0 14px rgba(63, 223, 151, 0.35);
+  }
+  100% {
+    box-shadow: 0 0 12px rgba(63, 223, 151, 0.6), inset 0 0 10px rgba(63, 223, 151, 0.25);
+  }
+}
+
+@keyframes tape-beacon-down {
+  0% {
+    box-shadow: 0 0 10px rgba(235, 97, 159, 0.5), inset 0 0 8px rgba(235, 97, 159, 0.25);
+  }
+  40% {
+    box-shadow: 0 0 18px rgba(235, 97, 159, 0.8), 0 0 32px rgba(235, 97, 159, 0.4), inset 0 0 14px rgba(235, 97, 159, 0.35);
+  }
+  100% {
+    box-shadow: 0 0 12px rgba(235, 97, 159, 0.6), inset 0 0 10px rgba(235, 97, 159, 0.25);
+  }
+}
+
+.tape-glow-up {
+  background: radial-gradient(ellipse at 50% 50%, rgba(63, 223, 151, 0.3) 0%, rgba(42, 40, 57, 0.95) 100%) !important;
+  border-color: rgba(63, 223, 151, 0.85) !important;
+  animation: tape-beacon-up 850ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.tape-glow-down {
+  background: radial-gradient(ellipse at 50% 50%, rgba(235, 97, 159, 0.3) 0%, rgba(42, 40, 57, 0.95) 100%) !important;
+  border-color: rgba(235, 97, 159, 0.85) !important;
+  animation: tape-beacon-down 850ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 .price-pixel-flash { position: relative; isolation: isolate; }
 .price-pixel-flash[data-direction="up"] { color: #3fdf97; background-color: #2a2839; border-color: #3fdf97; }
 .price-pixel-flash[data-direction="down"] { color: #eb619f; background-color: #2a2839; border-color: #eb619f; }

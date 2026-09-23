@@ -272,6 +272,12 @@ export class BinanceProvider extends EventEmitter implements MarketProvider {
 
   private mapTimeframeToBinance(tf: Timeframe): string {
     switch (tf) {
+      case "1s":
+        return "1s";
+      case "5s":
+      case "15s":
+      case "30s":
+        return "1s";
       case "1m":
         return "1m";
       case "5m":

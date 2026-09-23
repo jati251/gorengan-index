@@ -20,7 +20,31 @@ export default function LandingPage() {
   const { data: symbolsData } = useSymbolsQuery();
   useMarketsQuery();
   const symbols = symbolsData?.symbols || DEFAULT_SYMBOLS;
-  const symbolIds = useMemo(() => symbols.map((symbol) => symbol.id), [symbols]);
+
+  // Curate 2 representative items per asset class category for landing page
+  const landingSymbols = useMemo(() => {
+    const counts: Record<string, number> = {
+      crypto: 0,
+      fx: 0,
+      us_stocks: 0,
+      idx_stocks: 0,
+    };
+    const result: typeof symbols = [];
+
+    for (const sym of symbols) {
+      let cat = sym.assetClass as string;
+      if (cat === "stocks" || cat === "equity") {
+        cat = sym.id.startsWith("ID:") ? "idx_stocks" : "us_stocks";
+      }
+      if (counts[cat] !== undefined && counts[cat] < 2) {
+        result.push(sym);
+        counts[cat]++;
+      }
+    }
+    return result.length > 0 ? result : symbols.slice(0, 8);
+  }, [symbols]);
+
+  const symbolIds = useMemo(() => landingSymbols.map((symbol) => symbol.id), [landingSymbols]);
   useTerminalWebSocket(symbolIds, { isThrottled: !isAuthenticated, throttleMs: 5000 });
 
   const selectedSymbol = useMarketStore((state) => state.selectedSymbol);
@@ -64,10 +88,10 @@ export default function LandingPage() {
         </section>
 
 
-        <div className="tape-label"><span>THE BOARD</span><span>01 — 04 / {symbols.length.toString().padStart(2, "0")}</span></div>
+        <div className="tape-label"><span>THE BOARD</span><span>01 — {landingSymbols.length.toString().padStart(2, "0")} / {landingSymbols.length.toString().padStart(2, "0")}</span></div>
           <div className="home-market-tape" aria-label="Market snapshot">
-            <div className="snapshot-head"><span>From the board</span><span>{symbols.length} markets</span></div>
-            {symbols.slice(0, 4).map((symbol) => {
+            <div className="snapshot-head"><span>Featured Markets (2 per Category)</span><span>{landingSymbols.length} assets</span></div>
+            {landingSymbols.map((symbol) => {
               const ticker = tickers[symbol.id];
               const change = ticker?.changePercent24h;
               return (
@@ -103,7 +127,17 @@ export default function LandingPage() {
                   <Card className="preview-chart"><ChartHeader /><div className="h-[350px] sm:h-[450px]"><TradingViewChart key={selectedSymbol} symbol={selectedSymbol} className="h-full w-full" /></div></Card>
                   <aside className="preview-aside" aria-label="Market statistics"><div className="preview-aside-title"><BarChart3 className="size-4" /> Market snapshot</div><MarketStats /></aside>
                 </div>
-              ) : <Card className="preview-table"><MarketOverviewTable symbols={symbols} /></Card>}
+              ) : (
+                <div className="flex flex-col gap-3">
+                  <Card className="preview-table"><MarketOverviewTable symbols={landingSymbols} /></Card>
+                  <div className="flex items-center justify-between px-2 py-1 text-xs font-mono text-slate-400">
+                    <span>Showing 2 featured assets per asset class ({landingSymbols.length} total)</span>
+                    <Link href="/terminal" className="text-emerald-400 hover:text-emerald-300 inline-flex items-center gap-1 font-semibold transition-colors cursor-pointer">
+                      Open Terminal for all {symbols.length} markets <ArrowRight className="size-3.5" />
+                    </Link>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </section>
