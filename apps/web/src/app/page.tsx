@@ -19,7 +19,20 @@ export default function LandingPage() {
   const isAuthenticated = status === "authenticated";
   const { data: symbolsData } = useSymbolsQuery();
   useMarketsQuery();
-  const symbols = symbolsData?.symbols || DEFAULT_SYMBOLS;
+  const serverSymbols = symbolsData?.symbols;
+  const symbols = useMemo(() => {
+    if (!serverSymbols || serverSymbols.length === 0) {
+      return DEFAULT_SYMBOLS;
+    }
+    const serverMap = new Map(serverSymbols.map((s) => [s.id, s]));
+    const merged = [...serverSymbols];
+    for (const defaultSym of DEFAULT_SYMBOLS) {
+      if (!serverMap.has(defaultSym.id)) {
+        merged.push(defaultSym);
+      }
+    }
+    return merged;
+  }, [serverSymbols]);
 
   // Curate 2 representative items per asset class category for landing page
   const landingSymbols = useMemo(() => {

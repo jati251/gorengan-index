@@ -33,7 +33,20 @@ export default function TerminalPage() {
   const isCompact = useSyncExternalStore(subscribeCompact, getCompact, getServerCompact);
   const { data: symbolsData } = useSymbolsQuery();
   useMarketsQuery();
-  const symbols = symbolsData?.symbols || DEFAULT_SYMBOLS;
+  const serverSymbols = symbolsData?.symbols;
+  const symbols = React.useMemo(() => {
+    if (!serverSymbols || serverSymbols.length === 0) {
+      return DEFAULT_SYMBOLS;
+    }
+    const serverMap = new Map(serverSymbols.map((s) => [s.id, s]));
+    const merged = [...serverSymbols];
+    for (const defaultSym of DEFAULT_SYMBOLS) {
+      if (!serverMap.has(defaultSym.id)) {
+        merged.push(defaultSym);
+      }
+    }
+    return merged;
+  }, [serverSymbols]);
   const symbolIds = React.useMemo(() => symbols.map((symbol) => symbol.id), [symbols]);
   useTerminalWebSocket(symbolIds, { isThrottled: true, throttleMs: isCompact ? 250 : 100 });
   const selectedSymbol = useMarketStore((state) => state.selectedSymbol);

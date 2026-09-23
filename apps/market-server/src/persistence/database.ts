@@ -67,37 +67,40 @@ function initSchema(db: DatabaseSync): void {
     ON candles(symbol, timeframe, open_time DESC);
   `);
 
-  // Seed default symbols if empty
-  const countRow = db.prepare("SELECT COUNT(*) as count FROM symbols").get() as {
-    count: number | bigint;
-  };
+  // Sync all default symbols into database (upsert to ensure all instruments exist)
+  logger.info({ totalSymbols: DEFAULT_SYMBOLS.length }, "Syncing market symbols into database");
+  const now = Date.now();
+  const upsertStmt = db.prepare(`
+    INSERT INTO symbols (
+      id, provider, provider_symbol, base_asset, quote_asset,
+      asset_class, name, enabled, is_tokenized_metal, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      provider = excluded.provider,
+      provider_symbol = excluded.provider_symbol,
+      base_asset = excluded.base_asset,
+      quote_asset = excluded.quote_asset,
+      asset_class = excluded.asset_class,
+      name = excluded.name,
+      enabled = excluded.enabled,
+      is_tokenized_metal = excluded.is_tokenized_metal,
+      updated_at = excluded.updated_at
+  `);
 
-  const currentCount = Number(countRow?.count || 0);
-  if (currentCount === 0) {
-    logger.info("Seeding default market symbols into database");
-    const now = Date.now();
-    const insertStmt = db.prepare(`
-      INSERT INTO symbols (
-        id, provider, provider_symbol, base_asset, quote_asset,
-        asset_class, name, enabled, is_tokenized_metal, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    for (const sym of DEFAULT_SYMBOLS) {
-      insertStmt.run(
-        sym.id,
-        sym.provider,
-        sym.providerSymbol,
-        sym.base,
-        sym.quote,
-        sym.assetClass,
-        sym.name,
-        sym.enabled ? 1 : 0,
-        sym.isTokenizedMetal ? 1 : 0,
-        now,
-        now
-      );
-    }
+  for (const sym of DEFAULT_SYMBOLS) {
+    upsertStmt.run(
+      sym.id,
+      sym.provider,
+      sym.providerSymbol,
+      sym.base,
+      sym.quote,
+      sym.assetClass,
+      sym.name,
+      sym.enabled ? 1 : 0,
+      sym.isTokenizedMetal ? 1 : 0,
+      now,
+      now
+    );
   }
 }
 
