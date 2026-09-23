@@ -1,20 +1,19 @@
 export const ENV = {
-  // REST API endpoint (Next.js rewrite proxies /api/terminal to market server)
+  // Rust Axum Realtime Gateway REST endpoint
   get API_BASE_URL(): string {
     if (process.env.NEXT_PUBLIC_API_URL) {
       return process.env.NEXT_PUBLIC_API_URL;
     }
     if (typeof window !== "undefined") {
-      return "/api/terminal";
+      const isLocalhost =
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1";
+      return isLocalhost ? "http://localhost:9001/v1" : "/v1";
     }
-    return (
-      process.env.MARKET_SERVER_INTERNAL_URL
-        ? `${process.env.MARKET_SERVER_INTERNAL_URL}/api`
-        : process.env.MARKET_GATEWAY_INTERNAL_URL || "http://127.0.0.1:9000/api"
-    );
+    return process.env.MARKET_GATEWAY_INTERNAL_URL || "http://127.0.0.1:9001/v1";
   },
 
-  // WebSocket stream endpoint (market-server WS gateway at /ws)
+  // Rust Axum WebSocket stream endpoint
   get WS_URL(): string {
     if (process.env.NEXT_PUBLIC_WS_URL) {
       return process.env.NEXT_PUBLIC_WS_URL;
@@ -24,12 +23,13 @@ export const ENV = {
         window.location.hostname === "localhost" ||
         window.location.hostname === "127.0.0.1";
       if (isLocalhost) {
-        return "ws://localhost:9000/ws";
+        return "ws://localhost:9001/v1/stream";
       }
       const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-      return `${proto}//${window.location.host}/ws`;
+      return `${proto}//${window.location.host}/v1/stream`;
     }
-    return process.env.MARKET_WS_INTERNAL_URL || "ws://127.0.0.1:9000/ws";
+    return "ws://127.0.0.1:9001/v1/stream";
   },
 };
+
 
