@@ -5,7 +5,6 @@ import { CandleRepository } from "./persistence/candle-repository.js";
 import { MarketState } from "./market/market-state.js";
 import { CandleEngine } from "./market/candle-engine.js";
 import { CompositeMarketProvider } from "./providers/composite/composite-provider.js";
-import { seedInitialDataIfEmpty } from "./market/baseline-data.js";
 import { createHttpServer } from "./transport/http/server.js";
 import { MarketWebSocketGateway } from "./transport/websocket/gateway.js";
 import { runBackfill, runRetentionJob } from "./jobs/backfill.js";
@@ -16,16 +15,13 @@ async function bootstrap() {
   logger.info({ port: config.PORT, host: config.HOST }, "Bootstrapping market-server");
   logger.info("==================================================");
 
-  // 1. Initialize SQLite storage
+  // 1. Initialize QuestDB storage
   const db = getDatabase();
   const repository = new CandleRepository(db);
 
   // 2. Initialize in-memory state and engines
   const marketState = new MarketState();
   const candleEngine = new CandleEngine(repository);
-
-  // 3. Seed baseline tickers and candles for any empty symbols
-  seedInitialDataIfEmpty(repository, marketState);
 
   // 4. Symbols
   const allSymbols = repository.getSymbols();

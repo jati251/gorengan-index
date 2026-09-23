@@ -164,10 +164,9 @@ flowchart TD
         AGG["Market Aggregator (Rust / Node)\n• 1-Second OHLCV Candle Aggregation\n• 24h Rolling Ticker Statistics\n• Multi-Timeframe Resampling"]
     end
 
-    subgraph Storage["Dual-Tier Storage Layer"]
+    subgraph Storage["High-Throughput Storage Layer"]
         VALKEY[("Valkey / Redis\n• Hot Ticker State\n• Sub-millisecond Cache\n• Latest Candle Buffers")]
         QUESTDB[("QuestDB OSS\n• Influx Line Protocol (ILP)\n• High-Throughput Time-Series\n• 1s / 1m Historical Queries")]
-        SQLITE[("Embedded SQLite\n• Local Dev Storage\n• Fast Startup Persistence")]
     end
 
     subgraph GatewayTier["Distribution Gateway"]
@@ -183,7 +182,6 @@ flowchart TD
     NATS -->|"Subscribe Trade Stream"| AGG
     AGG -->|"Write Latest State"| VALKEY
     AGG -->|"ILP Stream Ingestion"| QUESTDB
-    AGG -->|"Persist Candles"| SQLITE
     AGG -->|"Publish Finalized Candles"| NATS
     NATS -->|"Forward to Gateway"| GW
     GW <===>|"WebSocket (ws://)"| WEB
@@ -210,16 +208,14 @@ flowchart TD
    - Mengelola koneksi ribuan browser via WebSocket.
    - Menyediakan fitur *subscription filtering*: klien hanya menerima update dari instrumen yang sedang dibuka atau berada di daftar pantauan (*watchlist*).
 
-### 3. Dual-Tier Storage Architecture
+### 3. High-Throughput Storage Architecture
 
 - **Hot Cache (Valkey / Redis)**:
-  - Menyimpan status ticker terkini dari seluruh 72 simbol.
+  - Menyimpan status ticker terkini dari seluruh 108 simbol.
   - Latensi baca sub-milidetik untuk rendering instan saat pengguna pertama kali membuka terminal.
 - **Time-Series Database (QuestDB OSS)**:
   - Menggunakan *columnar storage* yang dioptimasi khusus untuk data keuangan.
   - Ingestion ribuan candle per detik melalui Influx Line Protocol (ILP) dengan efisiensi kompresi disk tinggi.
-- **Embedded Engine (SQLite)**:
-  - Solusi penyimpanan *zero-configuration* untuk lingkungan pengembangan lokal dan deployment single-container.
 
 ---
 
@@ -248,7 +244,7 @@ gorengan-index/
 │   ├── market-server/              # Standalone Market Server (Node.js/TypeScript)
 │   │   ├── src/
 │   │   │   ├── market/             # 1s Candle Engine & in-memory state cache
-│   │   │   ├── persistence/        # SQLite database & candle repository
+│   │   │   ├── persistence/        # QuestDB client & candle repository
 │   │   │   ├── providers/          # Binance native WebSocket client
 │   │   │   ├── transport/          # HTTP REST server & WebSocket Gateway
 │   │   │   └── jobs/               # Gap backfill & 24h retention pruning
@@ -482,7 +478,7 @@ Buat file `.env` pada root project:
 PORT=9000
 HOST=0.0.0.0
 LOG_LEVEL=info
-SQLITE_PATH=./data/market.sqlite
+QUESTDB_HTTP_URL=http://localhost:9000
 RETENTION_1M_DAYS=7
 
 # ==========================================

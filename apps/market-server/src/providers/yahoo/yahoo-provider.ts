@@ -9,7 +9,6 @@ import type {
 import { DEFAULT_SYMBOLS } from "@gorengan/shared";
 import type { MarketProvider, ProviderStatus } from "../market-provider.js";
 import { logger } from "../../utils/logger.js";
-import { generateBaselineCandles, getBaselineTicker, getReferencePrice } from "../../market/baseline-data.js";
 
 interface YahooChartResponse {
   chart?: {
@@ -184,10 +183,9 @@ export class YahooMarketProvider extends EventEmitter implements MarketProvider 
     } catch (err) {
       logger.warn(
         { err: (err as Error).message, symbol: params.symbol, yahooSymbol },
-        "Yahoo chart fetch failed, using realistic baseline fallback candles"
+        "Yahoo chart fetch failed, returning empty candles"
       );
-      // Fallback: generate high-fidelity baseline candles
-      return generateBaselineCandles(params.symbol, params.timeframe, params.from, params.to, 500);
+      return [];
     }
   }
 
@@ -270,15 +268,13 @@ export class YahooMarketProvider extends EventEmitter implements MarketProvider 
     canonicalSymbol: string,
     meta: NonNullable<NonNullable<YahooChartResponse["chart"]>["result"]>[0]["meta"]
   ): MarketTicker {
-    if (!meta) return getBaselineTicker(canonicalSymbol);
-
-    const lastPrice = meta.regularMarketPrice || getReferencePrice(canonicalSymbol);
-    const prevClose = meta.previousClose || meta.chartPreviousClose || lastPrice;
+    const lastPrice = meta?.regularMarketPrice ?? 0;
+    const prevClose = meta?.previousClose || meta?.chartPreviousClose || lastPrice;
     const priceChange = lastPrice - prevClose;
     const priceChangePercent = prevClose > 0 ? (priceChange / prevClose) * 100 : 0;
-    const high = meta.regularMarketDayHigh || Math.max(lastPrice, prevClose);
-    const low = meta.regularMarketDayLow || Math.min(lastPrice, prevClose);
-    const volume = meta.regularMarketVolume || 10000;
+    const high = meta?.regularMarketDayHigh || Math.max(lastPrice, prevClose);
+    const low = meta?.regularMarketDayLow || Math.min(lastPrice, prevClose);
+    const volume = meta?.regularMarketVolume || 10000;
 
     const isId = canonicalSymbol.startsWith("ID:");
     const isFx = !isId && !canonicalSymbol.startsWith("US:") && !canonicalSymbol.endsWith("USDT");

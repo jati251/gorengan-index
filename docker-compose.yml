@@ -9,10 +9,8 @@ services:
     environment:
       - PORT=9000
       - HOST=0.0.0.0
-      - SQLITE_PATH=/data/market.sqlite
+      - QUESTDB_HTTP_URL=${QUESTDB_HTTP_URL:-http://127.0.0.1:9000}
       - LOG_LEVEL=info
-    volumes:
-      - market-data:/data
 
   web:
     build:
@@ -23,15 +21,11 @@ services:
       - "3000:3000"
     environment:
       - PORT=3000
-      - MARKET_SERVER_INTERNAL_URL=http://market-server:9000/api
-      - NEXT_PUBLIC_WS_URL=ws://localhost:9000/ws
+      - MARKET_GATEWAY_INTERNAL_URL=http://gateway:9001/v1
+      - NEXT_PUBLIC_API_URL=http://localhost:9001/v1
+      - NEXT_PUBLIC_WS_URL=ws://localhost:9001/v1/stream
       - AUTH_SECRET=${AUTH_SECRET}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
-    depends_on:
-      - market-server
-
-volumes:
-  market-data:

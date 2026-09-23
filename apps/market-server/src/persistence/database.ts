@@ -1,112 +1,101 @@
-import { DatabaseSync } from "node:sqlite";
-import fs from "node:fs";
-import path from "node:path";
 import { config } from "../config/index.js";
 import { logger } from "../utils/logger.js";
-import { DEFAULT_SYMBOLS } from "@gorengan/shared";
+import { DEFAULT_SYMBOLS, type MarketSymbol } from "@gorengan/shared";
 
-let dbInstance: DatabaseSync | null = null;
-
-export function getDatabase(): DatabaseSync {
-  if (dbInstance) return dbInstance;
-
-  const dbDir = path.dirname(config.SQLITE_PATH);
-  if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
-  }
-
-  logger.info({ path: config.SQLITE_PATH }, "Opening SQLite database");
-  const db = new DatabaseSync(config.SQLITE_PATH);
-
-  // Performance pragmas from architecture specification
-  db.exec("PRAGMA journal_mode = WAL;");
-  db.exec("PRAGMA synchronous = NORMAL;");
-  db.exec("PRAGMA temp_store = MEMORY;");
-  db.exec("PRAGMA foreign_keys = ON;");
-
-  initSchema(db);
-
-  dbInstance = db;
-  return db;
+export interface QuestDbExecResponse<T = unknown[]> {
+  query: string;
+  columns?: { name: string; type: string }[];
+  dataset?: T[];
+  count?: number;
+  error?: string;
 }
 
-function initSchema(db: DatabaseSync): void {
-  logger.info("Initializing SQLite schemas and indexes");
+export class QuestDbClient {
+  private baseUrl: string;
+  private isConnected = false;
 
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS symbols (
-      id TEXT PRIMARY KEY,
-      provider TEXT NOT NULL,
-      provider_symbol TEXT NOT NULL,
-      base_asset TEXT NOT NULL,
-      quote_asset TEXT NOT NULL,
-      asset_class TEXT NOT NULL,
-      name TEXT NOT NULL,
-      enabled INTEGER NOT NULL DEFAULT 1,
-      is_tokenized_metal INTEGER NOT NULL DEFAULT 0,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS candles (
-      symbol TEXT NOT NULL,
-      timeframe TEXT NOT NULL,
-      open_time INTEGER NOT NULL,
-      close_time INTEGER NOT NULL,
-      open REAL NOT NULL,
-      high REAL NOT NULL,
-      low REAL NOT NULL,
-      close REAL NOT NULL,
-      volume REAL NOT NULL,
-      trades INTEGER,
-      provider TEXT NOT NULL,
-      PRIMARY KEY (symbol, timeframe, open_time)
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_candles_lookup
-    ON candles(symbol, timeframe, open_time DESC);
-  `);
-
-  // Sync all default symbols into database (upsert to ensure all instruments exist)
-  logger.info({ totalSymbols: DEFAULT_SYMBOLS.length }, "Syncing market symbols into database");
-  const now = Date.now();
-  const upsertStmt = db.prepare(`
-    INSERT INTO symbols (
-      id, provider, provider_symbol, base_asset, quote_asset,
-      asset_class, name, enabled, is_tokenized_metal, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      provider = excluded.provider,
-      provider_symbol = excluded.provider_symbol,
-      base_asset = excluded.base_asset,
-      quote_asset = excluded.quote_asset,
-      asset_class = excluded.asset_class,
-      name = excluded.name,
-      enabled = excluded.enabled,
-      is_tokenized_metal = excluded.is_tokenized_metal,
-      updated_at = excluded.updated_at
-  `);
-
-  for (const sym of DEFAULT_SYMBOLS) {
-    upsertStmt.run(
-      sym.id,
-      sym.provider,
-      sym.providerSymbol,
-      sym.base,
-      sym.quote,
-      sym.assetClass,
-      sym.name,
-      sym.enabled ? 1 : 0,
-      sym.isTokenizedMetal ? 1 : 0,
-      now,
-      now
-    );
+  constructor(baseUrl: string) {
+    this.baseUrl = baseUrl.replace(/\/$/, "");
   }
+
+  public async init(): Promise<void> {
+    logger.info({ questdbUrl: this.baseUrl }, "Connecting to QuestDB");
+    try {
+      const res = await fetch(`${this.baseUrl}/exec?query=SELECT+1`);
+      if (res.ok) {
+        this.isConnected = true;
+        logger.info("Connected to QuestDB successfully");
+      } else {
+        logger.warn({ status: res.status }, "QuestDB /exec returned non-200, continuing with in-memory fallback");
+      }
+    } catch (err) {
+      logger.warn({ err }, "Could not reach QuestDB directly, in-memory caching will operate");
+    }
+
+    // Attempt to ensure tables exist in QuestDB if writable
+    try {
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS candles_1m (
+          instrument SYMBOL,
+          provider SYMBOL,
+          open DOUBLE,
+          high DOUBLE,
+          low DOUBLE,
+          close DOUBLE,
+          volume DOUBLE,
+          trade_count LONG,
+          timestamp TIMESTAMP
+        ) timestamp(timestamp) PARTITION BY DAY WAL;
+      `);
+    } catch {
+      // Table may already exist or QuestDB is currently connecting
+    }
+  }
+
+  public async query<T = unknown[]>(sql: string): Promise<QuestDbExecResponse<T>> {
+    const url = `${this.baseUrl}/exec?query=${encodeURIComponent(sql)}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`QuestDB query failed (${res.status}): ${errText}`);
+    }
+    return (await res.json()) as QuestDbExecResponse<T>;
+  }
+
+  public async writeIlp(lines: string[]): Promise<void> {
+    if (lines.length === 0) return;
+    const body = lines.join("\n") + "\n";
+    const res = await fetch(`${this.baseUrl}/write`, {
+      method: "POST",
+      body,
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`QuestDB write failed (${res.status}): ${errText}`);
+    }
+  }
+
+  public close(): void {
+    logger.info("QuestDB client closed");
+    this.isConnected = false;
+  }
+}
+
+let dbInstance: QuestDbClient | null = null;
+
+export function getDatabase(): QuestDbClient {
+  if (!dbInstance) {
+    dbInstance = new QuestDbClient(config.QUESTDB_HTTP_URL);
+    // Fire and forget background initialization
+    dbInstance.init().catch((err) => {
+      logger.warn({ err }, "QuestDB background initialization notice");
+    });
+  }
+  return dbInstance;
 }
 
 export function closeDatabase(): void {
   if (dbInstance) {
-    logger.info("Closing SQLite database connection");
     dbInstance.close();
     dbInstance = null;
   }

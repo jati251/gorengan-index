@@ -1,148 +1,56 @@
-import { DatabaseSync } from "node:sqlite";
 import type { Candle, Timeframe, MarketSymbol } from "@gorengan/shared";
-import { timeframeToMs } from "@gorengan/shared";
-import { getDatabase } from "./database.js";
+import { DEFAULT_SYMBOLS, timeframeToMs } from "@gorengan/shared";
+import { getDatabase, type QuestDbClient } from "./database.js";
 import { logger } from "../utils/logger.js";
 
-interface CandleRow {
-  symbol: string;
-  timeframe: string;
-  open_time: number | bigint;
-  close_time: number | bigint;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-  trades: number | bigint | null;
-  provider: string;
-}
-
-interface SymbolRow {
-  id: string;
-  provider: string;
-  provider_symbol: string;
-  base_asset: string;
-  quote_asset: string;
-  asset_class: string;
-  name: string;
-  enabled: number;
-  is_tokenized_metal: number;
-}
-
 export class CandleRepository {
-  private db: DatabaseSync;
+  private db: QuestDbClient;
+  private candleCache = new Map<string, Candle[]>();
+  private symbols: MarketSymbol[] = DEFAULT_SYMBOLS;
 
-  constructor(db?: DatabaseSync) {
+  constructor(db?: QuestDbClient) {
     this.db = db || getDatabase();
   }
 
   public getSymbols(): MarketSymbol[] {
-    const rows = this.db
-      .prepare("SELECT * FROM symbols WHERE enabled = 1")
-      .all() as unknown as SymbolRow[];
-
-    return rows.map((r) => ({
-      id: r.id,
-      provider: r.provider,
-      providerSymbol: r.provider_symbol,
-      base: r.base_asset,
-      quote: r.quote_asset,
-      assetClass: r.asset_class as MarketSymbol["assetClass"],
-      name: r.name,
-      enabled: r.enabled === 1,
-      isTokenizedMetal: r.is_tokenized_metal === 1,
-    }));
+    return this.symbols;
   }
 
   public saveCandle(candle: Candle): void {
-    const stmt = this.db.prepare(`
-      INSERT INTO candles (
-        symbol, timeframe, open_time, close_time,
-        open, high, low, close, volume, trades, provider
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(symbol, timeframe, open_time) DO UPDATE SET
-        close_time = excluded.close_time,
-        open = excluded.open,
-        high = excluded.high,
-        low = excluded.low,
-        close = excluded.close,
-        volume = excluded.volume,
-        trades = excluded.trades,
-        provider = excluded.provider
-    `);
+    const key = `${candle.symbol}:1m`;
+    let list = this.candleCache.get(key);
+    if (!list) {
+      list = [];
+      this.candleCache.set(key, list);
+    }
+    const idx = list.findIndex((c) => c.openTime === candle.openTime);
+    if (idx >= 0) {
+      list[idx] = candle;
+    } else {
+      list.push(candle);
+      list.sort((a, b) => a.openTime - b.openTime);
+      if (list.length > 2000) {
+        list.splice(0, list.length - 2000);
+      }
+    }
 
-    stmt.run(
-      candle.symbol,
-      candle.timeframe,
-      candle.openTime,
-      candle.closeTime,
-      candle.open,
-      candle.high,
-      candle.low,
-      candle.close,
-      candle.volume,
-      candle.trades ?? 0,
-      candle.provider || "binance"
-    );
+    // Persist to QuestDB asynchronously via ILP
+    const tsNs = candle.openTime * 1_000_000;
+    const line = `candles_1m,instrument=${candle.symbol},provider=${candle.provider || "default"} open=${candle.open},high=${candle.high},low=${candle.low},close=${candle.close},volume=${candle.volume},trade_count=${candle.trades ?? 0}i ${tsNs}`;
+    this.db.writeIlp([line]).catch((err) => {
+      logger.debug({ err: (err as Error).message, symbol: candle.symbol }, "QuestDB ILP write notice");
+    });
   }
 
   public saveCandles(candles: Candle[]): void {
-    if (candles.length === 0) return;
-
-    const stmt = this.db.prepare(`
-      INSERT INTO candles (
-        symbol, timeframe, open_time, close_time,
-        open, high, low, close, volume, trades, provider
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(symbol, timeframe, open_time) DO UPDATE SET
-        close_time = excluded.close_time,
-        open = excluded.open,
-        high = excluded.high,
-        low = excluded.low,
-        close = excluded.close,
-        volume = excluded.volume,
-        trades = excluded.trades,
-        provider = excluded.provider
-    `);
-
-    this.db.exec("BEGIN TRANSACTION;");
-    try {
-      for (const candle of candles) {
-        stmt.run(
-          candle.symbol,
-          candle.timeframe,
-          candle.openTime,
-          candle.closeTime,
-          candle.open,
-          candle.high,
-          candle.low,
-          candle.close,
-          candle.volume,
-          candle.trades ?? 0,
-          candle.provider || "binance"
-        );
-      }
-      this.db.exec("COMMIT;");
-    } catch (err) {
-      this.db.exec("ROLLBACK;");
-      logger.error({ err }, "Failed to batch save candles");
-      throw err;
+    for (const c of candles) {
+      this.saveCandle(c);
     }
   }
 
   public getLatestCandle(symbol: string, timeframe: Timeframe = "1m"): Candle | null {
-    const row = this.db
-      .prepare(`
-        SELECT * FROM candles
-        WHERE symbol = ? AND timeframe = ?
-        ORDER BY open_time DESC
-        LIMIT 1
-      `)
-      .get(symbol, timeframe) as unknown as CandleRow | undefined;
-
-    if (!row) return null;
-    return this.rowToCandle(row);
+    const candles = this.getCandles(symbol, timeframe, undefined, undefined, 1);
+    return candles.length > 0 ? candles[candles.length - 1] : null;
   }
 
   public getCandles(
@@ -152,58 +60,23 @@ export class CandleRepository {
     to?: number,
     limit: number = 500
   ): Candle[] {
-    const safeLimit = Math.min(Math.max(limit, 1), 1500);
-
-    // If 1m, fetch directly from candles table
-    if (timeframe === "1m") {
-      let query = `
-        SELECT * FROM candles
-        WHERE symbol = ? AND timeframe = '1m'
-      `;
-      const params: (string | number)[] = [symbol];
-
-      if (from !== undefined) {
-        query += " AND open_time >= ?";
-        params.push(from);
-      }
-      if (to !== undefined) {
-        query += " AND open_time <= ?";
-        params.push(to);
-      }
-
-      query += ` ORDER BY open_time DESC LIMIT ${safeLimit}`;
-
-      const rows = this.db.prepare(query).all(...params) as unknown as CandleRow[];
-      // Reverse to chronological order (ascending)
-      return rows.map((r) => this.rowToCandle(r)).reverse();
-    }
-
-    // For higher timeframes (5m, 15m, 1h, 4h, 1d, 1w), aggregate from 1m bars
-    const bucketMs = timeframeToMs(timeframe);
-    // Fetch 1m candles covering the required range
-    let query = `
-      SELECT * FROM candles
-      WHERE symbol = ? AND timeframe = '1m'
-    `;
-    const params: (string | number)[] = [symbol];
+    const key = `${symbol}:1m`;
+    const list = this.candleCache.get(key) || [];
+    let filtered = list;
 
     if (from !== undefined) {
-      query += " AND open_time >= ?";
-      params.push(from);
+      filtered = filtered.filter((c) => c.openTime >= from);
     }
     if (to !== undefined) {
-      query += " AND open_time <= ?";
-      params.push(to);
+      filtered = filtered.filter((c) => c.openTime <= to);
     }
 
-    // Pull sufficient 1m records to build the aggregated bars
-    const fetchLimit = safeLimit * Math.ceil(bucketMs / 60000);
-    query += ` ORDER BY open_time DESC LIMIT ${Math.min(fetchLimit, 20000)}`;
+    if (timeframe === "1m") {
+      return filtered.slice(-limit);
+    }
 
-    const rows = this.db.prepare(query).all(...params) as unknown as CandleRow[];
-    const rawCandles = rows.map((r) => this.rowToCandle(r)).reverse();
-
-    return this.aggregateCandles(rawCandles, timeframe, bucketMs).slice(-safeLimit);
+    const bucketMs = timeframeToMs(timeframe);
+    return this.aggregateCandles(filtered, timeframe, bucketMs).slice(-limit);
   }
 
   private aggregateCandles(
@@ -265,30 +138,13 @@ export class CandleRepository {
   }
 
   public pruneOldCandles(cutoffMs: number): number {
-    const result = this.db
-      .prepare(`
-        DELETE FROM candles
-        WHERE timeframe = '1m' AND open_time < ?
-      `)
-      .run(cutoffMs);
-
-    return Number(result.changes);
-  }
-
-  private rowToCandle(row: CandleRow): Candle {
-    return {
-      symbol: row.symbol,
-      timeframe: row.timeframe as Timeframe,
-      openTime: Number(row.open_time),
-      closeTime: Number(row.close_time),
-      open: row.open,
-      high: row.high,
-      low: row.low,
-      close: row.close,
-      volume: row.volume,
-      trades: row.trades != null ? Number(row.trades) : undefined,
-      finalized: true,
-      provider: row.provider,
-    };
+    let removed = 0;
+    for (const [key, list] of this.candleCache.entries()) {
+      const beforeLen = list.length;
+      const filtered = list.filter((c) => c.openTime >= cutoffMs);
+      this.candleCache.set(key, filtered);
+      removed += beforeLen - filtered.length;
+    }
+    return removed;
   }
 }

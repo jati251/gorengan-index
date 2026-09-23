@@ -4,7 +4,6 @@ import { DEFAULT_SYMBOLS } from "@gorengan/shared";
 import type { MarketProvider, ProviderStatus } from "../market-provider.js";
 import { BinanceProvider } from "../binance/binance-provider.js";
 import { YahooMarketProvider } from "../yahoo/yahoo-provider.js";
-import { generateBaselineCandles } from "../../market/baseline-data.js";
 import { logger } from "../../utils/logger.js";
 
 export class CompositeMarketProvider extends EventEmitter implements MarketProvider {
@@ -105,16 +104,7 @@ export class CompositeMarketProvider extends EventEmitter implements MarketProvi
       );
     }
 
-    if (candles.length > 0) {
-      return candles;
-    }
-
-    // Safety fallback: guaranteed baseline candles so chart is never blank
-    logger.info(
-      { symbol: params.symbol, timeframe: params.timeframe },
-      "Generating baseline fallback candles for chart display"
-    );
-    return generateBaselineCandles(params.symbol, params.timeframe, params.from, params.to, 500);
+    return candles;
   }
 
   public getStatus(): ProviderStatus {
