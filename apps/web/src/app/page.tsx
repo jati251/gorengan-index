@@ -97,7 +97,6 @@ export default function LandingPage() {
           </div>
           <div className="hero-model-wrap">
             <RetroTerminalScene />
-            <div className="hero-model-caption"><span>01 / PIXEL FORMS</span><span>ILLUSTRATION / NOT MARKET DATA</span></div>
           </div>
         </section>
 
