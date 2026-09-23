@@ -122,10 +122,10 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
   }, [selectedCategory]);
 
   return (
-    <div className="terminal-watchlist flex flex-col h-full bg-[#193326] font-mono select-none overflow-hidden min-h-0">
+    <div className="terminal-watchlist flex flex-col h-full bg-[#3c3f5f] font-mono select-none overflow-hidden min-h-0">
       {/* 1. Category Switcher (ALL | CRYPTO | FOREX | US | IDX) */}
       <div className="p-2.5 sm:p-3 border-b border-white/[0.06] bg-white/[0.01] space-y-2.5 shrink-0">
-        <div className="grid grid-cols-5 gap-0.5 bg-[#10251b] p-0.5 rounded-lg border border-white/[0.07] text-[10px] ">
+        <div className="grid grid-cols-5 gap-0.5 bg-[#2a2839] p-0.5 rounded-lg border border-white/[0.07] text-[10px] ">
           {CATEGORIES.map((cat) => {
             const isActive = selectedCategory === cat.id;
             return (
@@ -170,12 +170,12 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
             placeholder={searchPlaceholder}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-[#10251b] border border-white/[0.08] focus:border-emerald-500/50 rounded-lg px-2.5 py-1.5 pl-8 text-xs text-slate-100 placeholder-slate-500 focus:outline-hidden  transition-all "
+            className="w-full bg-[#2a2839] border border-white/[0.08] focus:border-emerald-500/50 rounded-lg px-2.5 py-1.5 pl-8 text-xs text-slate-100 placeholder-slate-500 focus:outline-hidden  transition-all "
           />
         </div>
 
         {/* Watchlist & All Tabs with accurate independent counts */}
-        <div className="grid grid-cols-2 gap-1 bg-[#10251b] p-0.5 rounded-lg border border-white/[0.07] text-[11px] ">
+        <div className="grid grid-cols-2 gap-1 bg-[#2a2839] p-0.5 rounded-lg border border-white/[0.07] text-[11px] ">
           <button
             onClick={() => setTab("favorites")}
             className={clsx(
@@ -424,13 +424,15 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
                   {/* Price & Direction Flash */}
                   <div className="text-right shrink-0 pl-2">
                     <div
+                      key={ticker?.price}
+                      data-direction={direction}
                       className={clsx(
-                        "text-xs font-semibold tabular-nums px-1.5 py-0.5 rounded transition-all duration-300 flex items-center justify-end gap-1",
+                        "price-pixel-flash text-xs font-semibold tabular-nums px-1.5 py-0.5 border border-transparent flex items-center justify-end gap-1",
                         direction === "up" &&
-                          "bg-emerald-500/25 text-emerald-300  ring-1 ring-emerald-400/60 ",
+                          "bg-emerald-500/25 text-emerald-300",
                         direction === "down" &&
-                          "bg-rose-500/25 text-rose-300  ring-1 ring-rose-400/60 ",
-                        direction === "neutral" && "text-slate-200 bg-transparent ring-transparent"
+                          "bg-rose-500/25 text-rose-300",
+                        direction === "neutral" && "text-slate-200 bg-transparent"
                       )}
                     >
                       <span>{formattedPrice}</span>

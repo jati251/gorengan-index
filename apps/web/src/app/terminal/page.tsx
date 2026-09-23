@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useSyncExternalStore } from "react";
 import { DEFAULT_SYMBOLS } from "@gorengan/shared";
 import { clsx } from "clsx";
 import {
@@ -19,13 +19,23 @@ import { useMarketStore } from "@/stores/marketStore";
 import { Card, CardContent } from "@/components/ui/card";
 import { MobileNavigationBar, type MobileTab } from "@/components/MobileNavigationBar";
 
+const compactQuery = "(max-width: 1279px)";
+const subscribeCompact = (callback: () => void) => {
+  const query = window.matchMedia(compactQuery);
+  query.addEventListener("change", callback);
+  return () => query.removeEventListener("change", callback);
+};
+const getCompact = () => window.matchMedia(compactQuery).matches;
+const getServerCompact = () => true;
+
 export default function TerminalPage() {
   const [mobileTab, setMobileTab] = useState<MobileTab>("chart");
+  const isCompact = useSyncExternalStore(subscribeCompact, getCompact, getServerCompact);
   const { data: symbolsData } = useSymbolsQuery();
   useMarketsQuery();
   const symbols = symbolsData?.symbols || DEFAULT_SYMBOLS;
   const symbolIds = React.useMemo(() => symbols.map((symbol) => symbol.id), [symbols]);
-  useTerminalWebSocket(symbolIds, { isThrottled: false });
+  useTerminalWebSocket(symbolIds, { isThrottled: true, throttleMs: isCompact ? 250 : 100 });
   const selectedSymbol = useMarketStore((state) => state.selectedSymbol);
 
   return (
@@ -39,11 +49,11 @@ export default function TerminalPage() {
 
       <div className="terminal-workspace">
         <aside className={clsx("terminal-watchlist-panel", mobileTab === "markets" ? "is-mobile-active" : "")} aria-label="Watchlist and markets">
-          <WatchlistSidebar symbols={symbols} onSelectSymbol={() => setMobileTab("chart")} />
+          {(!isCompact || mobileTab === "markets") && <WatchlistSidebar symbols={symbols} onSelectSymbol={() => setMobileTab("chart")} />}
         </aside>
 
         <section className={clsx("terminal-main-panel", mobileTab === "chart" ? "is-mobile-active" : "")} aria-label="Chart and market prices">
-          <Card className="terminal-card terminal-chart-card">
+          {(!isCompact || mobileTab === "chart") && <><Card className="terminal-card terminal-chart-card">
             <ChartHeader />
             <div className="terminal-chart-area">
               <TradingViewChart key={selectedSymbol} symbol={selectedSymbol} className="w-full h-full" />
@@ -65,11 +75,11 @@ export default function TerminalPage() {
             <CardContent className="p-0">
               <MarketOverviewTable symbols={symbols} onSelectSymbol={() => setMobileTab("chart")} />
             </CardContent>
-          </Card>
+          </Card></>}
         </section>
 
         <aside className={clsx("terminal-intel-panel", mobileTab === "intel" ? "is-mobile-active" : "")} aria-label="Market statistics and news">
-          <IntelligenceSidebar key={mobileTab === "intel" ? "news" : "pulse"} initialTab={mobileTab === "intel" ? "news" : "pulse"} />
+          {(!isCompact || mobileTab === "intel") && <IntelligenceSidebar key={mobileTab === "intel" ? "news" : "pulse"} initialTab={mobileTab === "intel" ? "news" : "pulse"} />}
         </aside>
       </div>
 

@@ -27,7 +27,7 @@ export function CardHeader({
   return (
     <div
       className={clsx(
-        "px-3.5 sm:px-4 py-2.5 sm:py-3 border-b border-[#35403b] bg-[#202824] flex items-center justify-between",
+        "px-3.5 sm:px-4 py-2.5 sm:py-3 border-b border-[#55607e] bg-[#3c3f5f] flex items-center justify-between",
         className
       )}
       {...props}

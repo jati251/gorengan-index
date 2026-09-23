@@ -101,7 +101,7 @@ function NewsItem({ article, index }: { article: NewsArticle; index: number }) {
         {article.symbols.slice(0, 3).map((sym) => (
           <span
             key={sym}
-            className="text-[9px] font-mono font-semibold text-[#ffb56d] bg-cyan-950/40 border border-cyan-800/30 px-1 py-0 rounded"
+            className="text-[9px] font-mono font-semibold text-[#f4c41b] bg-cyan-950/40 border border-cyan-800/30 px-1 py-0 rounded"
           >
             {sym}
           </span>
@@ -117,9 +117,9 @@ export function NewsFeed() {
   return (
     <div className="flex flex-col h-full font-mono select-none overflow-hidden min-h-0">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/[0.06] bg-[#19332c] shrink-0">
+      <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/[0.06] bg-[#3c3f5f] shrink-0">
         <div className="flex items-center gap-2">
-          <Newspaper className="w-3.5 h-3.5 text-[#ffb56d]" />
+          <Newspaper className="w-3.5 h-3.5 text-[#f4c41b]" />
           <span className="text-sm font-bold uppercase tracking-wide text-slate-200">
             Market Wire
           </span>
@@ -154,7 +154,7 @@ export function NewsFeed() {
             <span className="text-base text-slate-200">News unavailable</span>
             <button
               onClick={() => refetch()}
-              className="text-[10px] text-[#ffb56d] hover:underline cursor-pointer"
+              className="text-[10px] text-[#f4c41b] hover:underline cursor-pointer"
             >
               Retry
             </button>

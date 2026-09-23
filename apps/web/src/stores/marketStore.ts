@@ -74,6 +74,11 @@ const scheduleFlashReset = (symbol: string, resetFn: () => void) => {
   }, 850);
 };
 
+const sameTicker = (a: MarketTicker, b: MarketTicker) => {
+  const keys = Object.keys(b) as (keyof MarketTicker)[];
+  return keys.length === Object.keys(a).length && keys.every((key) => Object.is(a[key], b[key]));
+};
+
 export const useMarketStore = create<MarketStore>((set, get) => ({
   tickers: {},
   priceDirections: {},
@@ -152,45 +157,34 @@ export const useMarketStore = create<MarketStore>((set, get) => ({
     get().setSelectedCategory(assetClass as MarketCategory);
   },
 
-  setTicker: (ticker) =>
-    set((state) => {
-      const prev = state.tickers[ticker.symbol];
-      let direction: PriceDirection = "neutral";
-      if (prev && typeof prev.price === "number" && typeof ticker.price === "number") {
-        if (ticker.price > prev.price) direction = "up";
-        else if (ticker.price < prev.price) direction = "down";
-        else direction = state.priceDirections[ticker.symbol] || "neutral";
-      }
-
-      // If price moved up or down, schedule auto-reset back to neutral after 850ms
-      if (direction !== "neutral" && prev && prev.price !== ticker.price) {
-        scheduleFlashReset(ticker.symbol, () => {
-          set((s) => {
-            if (s.priceDirections[ticker.symbol] === "neutral") return s;
-            return {
-              priceDirections: {
-                ...s.priceDirections,
-                [ticker.symbol]: "neutral",
-              },
-            };
-          });
-        });
-      }
-
-      return {
-        tickers: { ...state.tickers, [ticker.symbol]: ticker },
-        priceDirections: { ...state.priceDirections, [ticker.symbol]: direction },
-        lastEventAt: ticker.timestamp || Date.now(),
-      };
-    }),
+  setTicker: (ticker) => get().setTickers([ticker]),
 
   setTickers: (tickers) =>
     set((state) => {
       const newMap = { ...state.tickers };
+      const directions = { ...state.priceDirections };
+      let lastEventAt = state.lastEventAt;
+      let changed = false;
       for (const t of tickers) {
+        if (!t.symbol || !Number.isFinite(t.price)) continue;
+        const previous = newMap[t.symbol];
+        if (previous && t.timestamp < previous.timestamp) continue;
+        if (previous && sameTicker(previous, t)) continue;
+        if (previous && typeof previous.price === "number" && typeof t.price === "number") {
+          if (t.price !== previous.price) {
+            directions[t.symbol] = t.price > previous.price ? "up" : "down";
+            scheduleFlashReset(t.symbol, () => {
+              set((current) => current.priceDirections[t.symbol] === "neutral" ? current : ({
+                priceDirections: { ...current.priceDirections, [t.symbol]: "neutral" },
+              }));
+            });
+          }
+        }
         newMap[t.symbol] = t;
+        changed = true;
+        lastEventAt = Math.max(lastEventAt, t.timestamp || Date.now());
       }
-      return { tickers: newMap };
+      return changed ? { tickers: newMap, priceDirections: directions, lastEventAt } : state;
     }),
 
   setFxQuote: (quote) =>
@@ -274,11 +268,12 @@ export const useMarketStore = create<MarketStore>((set, get) => ({
 
   setSelectedTimeframe: (timeframe) => set({ selectedTimeframe: timeframe }),
 
-  setSnapshot: (tickers, candles, status) =>
+  setSnapshot: (tickers, candles, status) => {
+    get().setTickers(Object.values(tickers));
     set((state) => ({
-      tickers: { ...state.tickers, ...tickers },
       candles: { ...state.candles, ...candles },
       providerStatus: status ?? state.providerStatus,
       lastEventAt: Date.now(),
-    })),
+    }));
+  },
 }));

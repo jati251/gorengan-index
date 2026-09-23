@@ -39,7 +39,7 @@ export function TimeframeSelector() {
   }, [isSubMinuteRestricted]);
 
   return (
-    <div className="flex max-w-full items-center gap-0.5 overflow-x-auto bg-[#10251b] p-1 border border-[#577a68] no-scrollbar">
+    <div className="flex max-w-full items-center gap-0.5 overflow-x-auto bg-[#2a2839] p-1 border border-[#55607e] no-scrollbar">
       {availableTimeframes.map((tf) => {
         const isSelected = selectedTimeframe === tf.value;
         const isSubMinute = ["1s", "5s", "15s"].includes(tf.value);

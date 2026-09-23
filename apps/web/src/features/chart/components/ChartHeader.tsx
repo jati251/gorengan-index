@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { motion } from "framer-motion";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { clsx } from "clsx";
 import { useMarketStore } from "@/stores/marketStore";
@@ -63,7 +62,7 @@ export function ChartHeader() {
     : null;
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-[#193326] border-b border-[#49654d] font-mono select-none">
+    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-[#3c3f5f] border-b border-[#55607e] font-mono select-none">
       <div className="flex flex-wrap items-center gap-4">
         {/* Symbol badge & provenance */}
         <div className="flex items-center gap-1.5 sm:gap-2">
@@ -121,21 +120,19 @@ export function ChartHeader() {
         {/* Animated Live Price */}
         <div className="flex items-center gap-2.5">
           <div
+            key={ticker?.price}
+            data-direction={direction || "neutral"}
             className={clsx(
-              "flex items-center gap-1.5 px-3 py-1 rounded-lg transition-all duration-300 border",
+              "price-pixel-flash flex items-center gap-1.5 px-3 py-1 border",
               direction === "up" &&
-                "bg-emerald-500/20 border-emerald-500/50  scale-[1.03]",
+                "bg-emerald-500/20 border-emerald-500/50",
               direction === "down" &&
-                "bg-rose-500/20 border-rose-500/50  scale-[1.03]",
+                "bg-rose-500/20 border-rose-500/50",
               (!direction || direction === "neutral") &&
                 "bg-white/[0.02] border-white/[0.06]"
             )}
           >
-            <motion.span
-              key={ticker?.price}
-              initial={{ scale: 1.05 }}
-              animate={{ scale: 1 }}
-              transition={{ type: "spring", stiffness: 500, damping: 25 }}
+            <span
               className={clsx(
                 "text-xl sm:text-2xl font-bold tabular-nums tracking-tight transition-colors duration-200",
                 direction === "up" && "text-emerald-300 ",
@@ -144,12 +141,12 @@ export function ChartHeader() {
               )}
             >
               {formattedPrice}
-            </motion.span>
+            </span>
             {direction === "up" && (
-              <span className="text-xs font-bold text-emerald-300 animate-pulse">▲</span>
+              <span className="text-xs font-bold text-emerald-300">▲</span>
             )}
             {direction === "down" && (
-              <span className="text-xs font-bold text-rose-300 animate-pulse">▼</span>
+              <span className="text-xs font-bold text-rose-300">▼</span>
             )}
           </div>
 
@@ -259,13 +256,13 @@ export function ChartHeader() {
       {/* Controls: Indicators + Resolution Selector + Timezone Pill */}
       <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         {/* Indicator Toggles */}
-        <div className="flex items-center gap-1 bg-[#10251b] p-1 rounded-md border border-slate-800/80 text-[11px]">
+        <div className="flex items-center gap-1 bg-[#2a2839] p-1 rounded-md border border-slate-800/80 text-[11px]">
           <button
             onClick={toggleEma20}
             className={clsx(
               "px-2 py-0.5 rounded transition-all cursor-pointer font-medium",
               showEma20
-                ? "bg-[#d4a060]/20 text-[#e9bd7b] border border-[#d4a060]/40 font-bold"
+                ? "bg-[#f4c41b]/20 text-[#f4c41b] border border-[#f4c41b]/40 font-bold"
                 : "text-slate-500 hover:text-slate-300"
             )}
           >
@@ -276,7 +273,7 @@ export function ChartHeader() {
             className={clsx(
               "px-2 py-0.5 rounded transition-all cursor-pointer font-medium",
               showEma50
-                ? "bg-[#dfd6b2]/20 text-[#dfd6b2] border border-[#dfd6b2]/40 font-bold"
+                ? "bg-[#c3e6eb]/20 text-[#c3e6eb] border border-[#c3e6eb]/40 font-bold"
                 : "text-slate-500 hover:text-slate-300"
             )}
           >

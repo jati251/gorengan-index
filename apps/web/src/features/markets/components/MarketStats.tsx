@@ -18,11 +18,11 @@ import type { StatCardProps } from "../types";
 
 function StatCard({ label, value, icon, accent = "slate", subtext }: StatCardProps) {
   const accentClasses = {
-    emerald: "text-emerald-300 bg-[#1d3930] border-[#4c8060]",
-    rose: "text-rose-300 bg-[#392c2c] border-[#805b57]",
-    cyan: "text-[#d6e8c8] bg-[#1d3930] border-[#4c8060]",
-    amber: "text-amber-300 bg-[#39342a] border-[#806d4f]",
-    slate: "text-slate-200 bg-[#20332e] border-[#4d6b5a]",
+    emerald: "text-emerald-300 bg-[#3c3f5f] border-[#3978a8]",
+    rose: "text-rose-300 bg-[#3c3f5f] border-[#613e7b]",
+    cyan: "text-[#c3e6eb] bg-[#3c3f5f] border-[#3978a8]",
+    amber: "text-amber-300 bg-[#3c3f5f] border-[#c66616]",
+    slate: "text-slate-200 bg-[#3c3f5f] border-[#55607e]",
   };
 
   return (
@@ -141,12 +141,12 @@ export function MarketStats() {
         />
       </div>
 
-      <div className="border border-[#4d6b5a] bg-[#20332e] p-2.5 font-mono">
+      <div className="border border-[#55607e] bg-[#3c3f5f] p-2.5 font-mono">
         <div className="flex items-center justify-between gap-2 text-xs text-slate-200 mb-2">
           <span>Market breadth</span>
           <span>{totalActive > 0 ? `${gainersCount} up / ${losersCount} down` : "Waiting for prices"}</span>
         </div>
-        {totalActive > 0 && <div className="flex h-2 bg-[#10251b]" role="img" aria-label={`${gainersPercent}% gainers, ${losersPercent}% losers`}>
+        {totalActive > 0 && <div className="flex h-2 bg-[#2a2839]" role="img" aria-label={`${gainersPercent}% gainers, ${losersPercent}% losers`}>
           <div className="h-full bg-emerald-400" style={{ width: `${gainersPercent}%` }} />
           <div className="h-full bg-rose-400" style={{ width: `${losersPercent}%` }} />
         </div>}

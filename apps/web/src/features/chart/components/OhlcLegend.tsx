@@ -42,7 +42,7 @@ export function OhlcLegend({
   };
 
   return (
-    <div className="absolute top-2 left-3 z-20 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] pointer-events-none bg-[#070a13]/85 backdrop-blur-xs px-2.5 py-1 rounded border border-slate-800/60 shadow-lg">
+    <div className="absolute top-2 left-3 z-20 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] pointer-events-none bg-[#2a2839]/85 backdrop-blur-xs px-2.5 py-1 rounded border border-slate-800/60 shadow-lg">
       <div className="flex items-center gap-1.5 font-bold text-slate-200">
         <span>{symbol}</span>
         <span className="text-slate-500 font-normal">[{timeframe}]</span>
@@ -86,8 +86,8 @@ export function OhlcLegend({
 
       {/* Active Indicator tags in Legend */}
       <div className="hidden sm:flex items-center gap-2 border-l border-slate-800/80 pl-2">
-        {showEma20 && <span className="text-[#06b6d4] font-medium text-[10px]">EMA(20)</span>}
-        {showEma50 && <span className="text-[#f59e0b] font-medium text-[10px]">EMA(50)</span>}
+        {showEma20 && <span className="text-[#26a6ac] font-medium text-[10px]">EMA(20)</span>}
+        {showEma50 && <span className="text-[#f4c41b] font-medium text-[10px]">EMA(50)</span>}
         {!isFx && showVolume && <span className="text-slate-400 font-medium text-[10px]">VOL</span>}
       </div>
     </div>

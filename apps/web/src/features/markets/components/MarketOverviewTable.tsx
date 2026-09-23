@@ -2,7 +2,6 @@
 
 import React, { useMemo } from "react";
 import { Star, TrendingUp, TrendingDown } from "lucide-react";
-import { motion } from "framer-motion";
 import { clsx } from "clsx";
 import type { MarketSymbol } from "@gorengan/shared";
 import { useMarketStore } from "@/stores/marketStore";
@@ -84,7 +83,7 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
   return (
     <div className="terminal-table-scroll w-full max-h-[440px] overflow-auto relative">
       <table className="w-full text-left border-collapse text-xs font-mono">
-        <thead className="sticky top-0 z-10 bg-[#19332c] border-b border-[#648672]">
+        <thead className="sticky top-0 z-10 bg-[#3c3f5f] border-b border-[#757e8a]">
           <tr className="text-slate-400 uppercase text-[9.5px] tracking-wider select-none">
             <th className="py-2.5 px-3 w-10 text-center">Fav</th>
             <th className="py-2.5 px-3">Symbol</th>
@@ -127,7 +126,7 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
                 : null;
 
               return (
-                <motion.tr
+                <tr
                   key={symbol.id}
                   tabIndex={0}
                   aria-label={`Show ${symbol.name} chart`}
@@ -143,17 +142,16 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
                       onSelectSymbol?.(symbol.id);
                     }
                   }}
-                  whileHover={{ backgroundColor: isPositive ? "rgba(16, 185, 129, 0.04)" : "rgba(244, 63, 94, 0.04)" }}
                   className={clsx(
                     "transition-all duration-150 cursor-pointer group select-none",
                     isSelected
                       ? isUs
-                        ? "bg-cyan-500/[0.12] border-l-2 border-cyan-400 shadow-[inset_0_0_12px_rgba(6,182,212,0.12)]"
+                        ? "bg-cyan-500/[0.12] border-l-2 border-cyan-400 shadow-[inset_0_0_12px_rgba(38,166,172,0.12)]"
                         : isId
-                          ? "bg-amber-500/[0.12] border-l-2 border-amber-400 shadow-[inset_0_0_12px_rgba(245,158,11,0.12)]"
+                          ? "bg-amber-500/[0.12] border-l-2 border-amber-400 shadow-[inset_0_0_12px_rgba(244,196,27,0.12)]"
                           : isFx
-                            ? "bg-blue-500/[0.12] border-l-2 border-blue-400 shadow-[inset_0_0_12px_rgba(59,130,246,0.12)]"
-                            : "bg-emerald-500/[0.12] border-l-2 border-emerald-400 shadow-[inset_0_0_12px_rgba(16,185,129,0.12)]"
+                            ? "bg-blue-500/[0.12] border-l-2 border-blue-400 shadow-[inset_0_0_12px_rgba(57,120,168,0.12)]"
+                            : "bg-emerald-500/[0.12] border-l-2 border-emerald-400 shadow-[inset_0_0_12px_rgba(63,223,151,0.12)]"
                       : isPositive
                         ? "hover:bg-emerald-500/[0.04] border-l-2 border-transparent hover:border-emerald-500/50"
                         : "hover:bg-rose-500/[0.04] border-l-2 border-transparent hover:border-rose-500/50"
@@ -233,12 +231,13 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
                   <td className="py-3 px-3 text-right">
                     <span
                       key={ticker?.price}
+                      data-direction={direction}
                       className={clsx(
-                        "inline-flex items-center justify-end gap-1 px-2 py-0.5 rounded-md font-semibold text-xs sm:text-sm tabular-nums transition-all duration-300",
+                        "price-pixel-flash inline-flex items-center justify-end gap-1 px-2 py-0.5 font-semibold text-xs sm:text-sm tabular-nums border border-transparent",
                         direction === "up" &&
-                          "bg-emerald-500/25 text-emerald-300  ring-1 ring-emerald-400/60 ",
+                          "bg-emerald-500/25 text-emerald-300",
                         direction === "down" &&
-                          "bg-rose-500/25 text-rose-300  ring-1 ring-rose-400/60 ",
+                          "bg-rose-500/25 text-rose-300",
                         direction === "neutral" && "text-slate-100 bg-white/[0.02]"
                       )}
                     >
@@ -283,8 +282,8 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
                           className={clsx(
                             "h-full transition-all duration-300 rounded-full",
                             isPositive
-                              ? "bg-gradient-to-r from-emerald-500 to-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.4)]"
-                              : "bg-gradient-to-r from-rose-500 to-rose-400 shadow-[0_0_8px_rgba(244,63,94,0.4)]"
+                              ? "bg-gradient-to-r from-emerald-500 to-emerald-400 shadow-[0_0_8px_rgba(63,223,151,0.4)]"
+                              : "bg-gradient-to-r from-rose-500 to-rose-400 shadow-[0_0_8px_rgba(235,97,159,0.4)]"
                           )}
                           style={{ width: `${rangePercent}%` }}
                         />
@@ -331,7 +330,7 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
                       </span>
                     )}
                   </td>
-                </motion.tr>
+                </tr>
               );
             })}
         </tbody>

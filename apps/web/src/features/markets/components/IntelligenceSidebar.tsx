@@ -22,7 +22,7 @@ export function IntelligenceSidebar({ className, initialTab = "pulse" }: Intelli
   return (
     <div className={clsx("flex flex-col h-full overflow-hidden select-none font-mono", className)}>
       {/* Tab Switcher Header */}
-      <div className="p-2.5 border-b border-white/[0.08] bg-[#193326] shrink-0">
+      <div className="p-2.5 border-b border-white/[0.08] bg-[#3c3f5f] shrink-0">
         <div className="flex items-center gap-1.5 p-1 bg-white/[0.03] border border-white/[0.07] rounded-xl relative">
           <button
             type="button"

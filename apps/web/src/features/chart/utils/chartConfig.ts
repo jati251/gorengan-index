@@ -3,20 +3,20 @@ import { ColorType, type ChartOptions, type DeepPartial } from "lightweight-char
 /* ─── Theme Colors ────────────────────────────────────────────────── */
 
 export const CHART_COLORS = {
-  background: "#10251b",
-  text: "#b3c6ad",
-  grid: "rgba(166, 192, 157, 0.10)",
-  crosshair: "rgba(221, 181, 113, 0.55)",
-  crosshairLabel: "#34503a",
-  border: "rgba(166, 192, 157, 0.30)",
+  background: "#2a2839",
+  text: "#c8df79",
+  grid: "rgba(85, 96, 126, 0.35)",
+  crosshair: "rgba(244, 196, 27, 0.65)",
+  crosshairLabel: "#55607e",
+  border: "rgba(85, 96, 126, 0.7)",
 
-  candleUp: "#10b981",
-  candleDown: "#f43f5e",
-  volumeUp: "rgba(16, 185, 129, 0.45)",
-  volumeDown: "rgba(244, 63, 94, 0.45)",
+  candleUp: "#3fdf97",
+  candleDown: "#eb619f",
+  volumeUp: "rgba(63, 223, 151, 0.35)",
+  volumeDown: "rgba(235, 97, 159, 0.35)",
 
-  ema20: "#d4a060",
-  ema50: "#dfd6b2",
+  ema20: "#f4c41b",
+  ema50: "#c3e6eb",
 } as const;
 
 /* ─── Chart Options Factory ───────────────────────────────────────── */

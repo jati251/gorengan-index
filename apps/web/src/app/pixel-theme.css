@@ -1,0 +1,77 @@
+/* SLSO-CLR17 — palette supplied as the visual reference. */
+@theme {
+  --color-slate-50: #c3e6eb;
+  --color-slate-100: #c3e6eb;
+  --color-slate-200: #c3e6eb;
+  --color-slate-300: #c3e6eb;
+  --color-slate-400: color-mix(in srgb, #c3e6eb 85%, #757e8a);
+  --color-slate-500: color-mix(in srgb, #c3e6eb 65%, #757e8a);
+  --color-slate-600: #757e8a;
+  --color-slate-700: #55607e;
+  --color-slate-800: #3c3f5f;
+  --color-slate-900: #2a2839;
+  --color-slate-950: #2a2839;
+  --color-emerald-100: #c8df79;
+  --color-emerald-200: #c8df79;
+  --color-emerald-300: #3fdf97;
+  --color-emerald-400: #3fdf97;
+  --color-emerald-500: #3fdf97;
+  --color-emerald-600: #56c043;
+  --color-emerald-700: #1f9534;
+  --color-emerald-800: #1f9534;
+  --color-emerald-900: #3c3f5f;
+  --color-emerald-950: #2a2839;
+  --color-rose-100: #c3e6eb;
+  --color-rose-200: color-mix(in srgb, #eb619f 50%, #c3e6eb);
+  --color-rose-300: color-mix(in srgb, #eb619f 50%, #c3e6eb);
+  --color-rose-400: color-mix(in srgb, #eb619f 50%, #c3e6eb);
+  --color-rose-500: #eb619f;
+  --color-rose-600: #b73f2e;
+  --color-rose-700: #b73f2e;
+  --color-rose-800: #613e7b;
+  --color-rose-900: #613e7b;
+  --color-rose-950: #2a2839;
+  --color-cyan-300: #c3e6eb;
+  --color-cyan-400: color-mix(in srgb, #26a6ac 50%, #c3e6eb);
+  --color-cyan-500: #26a6ac;
+  --color-cyan-800: #3978a8;
+  --color-cyan-950: #2a2839;
+  --color-blue-300: #c3e6eb;
+  --color-blue-400: color-mix(in srgb, #3978a8 35%, #c3e6eb);
+  --color-blue-500: #3978a8;
+  --color-blue-800: #55607e;
+  --color-blue-950: #2a2839;
+  --color-amber-300: #f4c41b;
+  --color-amber-400: #f4c41b;
+  --color-amber-500: #f4c41b;
+  --color-amber-800: #c66616;
+  --color-amber-950: #2a2839;
+  --color-yellow-400: #f4c41b;
+  --color-yellow-500: #f4c41b;
+  --color-yellow-800: #c66616;
+  --color-yellow-950: #2a2839;
+  --color-purple-400: color-mix(in srgb, #913ba9 35%, #c3e6eb);
+  --color-purple-800: #613e7b;
+  --color-purple-950: #2a2839;
+  --color-indigo-400: color-mix(in srgb, #55607e 35%, #c3e6eb);
+  --color-indigo-800: #55607e;
+  --color-indigo-950: #2a2839;
+  --color-orange-400: #f4c41b;
+  --color-orange-500: #c66616;
+  --color-orange-950: #2a2839;
+  --color-white: #c3e6eb;
+  --color-black: #2a2839;
+}
+
+:root {
+  --pixel-ink: #2a2839;
+  --pixel-panel: #3c3f5f;
+  --pixel-edge: #55607e;
+  --pixel-muted: #757e8a;
+  --pixel-paper: #c3e6eb;
+  --pixel-mint: #3fdf97;
+  --pixel-yellow: #f4c41b;
+  --pixel-pink: #eb619f;
+  --pixel-purple: #913ba9;
+  --pixel-plum: #613e7b;
+}

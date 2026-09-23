@@ -38,19 +38,19 @@ export default function RetroTerminalScene() {
     camera.position.set(6, 5, 10);
     camera.lookAt(0, 0, 0);
     scene.add(new THREE.AmbientLight(0xffffff, 1.8));
-    const light = new THREE.DirectionalLight(0xffd7a0, 3.2);
+    const light = new THREE.DirectionalLight(0xc3e6eb, 3.2);
     light.position.set(-4, 8, 7);
     scene.add(light);
-    const fill = new THREE.DirectionalLight(0x8ee0b2, 1.2);
+    const fill = new THREE.DirectionalLight(0xc3e6eb, 1.2);
     fill.position.set(6, 3, -4);
     scene.add(fill);
 
-    const orange = new THREE.MeshLambertMaterial({ color: 0xf09649 });
-    const orangeLight = new THREE.MeshLambertMaterial({ color: 0xffc16e });
-    const orangeDark = new THREE.MeshLambertMaterial({ color: 0xb85039 });
-    const mint = new THREE.MeshLambertMaterial({ color: 0x7ccf9a });
-    const green = new THREE.MeshLambertMaterial({ color: 0x315e4d });
-    const cream = new THREE.MeshLambertMaterial({ color: 0xf3e7bd });
+    const orange = new THREE.MeshLambertMaterial({ color: 0xf4c41b });
+    const orangeLight = new THREE.MeshLambertMaterial({ color: 0xc8df79 });
+    const orangeDark = new THREE.MeshLambertMaterial({ color: 0xeb619f });
+    const mint = new THREE.MeshLambertMaterial({ color: 0x3fdf97 });
+    const green = new THREE.MeshLambertMaterial({ color: 0x26a6ac });
+    const cream = new THREE.MeshLambertMaterial({ color: 0xc3e6eb });
     const materials = [orange, orangeLight, orangeDark, mint, green, cream];
     const geometries: THREE.BufferGeometry[] = [];
     const group = new THREE.Group();
@@ -66,12 +66,25 @@ export default function RetroTerminalScene() {
 
     const star = new THREE.Group();
     star.position.set(-0.7, 0.25, 0.7);
+    const starGeometry = new THREE.BoxGeometry(0.31, 0.31, 0.36);
+    geometries.push(starGeometry);
+    const starPixels = [[], []] as [THREE.Vector3[], THREE.Vector3[]];
     STAR.forEach((row, y) => {
       [...row].forEach((pixel, x) => {
         if (pixel !== "#") return;
-        const material = (x + y) % 5 === 0 ? orangeLight : orange;
-        add(new THREE.BoxGeometry(0.31, 0.31, 0.36), material, (x - 5) * 0.315, (4.5 - y) * 0.315, 0, star);
+        starPixels[(x + y) % 5 === 0 ? 1 : 0].push(new THREE.Vector3((x - 5) * 0.315, (4.5 - y) * 0.315, 0));
       });
+    });
+    const pixel = new THREE.Object3D();
+    starPixels.forEach((positions, index) => {
+      const mesh = new THREE.InstancedMesh(starGeometry, index === 0 ? orange : orangeLight, positions.length);
+      positions.forEach((position, instance) => {
+        pixel.position.copy(position);
+        pixel.updateMatrix();
+        mesh.setMatrixAt(instance, pixel.matrix);
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+      star.add(mesh);
     });
     group.add(star);
 
@@ -125,20 +138,30 @@ export default function RetroTerminalScene() {
     resize();
     let frame = 0;
     let time = 0;
-    const animate = () => {
-      time += 0.012;
+    let visible = true;
+    let lastRender = 0;
+    const visibilityObserver = new IntersectionObserver(([entry]) => {
+      visible = entry.isIntersecting;
+    });
+    visibilityObserver.observe(mount);
+    const mobile = window.matchMedia("(max-width: 767px)").matches;
+    const animate = (timestamp: number) => {
+      frame = requestAnimationFrame(animate);
+      if (!visible || document.hidden || timestamp - lastRender < (mobile ? 33 : 16)) return;
+      lastRender = timestamp;
+      time += mobile ? 0.024 : 0.012;
       group.rotation.y += (targetX - group.rotation.y) * 0.035;
       group.rotation.x += (targetY - group.rotation.x) * 0.035;
       star.position.y = 0.25 + Math.sin(time) * 0.08;
       ring.rotation.z += 0.002;
       renderer.render(scene, camera);
-      frame = requestAnimationFrame(animate);
     };
-    if (!reducedMotion) animate();
+    if (!reducedMotion) frame = requestAnimationFrame(animate);
 
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
+      visibilityObserver.disconnect();
       mount.removeEventListener("pointermove", onPointerMove);
       mount.removeEventListener("pointerleave", onPointerLeave);
       geometries.forEach((geometry) => geometry.dispose());

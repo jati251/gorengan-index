@@ -25,10 +25,10 @@ export function SentimentGauge({ compact = false }: { compact?: boolean }) {
 
   const barColor =
     value >= 55
-      ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"
+      ? "bg-emerald-500 shadow-[0_0_8px_rgba(63,223,151,0.5)]"
       : value >= 45
         ? "bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.5)]"
-        : "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]";
+        : "bg-rose-500 shadow-[0_0_8px_rgba(235,97,159,0.5)]";
 
   if (compact) {
     return (
@@ -49,7 +49,7 @@ export function SentimentGauge({ compact = false }: { compact?: boolean }) {
   }
 
   if (isLoading && !compact) return <SentimentSkeleton />;
-  if (!sentiment && !compact) return <div role="status" className="border border-[#4d6b5a] bg-[#20332e] p-4 text-sm text-slate-300">{isError ? "Sentiment is unavailable right now." : "No sentiment data yet."}</div>;
+  if (!sentiment && !compact) return <div role="status" className="border border-[#55607e] bg-[#3c3f5f] p-4 text-sm text-slate-300">{isError ? "Sentiment is unavailable right now." : "No sentiment data yet."}</div>;
 
   return (
     <div className="flex flex-col gap-2 p-3.5 rounded-xl bg-white/[0.025] backdrop-blur-xl border border-white/[0.08] shadow-[0_4px_24px_rgba(0,0,0,0.3)] font-mono select-none relative overflow-hidden">

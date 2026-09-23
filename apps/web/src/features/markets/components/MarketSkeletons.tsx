@@ -19,7 +19,7 @@ export function TableSkeleton({ rows = 8 }: { rows?: number }) {
   return (
     <div className="w-full">
       {/* Header row */}
-      <div className="flex items-center gap-3 px-3 py-2.5 border-b border-slate-800 bg-[#060910]">
+      <div className="flex items-center gap-3 px-3 py-2.5 border-b border-slate-800 bg-[#2a2839]">
         <Skeleton className="h-2.5 w-8" />
         <Skeleton className="h-2.5 w-16" />
         <Skeleton className="h-2.5 w-12" />

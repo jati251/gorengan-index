@@ -1,148 +1,161 @@
 "use client";
 
-import React, { useMemo, useRef, useState } from "react";
-import { motion, useMotionValue, useAnimationFrame } from "framer-motion";
-import { useMarketStore } from "@/stores/marketStore";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { clsx } from "clsx";
+import { useMarketStore, type PriceDirection } from "@/stores/marketStore";
 import { formatPrice, formatPercent } from "@/utils/formatters";
 import { formatFxPrice, isFxSymbol } from "@/features/forex";
 import { formatEquityPrice, isUsEquitySymbol, isIdxEquitySymbol } from "@/features/equities";
 import type { MarketTicker } from "@gorengan/shared";
 
+interface TapeItemProps {
+  ticker: MarketTicker;
+  direction: PriceDirection;
+  selected: boolean;
+  copy: number;
+  onSelect: (symbol: string) => void;
+}
+
+const TapeItem = React.memo(function TapeItem({ ticker, direction, selected, copy, onSelect }: TapeItemProps) {
+  const isPositive = (ticker.changePercent24h ?? 0) >= 0;
+  const isFx = isFxSymbol(ticker.symbol);
+  const isUs = isUsEquitySymbol(ticker.symbol);
+  const isId = isIdxEquitySymbol(ticker.symbol);
+  const price = isFx
+    ? formatFxPrice(ticker.price, ticker.symbol)
+    : isId
+      ? formatEquityPrice(ticker.price, ticker.symbol, "IDR")
+      : isUs
+        ? formatEquityPrice(ticker.price, ticker.symbol, "USD")
+        : "$" + formatPrice(ticker.price);
+
+  return (
+    <button
+      type="button"
+      tabIndex={copy === 0 ? 0 : -1}
+      onClick={() => onSelect(ticker.symbol)}
+      className={clsx(
+        "flex items-center gap-2 px-2.5 py-1 rounded-md text-[11px] cursor-pointer shrink-0 border",
+        direction === "up" ? "bg-emerald-500/25 border-emerald-400" :
+        direction === "down" ? "bg-rose-500/25 border-rose-400" :
+        selected ? "bg-emerald-500/15 border-emerald-500/50 text-emerald-300 font-bold" :
+        "bg-white/[0.025] hover:bg-white/[0.08] border-white/[0.06] hover:border-white/[0.18] text-slate-300"
+      )}
+      title={"Select " + ticker.symbol}
+    >
+      <span className="font-semibold text-slate-200">{ticker.symbol}</span>
+      <span key={ticker.price} data-direction={direction} className={clsx("price-pixel-flash font-medium tabular-nums flex items-center gap-0.5 px-1", direction === "up" ? "font-bold" : direction === "down" ? "font-bold" : "text-white")}>
+        {price}
+        {direction === "up" && <span className="text-[9px] text-emerald-300 font-extrabold">▲</span>}
+        {direction === "down" && <span className="text-[9px] text-rose-300 font-extrabold">▼</span>}
+      </span>
+      <span className={clsx("font-semibold tabular-nums text-[10px] px-1.5 py-0.2 rounded border", isPositive ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/25" : "text-rose-400 bg-rose-500/10 border-rose-500/25")}>
+        {formatPercent(ticker.changePercent24h)}
+      </span>
+    </button>
+  );
+});
+
 export function BottomStickyTickerTape() {
-  const tickers = useMarketStore((s) => s.tickers);
-  const priceDirections = useMarketStore((s) => s.priceDirections);
+  const [market, setMarket] = useState(() => {
+    const state = useMarketStore.getState();
+    return { tickers: state.tickers, priceDirections: state.priceDirections };
+  });
+  const { tickers, priceDirections } = market;
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
   const setSelectedSymbol = useMarketStore((s) => s.setSelectedSymbol);
 
-  const [isHovered, setIsHovered] = useState(false);
-  const x = useMotionValue(0);
+  const pausedRef = useRef(false);
   const contentRef = useRef<HTMLDivElement>(null);
+  const widthRef = useRef(0);
+  const offsetRef = useRef(0);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const unsubscribe = useMarketStore.subscribe((state, previous) => {
+      if (state.tickers === previous.tickers && state.priceDirections === previous.priceDirections) return;
+      if (timer) return;
+      timer = setTimeout(() => {
+        const latest = useMarketStore.getState();
+        setMarket({ tickers: latest.tickers, priceDirections: latest.priceDirections });
+        timer = undefined;
+      }, 250);
+    });
+    return () => {
+      unsubscribe();
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
 
   const tickerList = useMemo(() => Object.values(tickers), [tickers]);
 
-  // Duplicate items twice to allow continuous seamless 50% translation marquee
-  const loopedTickers = useMemo(() => {
-    if (tickerList.length === 0) return [];
-    return [...tickerList, ...tickerList];
-  }, [tickerList]);
-
-  // Calm, steady, ultra-smooth ticker flow (~36 pixels per second)
-  const SPEED = 36;
-
-  useAnimationFrame((_, delta) => {
-    if (isHovered) return;
-    if (!contentRef.current) return;
-
-    const halfWidth = contentRef.current.scrollWidth / 2;
-    if (halfWidth <= 0) return;
-
-    let currentX = x.get() - SPEED * (delta / 1000);
-    if (currentX <= -halfWidth) {
-      currentX += halfWidth;
-    }
-    x.set(currentX);
-  });
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content || tickerList.length === 0) return;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const observer = new ResizeObserver(() => {
+      widthRef.current = content.scrollWidth / 2;
+      if (widthRef.current > 0) offsetRef.current %= widthRef.current;
+    });
+    observer.observe(content);
+    widthRef.current = content.scrollWidth / 2;
+    let frame = 0;
+    let previousTime = 0;
+    const animate = (time: number) => {
+      if (previousTime && !pausedRef.current && !document.hidden && !reducedMotion.matches && widthRef.current > 0) {
+        offsetRef.current = (offsetRef.current + 36 * Math.min((time - previousTime) / 1000, 0.05)) % widthRef.current;
+        content.style.transform = `translate3d(${-offsetRef.current}px, 0, 0)`;
+      }
+      previousTime = time;
+      frame = requestAnimationFrame(animate);
+    };
+    frame = requestAnimationFrame(animate);
+    return () => { cancelAnimationFrame(frame); observer.disconnect(); };
+  }, [tickerList.length]);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, ease: "easeOut" }}
+    <div
       aria-label="Real-time Market Ticker Tape"
-      className="fixed bottom-[72px] xl:bottom-0 left-0 right-0 z-40 h-9 bg-[#173025] border-t border-white/[0.08] flex items-center font-mono select-none overflow-hidden "
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      className="fixed bottom-[72px] xl:bottom-0 left-0 right-0 z-40 h-9 bg-[#3c3f5f] border-t border-white/[0.08] flex items-center font-mono select-none overflow-hidden "
+      onMouseEnter={() => { pausedRef.current = true; }}
+      onMouseLeave={() => { pausedRef.current = false; }}
+      onFocusCapture={() => { pausedRef.current = true; }}
+      onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) pausedRef.current = false; }}
     >
       {/* Marquee Track Container with Edge Fades */}
       <div className="relative flex-1 w-full overflow-hidden h-full flex items-center">
         {/* Left fade gradient */}
-        <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-[#173025] via-[#173025]/80 to-transparent z-10" />
+        <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-[#3c3f5f] via-[#3c3f5f]/80 to-transparent z-10" />
 
-        {loopedTickers.length === 0 ? (
+        {tickerList.length === 0 ? (
           <div className="px-4 text-xs text-slate-500 italic">
             Connecting to live market stream...
           </div>
         ) : (
-          <motion.div
+          <div
             ref={contentRef}
-            style={{ x }}
-            className="flex items-center gap-2 py-0.5 will-change-transform"
+            className="flex w-max items-center py-0.5 will-change-transform"
           >
-            {loopedTickers.map((t: MarketTicker, idx: number) => {
-              const isPositive = (t.changePercent24h ?? 0) >= 0;
-              const isSelected = t.symbol === selectedSymbol;
-              const direction = priceDirections[t.symbol];
-              const isFx = isFxSymbol(t.symbol);
-              const isUs = isUsEquitySymbol(t.symbol);
-              const isId = isIdxEquitySymbol(t.symbol);
-
-              let formattedPrice = `$${formatPrice(t.price)}`;
-              if (isFx) {
-                formattedPrice = formatFxPrice(t.price, t.symbol);
-              } else if (isId) {
-                formattedPrice = formatEquityPrice(t.price, t.symbol, "IDR");
-              } else if (isUs) {
-                formattedPrice = formatEquityPrice(t.price, t.symbol, "USD");
-              }
-
-              return (
-                <motion.button
-                  key={`${t.symbol}-${idx}`}
-                  type="button"
-                  whileHover={{ scale: 1.04, y: -1 }}
-                  whileTap={{ scale: 0.96 }}
-                  onClick={() => setSelectedSymbol(t.symbol)}
-                  className={`flex items-center gap-2 px-2.5 py-1 rounded-md text-[11px] transition-all duration-300 cursor-pointer shrink-0 border ${
-                    direction === "up"
-                      ? "bg-emerald-500/25 border-emerald-400 shadow-[0_0_16px_rgba(16,185,129,0.5)] scale-[1.02]"
-                      : direction === "down"
-                        ? "bg-rose-500/25 border-rose-400 shadow-[0_0_16px_rgba(244,63,94,0.5)] scale-[1.02]"
-                        : isSelected
-                          ? "bg-emerald-500/15 border-emerald-500/50 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.2)] font-bold"
-                          : "bg-white/[0.025] hover:bg-white/[0.08] border-white/[0.06] hover:border-white/[0.18] text-slate-300"
-                  }`}
-                  title={`Select ${t.symbol}`}
-                >
-                  <span className="font-semibold text-slate-200">{t.symbol}</span>
-                  <span
-                    className={`font-medium tabular-nums transition-colors duration-200 flex items-center gap-0.5 ${
-                      direction === "up"
-                        ? "text-emerald-300 font-bold drop-shadow-[0_0_8px_rgba(16,185,129,0.9)]"
-                        : direction === "down"
-                          ? "text-rose-300 font-bold drop-shadow-[0_0_8px_rgba(244,63,94,0.9)]"
-                          : "text-white"
-                    }`}
-                  >
-                    {formattedPrice}
-                    {direction === "up" && (
-                      <span className="text-[9px] text-emerald-300 font-extrabold animate-pulse">
-                        ▲
-                      </span>
-                    )}
-                    {direction === "down" && (
-                      <span className="text-[9px] text-rose-300 font-extrabold animate-pulse">
-                        ▼
-                      </span>
-                    )}
-                  </span>
-                  <span
-                    className={`font-semibold tabular-nums text-[10px] px-1.5 py-0.2 rounded border ${
-                      isPositive
-                        ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/25 drop-shadow-[0_0_6px_rgba(16,185,129,0.3)]"
-                        : "text-rose-400 bg-rose-500/10 border-rose-500/25 drop-shadow-[0_0_6px_rgba(244,63,94,0.3)]"
-                    }`}
-                  >
-                    {formatPercent(t.changePercent24h)}
-                  </span>
-                </motion.button>
-              );
-            })}
-          </motion.div>
+            {([0, 1] as const).map((copy) => (
+              <div key={copy} aria-hidden={copy === 1 ? true : undefined} className="flex shrink-0 items-center gap-2 pr-2">
+                {tickerList.map((ticker) => (
+                  <TapeItem
+                    key={ticker.symbol}
+                    ticker={ticker}
+                    direction={priceDirections[ticker.symbol] || "neutral"}
+                    selected={ticker.symbol === selectedSymbol}
+                    copy={copy}
+                    onSelect={setSelectedSymbol}
+                  />
+                ))}
+              </div>
+            ))}
+          </div>
         )}
 
         {/* Right fade gradient */}
-        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-[#173025] via-[#173025]/80 to-transparent z-10" />
+        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-[#3c3f5f] via-[#3c3f5f]/80 to-transparent z-10" />
       </div>
-    </motion.div>
+    </div>
   );
 }

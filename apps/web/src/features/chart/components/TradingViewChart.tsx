@@ -279,6 +279,7 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
 
   // Subscribe to realtime live candle stream from Zustand store
   useEffect(() => {
+    let lastCandle: ReturnType<typeof useMarketStore.getState>["candles"][string] | undefined;
     const unsubscribe = useMarketStore.subscribe((state) => {
       if (!candleSeriesRef.current || !volumeSeriesRef.current) return;
 
@@ -286,7 +287,8 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
         state.candles[`${symbol}:${selectedTimeframe}`] ||
         (selectedTimeframe === "1m" ? state.candles[`${symbol}:1m`] : undefined);
 
-      if (!liveCandle) return;
+      if (!liveCandle || liveCandle === lastCandle) return;
+      lastCandle = liveCandle;
 
       const time = toLocalChartTime(liveCandle.openTime) as Time;
       try {
@@ -356,7 +358,7 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
       )}
 
       {isLoading ? (
-        <div className="absolute inset-0 z-10 bg-[#10251b]">
+        <div className="absolute inset-0 z-10 bg-[#2a2839]">
           <ChartSkeleton />
         </div>
       ) : !hasCandles ? (
