@@ -16,7 +16,7 @@ import { TIMEFRAME_MS } from "@gorengan/shared";
 import { useCandlesQuery } from "../api/useCandlesQuery";
 import { useMarketStore } from "@/stores/marketStore";
 import { toLocalChartTime } from "@/utils/formatters";
-import { ChartSkeleton } from "./ChartSkeleton";
+import { DataState } from "@/components/ui/data-state";
 import { OhlcLegend, type OhlcData } from "./OhlcLegend";
 import { calculateEMA } from "../utils/indicators";
 import {
@@ -42,9 +42,10 @@ function getChartPrecision(
 interface TradingViewChartProps {
   symbol: string;
   className?: string;
+  terminalTheme?: boolean;
 }
 
-export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
+export function TradingViewChart({ symbol, className, terminalTheme = false }: TradingViewChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -76,7 +77,7 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
   const precision = getChartPrecision(isId, isUs, isFx, fxMeta?.displayDecimals);
   const minMove = precision === 0 ? 1 : 1 / Math.pow(10, precision);
 
-  const { data: candlesData, isLoading, isError } = useCandlesQuery(symbol, selectedTimeframe);
+  const { data: candlesData, isLoading, isError, refetch } = useCandlesQuery(symbol, selectedTimeframe);
   const candlesDataRef = useRef(candlesData);
   useEffect(() => {
     candlesDataRef.current = candlesData;
@@ -113,7 +114,7 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
 
     const chart = createChart(
       containerRef.current,
-      createChartOptions(width, height, isSubMinuteTimeframe(selectedTimeframe))
+      createChartOptions(width, height, isSubMinuteTimeframe(selectedTimeframe), terminalTheme)
     );
 
     const candlestickSeries = chart.addSeries(CandlestickSeries, {
@@ -225,12 +226,18 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
 
   // Update chart historical data whenever TanStack query resolves
   useEffect(() => {
-    if (!candleSeriesRef.current || !volumeSeriesRef.current || !candlesData?.candles) {
+    if (!candleSeriesRef.current || !volumeSeriesRef.current) {
       return;
     }
 
-    const candles = candlesData.candles;
-    if (candles.length === 0) return;
+    const candles = candlesData?.candles ?? [];
+    if (candles.length === 0) {
+      candleSeriesRef.current.setData([]);
+      volumeSeriesRef.current.setData([]);
+      ema20SeriesRef.current?.setData([]);
+      ema50SeriesRef.current?.setData([]);
+      return;
+    }
 
     // Ensure sorted by time ascending
     const sorted = [...candles].sort((a, b) => a.openTime - b.openTime);
@@ -508,8 +515,8 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
     liveCandleState?.key === `${symbol}:${selectedTimeframe}`
       ? liveCandleState.candle
       : null;
-  const displayOhlc = hoveredCandle || currentLiveCandle || queryLatestCandle;
   const hasCandles = Boolean(candlesData?.candles?.length || currentLiveCandle);
+  const displayOhlc = !isLoading && hasCandles ? hoveredCandle || currentLiveCandle || queryLatestCandle : null;
 
   return (
     <div className={`relative w-full h-full min-h-0 select-none ${className || ""}`}>
@@ -532,12 +539,11 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
 
       {isLoading ? (
         <div className="absolute inset-0 z-10 bg-[#2a2839]">
-          <ChartSkeleton />
+          <DataState loading />
         </div>
       ) : !hasCandles ? (
         <div className="chart-empty-state" role="status">
-          <span>NO CHART DATA</span>
-          <p>{isError ? "Chart unavailable. Try another timeframe." : `No candles yet for ${symbol} at ${selectedTimeframe}.`}</p>
+          <DataState error={isError} onRetry={() => refetch()} />
         </div>
       ) : null}
 

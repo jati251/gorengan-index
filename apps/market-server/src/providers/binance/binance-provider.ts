@@ -4,6 +4,7 @@ import { request } from "undici";
 import type {
   Candle,
   MarketSymbol,
+  MarketTicker,
   Timeframe,
   ProviderStatusLevel,
 } from "@gorengan/shared";

@@ -8,13 +8,13 @@ import {
   TrendingUp,
   TrendingDown,
   Minus,
-  AlertTriangle,
   Clock,
   RefreshCw,
 } from "lucide-react";
 import { clsx } from "clsx";
 import { useNewsQuery } from "../api/useNewsQuery";
 import { timeAgo } from "@/utils/formatters";
+import { DataState } from "@/components/ui/data-state";
 import { NewsFeedSkeleton } from "./NewsSkeletons";
 import type { NewsArticle } from "../types";
 import { useTranslation } from "@/features/i18n";
@@ -120,7 +120,6 @@ function NewsItem({ article, index }: { article: NewsArticle; index: number }) {
 }
 
 export function NewsFeed() {
-  const { dict } = useTranslation();
   const { data: articles, isLoading, isError, refetch, isFetching } = useNewsQuery();
 
   return (
@@ -157,21 +156,8 @@ export function NewsFeed() {
       <div className="flex-1 overflow-y-auto min-h-0">
         {isLoading ? (
           <NewsFeedSkeleton />
-        ) : isError ? (
-          <div className="flex flex-col items-center justify-center p-8 gap-3 text-center">
-            <AlertTriangle className="w-6 h-6 text-amber-400" />
-            <span className="text-base text-slate-200">{dict.news.empty}</span>
-            <button
-              onClick={() => refetch()}
-              className="text-[10px] text-[#f4c41b] hover:underline cursor-pointer"
-            >
-              Retry
-            </button>
-          </div>
-        ) : !articles || articles.length === 0 ? (
-          <div className="p-8 text-center text-base text-slate-300">
-            {dict.news.empty}
-          </div>
+        ) : !articles?.length ? (
+          <DataState error={isError} onRetry={() => refetch()} />
         ) : (
           <AnimatePresence initial={false}>
             {articles.map((article, idx) => (

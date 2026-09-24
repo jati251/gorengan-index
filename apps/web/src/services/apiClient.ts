@@ -29,6 +29,7 @@ export async function apiGet<T>(
 
   const res = await fetch(url, {
     method: "GET",
+    signal: AbortSignal.timeout(12_000),
     headers: {
       Accept: "application/json",
     },

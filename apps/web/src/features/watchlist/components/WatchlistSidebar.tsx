@@ -25,7 +25,10 @@ import {
   getSymbolSearchSuggestions,
 } from "@/features/markets";
 
+import { DataState } from "@/components/ui/data-state";
+
 interface WatchlistSidebarProps {
+  isLoading?: boolean;
   symbols: MarketSymbol[];
   onSelectSymbol?: (symbolId: string) => void;
 }
@@ -67,7 +70,7 @@ function getWatchlistDirectionArrowClass(direction?: "up" | "down" | "neutral"):
   return "opacity-0 scale-50";
 }
 
-export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarProps) {
+export function WatchlistSidebar({ symbols, onSelectSymbol, isLoading = false }: WatchlistSidebarProps) {
   const { dict, interpolate, locale } = useTranslation();
   const [search, setSearch] = useState("");
   const [committedSearch, setCommittedSearch] = useState("");
@@ -403,7 +406,7 @@ export function WatchlistSidebar({ symbols, onSelectSymbol }: WatchlistSidebarPr
 
       {/* Symbol List — Rendered cleanly without AnimatePresence layout shifts */}
       <div className="flex-1 overflow-y-auto divide-y divide-white/[0.04] no-scrollbar min-h-0">
-        {displayedSymbols.length === 0 ? (
+        {isLoading && !symbols.length ? <DataState loading /> : displayedSymbols.length === 0 ? (
           tab === "favorites" ? (
             <div className="p-6 text-center text-xs flex flex-col items-center justify-center gap-2 text-slate-400">
               <Star className="w-8 h-8 text-yellow-400/25 stroke-1" />

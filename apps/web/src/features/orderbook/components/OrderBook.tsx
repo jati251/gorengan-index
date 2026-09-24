@@ -21,7 +21,7 @@ function formatNumber(num: number, decimals: number): string {
 }
 
 export function OrderBook({ className, maxRows = 10 }: OrderBookProps) {
-  const { dict } = useTranslation();
+  const { dict, locale } = useTranslation();
   const {
     symbol,
     bids,
@@ -49,6 +49,16 @@ export function OrderBook({ className, maxRows = 10 }: OrderBookProps) {
     const limit = viewMode === "bids" ? maxRows * 2 : maxRows;
     return bids.slice(0, limit);
   }, [bids, viewMode, maxRows]);
+
+  if (source !== "binance_live") {
+    return <div className={clsx("desk-empty", className)} role="status">
+      <Layers className="w-6 h-6 text-slate-400" aria-hidden="true" />
+      <h3>{source === "connecting"
+        ? (locale === "id" ? "Menghubungkan order book" : "Connecting to order book")
+        : (locale === "id" ? "Data kedalaman belum tersedia" : "Depth data unavailable")}</h3>
+      <p>{locale === "id" ? "Level bid dan ask ditampilkan ketika data order book asli diterima." : "Bid and ask levels appear when actual order book data is received."}</p>
+    </div>;
+  }
 
   return (
     <div

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
+import "./terminal.css";
 
 export async function generateMetadata(): Promise<Metadata> {
   const cookieStore = await cookies();

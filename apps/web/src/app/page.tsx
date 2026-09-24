@@ -29,7 +29,7 @@ export default function LandingPage() {
   const { status } = useSession();
   const isAuthenticated = status === "authenticated";
   const { dict, interpolate, locale } = useTranslation();
-  const { symbols, symbolIds, isLoading } = useResolvedSymbols();
+  const { symbols, symbolIds, isLoading, isError, refetch } = useResolvedSymbols();
   useMarketsQuery();
 
   // Curate 8 representative items for hero snapshot tape
@@ -166,6 +166,7 @@ export default function LandingPage() {
               </span>
             </div>
             <div className="preview-content">
+              {isError && <div role="status" className="px-4 py-3 border-b border-[#55607e] font-mono text-sm text-[#f4c41b]"><span>{locale === "id" ? "Daftar instrumen cadangan digunakan. " : "Using the fallback instrument list. "}</span><button type="button" className="underline min-h-11" onClick={() => refetch()}>{locale === "id" ? "Muat ulang" : "Retry"}</button></div>}
               {activeTab === "chart" ? (
                 <div className="preview-grid">
                   <Card className="preview-chart">

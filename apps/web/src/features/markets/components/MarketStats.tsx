@@ -92,7 +92,6 @@ export function MarketStats() {
   const allTickers = Object.values(tickers);
   const gainersCount = allTickers.filter((t) => (t.changePercent24h ?? 0) > 0).length;
   const losersCount = allTickers.filter((t) => (t.changePercent24h ?? 0) < 0).length;
-  const totalVol = allTickers.reduce((sum, t) => sum + (t.volume24h ?? 0), 0);
 
   const totalActive = gainersCount + losersCount;
   const gainersPercent = totalActive > 0 ? Math.round((gainersCount / totalActive) * 100) : 0;
@@ -123,28 +122,28 @@ export function MarketStats() {
         />
         <StatCard
           label={dict.marketStats.labels.gainers}
-          value={`${gainersCount}`}
+          value={allTickers.length ? `${gainersCount}` : "—"}
           icon={<TrendingUp className="w-3.5 h-3.5" />}
           accent="emerald"
           subtext={`of ${allTickers.length}`}
         />
         <StatCard
           label={dict.marketStats.labels.losers}
-          value={`${losersCount}`}
+          value={allTickers.length ? `${losersCount}` : "—"}
           icon={<TrendingDown className="w-3.5 h-3.5" />}
           accent="rose"
           subtext={`of ${allTickers.length}`}
         />
         <StatCard
           label={isFx ? "Venue" : dict.marketStats.labels.volume24h}
-          value={isFx ? "Interbank" : formatVolume(totalVol)}
+          value={isFx ? "Interbank" : formatVolume(ticker?.volume24h)}
           icon={<Activity className="w-3.5 h-3.5" />}
           accent="slate"
-          subtext={isFx ? "Venues streaming" : "Across markets"}
+          subtext={isFx ? "Venues streaming" : selectedSymbol}
         />
         <StatCard
           label={dict.common.allMarkets}
-          value={`${allTickers.length}`}
+          value={allTickers.length ? `${allTickers.length}` : "—"}
           icon={<Layers className="w-3.5 h-3.5" />}
           accent="slate"
           subtext="Active instruments"

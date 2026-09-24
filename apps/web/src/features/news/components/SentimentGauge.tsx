@@ -6,6 +6,7 @@ import { clsx } from "clsx";
 import { useSentimentQuery } from "../api/useSentimentQuery";
 import { SentimentSkeleton } from "./NewsSkeletons";
 import { useTranslation } from "@/features/i18n";
+import { DataState } from "@/components/ui/data-state";
 
 function getSentimentColorClass(value: number): string {
   if (value >= 75) return "text-emerald-400 border-emerald-500/40 bg-emerald-950/40";
@@ -23,7 +24,7 @@ function getSentimentBarColor(value: number): string {
 
 export function SentimentGauge({ compact = false }: { compact?: boolean }) {
   const { dict } = useTranslation();
-  const { data: sentiment, isLoading, isError } = useSentimentQuery();
+  const { data: sentiment, isLoading, isError, refetch } = useSentimentQuery();
 
   const value = sentiment?.value ?? 0;
   const rawClassification = sentiment?.classification ?? "Unavailable";
@@ -39,7 +40,8 @@ export function SentimentGauge({ compact = false }: { compact?: boolean }) {
   };
 
   const classification = getLocalizedClassification(rawClassification);
-  const colorClass = getSentimentColorClass(value);
+  const valid = sentiment && Number.isFinite(sentiment.value) && sentiment.value >= 0 && sentiment.value <= 100;
+  const colorClass = valid ? getSentimentColorClass(value) : "text-slate-300 border-slate-700";
   const barColor = getSentimentBarColor(value);
 
   if (compact) {
@@ -52,20 +54,18 @@ export function SentimentGauge({ compact = false }: { compact?: boolean }) {
         title={sentiment ? `${dict.sentiment.title}: ${value}/100 (${classification})` : dict.sentiment.levels.unavailable}
       >
         <Gauge className="w-3.5 h-3.5" />
-        <span className="font-bold tabular-nums">{sentiment ? value : "—"}</span>
+        <span className="font-bold tabular-nums">{valid ? value : "—"}</span>
         <span className="text-[10px] uppercase font-semibold hidden sm:inline">
-          {classification}
+          {valid ? classification : dict.sentiment.levels.unavailable}
         </span>
       </div>
     );
   }
 
   if (isLoading && !compact) return <SentimentSkeleton />;
-  if (!sentiment && !compact) {
+  if (!valid && !compact) {
     return (
-      <div role="status" className="border border-[#55607e] bg-[#3c3f5f] p-4 text-sm text-slate-300">
-        {isError ? dict.sentiment.labels.unavailableMsg : dict.sentiment.labels.noDataMsg}
-      </div>
+      <DataState error={isError} onRetry={() => refetch()} />
     );
   }
 

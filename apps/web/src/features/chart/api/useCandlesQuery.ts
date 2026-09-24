@@ -11,7 +11,6 @@ export function useCandlesQuery(symbol: string, timeframe: Timeframe = "1m") {
         limit: 1000,
       }),
     enabled: !!symbol,
-    placeholderData: (previousData) => previousData,
     staleTime: 15 * 1000,
   });
 }

@@ -250,6 +250,7 @@ export function ChartHeader() {
   const fxMeta = useMemo(() => (isFx ? getFxMetadata(selectedSymbol) : undefined), [selectedSymbol, isFx]);
   const eqMeta = useMemo(() => (isEquity ? getEquityMetadata(selectedSymbol) : undefined), [selectedSymbol, isEquity]);
 
+  const hasChange = Number.isFinite(ticker?.changePercent24h);
   const isPositive = (ticker?.changePercent24h ?? 0) >= 0;
 
   // Format price appropriately depending on asset class
@@ -326,12 +327,12 @@ export function ChartHeader() {
           <span
             className={clsx(
               "text-xs font-semibold px-2.5 py-1 rounded-md border transition-all duration-200 flex items-center gap-1 shadow-sm",
-              isPositive
+              !hasChange ? "text-slate-400 border-slate-700" : isPositive
                 ? "bg-emerald-950/60 text-emerald-400 border-emerald-800/40 "
                 : "bg-rose-950/60 text-rose-400 border-rose-800/40 "
             )}
           >
-            {isPositive ? (
+            {!hasChange ? null : isPositive ? (
               <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
             ) : (
               <TrendingDown className="w-3.5 h-3.5 text-rose-400" />

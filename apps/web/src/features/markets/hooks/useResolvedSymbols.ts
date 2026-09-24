@@ -7,6 +7,7 @@ export interface ResolvedSymbolsResult {
   symbolIds: string[];
   isLoading: boolean;
   isError: boolean;
+  refetch: () => Promise<unknown>;
 }
 
 /**
@@ -14,12 +15,12 @@ export interface ResolvedSymbolsResult {
  * guaranteeing deduplicated canonical symbol identities across the application.
  */
 export function useResolvedSymbols(): ResolvedSymbolsResult {
-  const { data, isLoading, isError } = useSymbolsQuery();
+  const { data, isLoading, isError, refetch } = useSymbolsQuery();
   const serverSymbols = data?.symbols;
 
   const symbols = useMemo(() => {
     const symbolMap = new Map<string, MarketSymbol>();
-    if (serverSymbols && serverSymbols.length > 0) {
+    if (serverSymbols) {
       for (const s of serverSymbols) {
         if (s.id && !symbolMap.has(s.id)) {
           symbolMap.set(s.id, s);
@@ -44,5 +45,6 @@ export function useResolvedSymbols(): ResolvedSymbolsResult {
     symbolIds,
     isLoading,
     isError,
+    refetch,
   };
 }

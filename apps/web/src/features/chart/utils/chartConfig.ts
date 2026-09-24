@@ -24,14 +24,15 @@ export const CHART_COLORS = {
 export function createChartOptions(
   width: number,
   height: number,
-  secondsVisible: boolean
+  secondsVisible: boolean,
+  terminalTheme = false
 ): DeepPartial<ChartOptions> {
   return {
     width,
     height,
     layout: {
       background: { type: ColorType.Solid, color: CHART_COLORS.background },
-      textColor: CHART_COLORS.text,
+      textColor: terminalTheme ? "#c3e6eb" : CHART_COLORS.text,
       fontFamily: "monospace",
       fontSize: 11,
     },

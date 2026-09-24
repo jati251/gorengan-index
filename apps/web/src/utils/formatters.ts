@@ -4,7 +4,7 @@ export function formatPrice(
   maxDecimals = 4,
   locale: "en" | "id" = "en"
 ): string {
-  if (price === undefined || price === null || isNaN(price)) return "—";
+  if (price === undefined || price === null || !Number.isFinite(price)) return "—";
 
   // For very small numbers (e.g. XRP or meme tokens), show more decimals
   if (price < 1 && price > 0) {
@@ -20,13 +20,13 @@ export function formatPrice(
 }
 
 export function formatPercent(percent: number | undefined | null): string {
-  if (percent === undefined || percent === null || isNaN(percent)) return "0.00%";
+  if (percent === undefined || percent === null || !Number.isFinite(percent)) return "—";
   const sign = percent > 0 ? "+" : "";
   return `${sign}${percent.toFixed(2)}%`;
 }
 
 export function formatVolume(volume: number | undefined | null): string {
-  if (volume === undefined || volume === null || isNaN(volume)) return "0";
+  if (volume === undefined || volume === null || !Number.isFinite(volume)) return "—";
   if (volume >= 1e9) {
     return `${(volume / 1e9).toFixed(2)}B`;
   }
