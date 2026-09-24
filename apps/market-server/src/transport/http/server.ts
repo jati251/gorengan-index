@@ -44,11 +44,12 @@ export function createHttpServer(
 
     const host = req.headers.host || `localhost:${config.PORT}`;
     const urlObj = new URL(req.url || "/", `http://${host}`);
-    const pathname = urlObj.pathname;
+    const rawPath = urlObj.pathname;
+    const pathname = rawPath.replace(/^\/(?:api|v1)/, "") || "/";
 
     try {
-      // 1. GET /api/health
-      if (pathname === "/api/health") {
+      // 1. GET /api/health or /v1/health
+      if (pathname === "/health") {
         const provStatus = provider.getStatus();
         const body: HealthResponse = {
           status: provStatus.connected ? "ok" : "degraded",
@@ -69,16 +70,16 @@ export function createHttpServer(
         return;
       }
 
-      // 2. GET /api/symbols
-      if (pathname === "/api/symbols") {
+      // 2. GET /api/symbols or /v1/symbols
+      if (pathname === "/symbols") {
         const symbols = repository.getSymbols();
         const body: SymbolsResponse = { symbols };
         sendJson(res, 200, body);
         return;
       }
 
-      // 3. GET /api/markets
-      if (pathname === "/api/markets") {
+      // 3. GET /api/markets or /v1/markets
+      if (pathname === "/markets") {
         const markets = marketState.getAllTickers();
         const body: MarketsResponse = {
           markets,
@@ -88,9 +89,9 @@ export function createHttpServer(
         return;
       }
 
-      // 4. GET /api/markets/:symbol
-      if (pathname.startsWith("/api/markets/")) {
-        const rawSymbol = pathname.slice("/api/markets/".length);
+      // 4. GET /api/markets/:symbol or /v1/markets/:symbol
+      if (pathname.startsWith("/markets/")) {
+        const rawSymbol = pathname.slice("/markets/".length);
         const symbol = decodeURIComponent(rawSymbol);
         const ticker = marketState.getTicker(symbol);
         const candle1m = candleEngine.getCurrentCandle(symbol, "1m");
@@ -104,9 +105,9 @@ export function createHttpServer(
         return;
       }
 
-      // 5. GET /api/candles/:symbol
-      if (pathname.startsWith("/api/candles/")) {
-        const rawSymbol = pathname.slice("/api/candles/".length);
+      // 5. GET /api/candles/:symbol or /v1/candles/:symbol
+      if (pathname.startsWith("/candles/")) {
+        const rawSymbol = pathname.slice("/candles/".length);
         const symbol = decodeURIComponent(rawSymbol);
 
         const timeframe = (urlObj.searchParams.get("timeframe") as Timeframe) || "1m";

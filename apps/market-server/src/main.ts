@@ -90,15 +90,13 @@ async function bootstrap() {
     });
   });
 
-  // 8. Gap backfill
-  try {
-    await runBackfill(repository, provider, symbols);
-  } catch (err) {
-    logger.warn({ err }, "Initial backfill failed or partially completed, continuing startup");
-  }
-
-  // 9. Connect realtime feed
+  // 8. Connect realtime feed immediately
   await provider.connect();
+
+  // 9. Run historical gap backfill in background without blocking realtime stream
+  runBackfill(repository, provider, symbols).catch((err) => {
+    logger.warn({ err }, "Initial backfill failed or partially completed, continuing startup");
+  });
 
   // 10. Schedule retention job (runs once every 24 hours)
   const retentionInterval = setInterval(() => {

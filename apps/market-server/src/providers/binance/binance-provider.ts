@@ -11,7 +11,7 @@ import { DEFAULT_SYMBOLS } from "@gorengan/shared";
 import type { MarketProvider, ProviderStatus } from "../market-provider.js";
 import { config } from "../../config/index.js";
 import { logger } from "../../utils/logger.js";
-import { toBinanceSymbol } from "./binance-symbols.js";
+import { toBinanceSymbol, toCanonicalSymbol } from "./binance-symbols.js";
 import {
   normalizeBinanceTicker,
   normalizeBinanceTrade,
@@ -50,6 +50,9 @@ export class BinanceProvider extends EventEmitter implements MarketProvider {
     this.isConnecting = true;
     this.setStatus("CONNECTING");
 
+    // Fetch initial REST ticker snapshots so all symbols immediately have 24h data
+    this.fetchTickerSnapshots().catch(() => {});
+
     const streams = this.buildStreamList();
     if (streams.length === 0) {
       logger.warn("No symbols to subscribe for Binance provider");
@@ -66,7 +69,7 @@ export class BinanceProvider extends EventEmitter implements MarketProvider {
     try {
       this.ws = new WebSocket(wsUrl);
 
-      this.ws.on("open", () => {
+      this.ws.on("open", async () => {
         logger.info("Binance WebSocket stream connected successfully");
         this.isConnected = true;
         this.isConnecting = false;
@@ -75,18 +78,22 @@ export class BinanceProvider extends EventEmitter implements MarketProvider {
         this.setStatus("LIVE");
         this.startHeartbeat();
 
-        // Subscribe via JSON-RPC in chunks of 50 to adhere to payload limits
+        // Subscribe via JSON-RPC in chunks of 50, paced to respect 5 msg/sec rate limit
         const chunkSize = 50;
         let reqId = 1;
         for (let i = 0; i < streams.length; i += chunkSize) {
+          if (!this.ws || this.ws.readyState !== WebSocket.OPEN) break;
           const chunk = streams.slice(i, i + chunkSize);
-          this.ws?.send(
+          this.ws.send(
             JSON.stringify({
               method: "SUBSCRIBE",
               params: chunk,
               id: reqId++,
             })
           );
+          if (i + chunkSize < streams.length) {
+            await new Promise((r) => setTimeout(r, 220));
+          }
         }
       });
 
@@ -223,6 +230,51 @@ export class BinanceProvider extends EventEmitter implements MarketProvider {
       reconnectCount: this.reconnectAttempts,
       subscribedSymbols: Array.from(this.activeSymbols),
     };
+  }
+
+  private async fetchTickerSnapshots(): Promise<void> {
+    try {
+      const res = await request(`${config.BINANCE_REST_URL}/api/v3/ticker/24hr`);
+      if (res.statusCode === 200) {
+        const data = (await res.body.json()) as Array<{
+          symbol: string;
+          lastPrice: string;
+          openPrice: string;
+          highPrice: string;
+          lowPrice: string;
+          volume: string;
+          quoteVolume: string;
+          priceChange: string;
+          priceChangePercent: string;
+          closeTime: number;
+        }>;
+
+        let populatedCount = 0;
+        for (const item of data) {
+          const canonical = toCanonicalSymbol(item.symbol);
+          if (this.activeSymbols.has(canonical)) {
+            const ticker: MarketTicker = {
+              symbol: canonical,
+              timestamp: item.closeTime || Date.now(),
+              price: parseFloat(item.lastPrice),
+              open24h: parseFloat(item.openPrice),
+              high24h: parseFloat(item.highPrice),
+              low24h: parseFloat(item.lowPrice),
+              volume24h: parseFloat(item.volume),
+              quoteVolume24h: parseFloat(item.quoteVolume),
+              change24h: parseFloat(item.priceChange),
+              changePercent24h: parseFloat(item.priceChangePercent),
+              provider: "binance",
+            };
+            this.emit("ticker", ticker);
+            populatedCount++;
+          }
+        }
+        logger.info({ populatedCount }, "Successfully populated Binance 24h ticker snapshots");
+      }
+    } catch (err) {
+      logger.warn({ err }, "Could not fetch initial Binance 24h ticker snapshots");
+    }
   }
 
   private handleMessage(data: WebSocket.Data): void {

@@ -24,8 +24,21 @@ export class MarketWebSocketGateway {
     this.candleEngine = candleEngine;
 
     this.wss = new WebSocketServer({
-      server,
-      path: "/ws",
+      noServer: true,
+    });
+
+    server.on("upgrade", (request, socket, head) => {
+      const pathname = new URL(request.url || "/", "http://localhost").pathname;
+      if (
+        pathname === "/ws" ||
+        pathname === "/v1/stream" ||
+        pathname === "/stream" ||
+        pathname.startsWith("/ws")
+      ) {
+        this.wss.handleUpgrade(request, socket, head, (ws) => {
+          this.wss.emit("connection", ws, request);
+        });
+      }
     });
 
     this.wss.on("connection", (ws, req) => {

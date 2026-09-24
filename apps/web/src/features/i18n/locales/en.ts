@@ -198,11 +198,20 @@ export const en: TranslationSchema = {
   },
   intelligence: {
     tabs: {
+      orderbook: "Order Book",
       stats: "Market stats",
       news: "News",
     },
     selectedMarket: "Selected market",
     sentimentTitle: "Sentiment Index",
+    orderbook: {
+      title: "Order Book",
+      price: "Price",
+      size: "Size",
+      total: "Total",
+      spread: "Spread",
+      connecting: "Connecting live stream...",
+    },
   },
   sentiment: {
     title: "Fear & Greed Index",

@@ -8,6 +8,10 @@
     "dev:web": "pnpm --filter web dev",
     "build": "pnpm -r build",
     "symbols:add": "node scripts/bulk-add-symbols.mjs",
+    "tail": "node scripts/tail-market.mjs",
+    "tail:trades": "node scripts/tail-market.mjs --trades-only",
+    "tail:whales": "node scripts/tail-market.mjs --trades-only --min-value=5000",
+    "tail:tickers": "node scripts/tail-market.mjs --tickers-only",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
     "prepare": "husky"

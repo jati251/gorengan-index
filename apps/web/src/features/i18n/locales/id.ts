@@ -198,11 +198,20 @@ export const id: TranslationSchema = {
   },
   intelligence: {
     tabs: {
-      stats: "Statistik pasar",
+      orderbook: "Order Book",
+      stats: "Statistik",
       news: "Berita",
     },
     selectedMarket: "Pasar terpilih",
     sentimentTitle: "Indeks Sentimen",
+    orderbook: {
+      title: "Buku Pesanan",
+      price: "Harga",
+      size: "Ukuran",
+      total: "Total",
+      spread: "Spread",
+      connecting: "Menghubungkan stream...",
+    },
   },
   sentiment: {
     title: "Fear & Greed Index",

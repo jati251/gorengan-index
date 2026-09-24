@@ -172,11 +172,20 @@ export interface TranslationSchema {
   };
   intelligence: {
     tabs: {
+      orderbook: string;
       stats: string;
       news: string;
     };
     selectedMarket: string;
     sentimentTitle: string;
+    orderbook: {
+      title: string;
+      price: string;
+      size: string;
+      total: string;
+      spread: string;
+      connecting: string;
+    };
   };
   sentiment: {
     title: string;
