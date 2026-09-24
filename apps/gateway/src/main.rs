@@ -10,7 +10,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json};
 use axum::routing::get;
 use axum::Router;
-use chrono::Utc;
+use chrono::{DateTime, Datelike, Timelike, Utc, Weekday};
 use futures_util::{SinkExt, StreamExt};
 use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
@@ -34,6 +34,12 @@ use market_protocol::{
 static ACTIVE_WS_CLIENTS: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone)]
+struct YahooCrumbState {
+    crumb: String,
+    fetched_at: std::time::Instant,
+}
+
+#[derive(Clone)]
 struct AppState {
     config: AppConfig,
     instruments: Vec<Instrument>,
@@ -44,6 +50,7 @@ struct AppState {
     http_client: reqwest::Client,
     cached_news: Arc<RwLock<(Option<tokio::time::Instant>, Vec<NewsArticle>)>>,
     cached_sentiment: Arc<RwLock<(Option<tokio::time::Instant>, SentimentData)>>,
+    yahoo_crumb: Arc<RwLock<Option<YahooCrumbState>>>,
 }
 
 #[tokio::main]
@@ -96,11 +103,13 @@ async fn main() -> Result<()> {
         provider_status: Arc::new(RwLock::new(HashMap::new())),
         broadcast_tx,
         http_client: reqwest::Client::builder()
-            .timeout(Duration::from_secs(6))
-            .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
+            .timeout(Duration::from_secs(8))
+            .cookie_store(true)
+            .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
             .build()?,
         cached_news: Arc::new(RwLock::new((None, Vec::new()))),
         cached_sentiment: Arc::new(RwLock::new((None, SentimentData::default()))),
+        yahoo_crumb: Arc::new(RwLock::new(None)),
     };
 
     info!("===============================================");
@@ -288,7 +297,429 @@ async fn run_nats_consumer(state: AppState) {
     }
 }
 
-/// Real live background poller for Forex pairs from CCY market feed
+fn is_forex_weekend(now: DateTime<Utc>) -> bool {
+    let weekday = now.weekday();
+    let hour = now.hour();
+    match weekday {
+        Weekday::Sat => true,
+        Weekday::Fri => hour >= 22,
+        Weekday::Sun => hour < 21,
+        _ => false,
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct YahooQuoteResponse {
+    #[serde(rename = "quoteResponse")]
+    quote_response: Option<YahooQuoteResult>,
+}
+
+#[derive(Debug, Deserialize)]
+struct YahooQuoteResult {
+    result: Option<Vec<YahooQuoteItem>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct YahooQuoteItem {
+    symbol: Option<String>,
+    regular_market_price: Option<f64>,
+    regular_market_time: Option<i64>,
+    regular_market_day_high: Option<f64>,
+    regular_market_day_low: Option<f64>,
+    regular_market_previous_close: Option<f64>,
+    #[serde(default)]
+    previous_close: Option<f64>,
+    regular_market_volume: Option<f64>,
+    regular_market_change: Option<f64>,
+    regular_market_change_percent: Option<f64>,
+    bid: Option<f64>,
+    ask: Option<f64>,
+}
+
+async fn get_yahoo_crumb(state: &AppState) -> Option<String> {
+    {
+        let lock = state.yahoo_crumb.read().await;
+        if let Some(ref c) = *lock {
+            if c.fetched_at.elapsed() < Duration::from_secs(3600) {
+                return Some(c.crumb.clone());
+            }
+        }
+    }
+
+    // Set cookie first via fc.yahoo.com
+    let _ = state.http_client.get("https://fc.yahoo.com").send().await;
+
+    match state
+        .http_client
+        .get("https://query1.finance.yahoo.com/v1/test/getcrumb")
+        .send()
+        .await
+    {
+        Ok(res) if res.status().is_success() => {
+            if let Ok(crumb) = res.text().await {
+                let crumb = crumb.trim().to_string();
+                if !crumb.is_empty() && !crumb.contains("<html>") {
+                    let mut lock = state.yahoo_crumb.write().await;
+                    *lock = Some(YahooCrumbState {
+                        crumb: crumb.clone(),
+                        fetched_at: std::time::Instant::now(),
+                    });
+                    info!(crumb = %crumb, "Obtained fresh Yahoo Finance crumb");
+                    return Some(crumb);
+                }
+            }
+            warn!("Failed to parse Yahoo crumb response");
+            None
+        }
+        Ok(res) => {
+            warn!(status = %res.status(), "Yahoo getcrumb returned non-success status");
+            None
+        }
+        Err(e) => {
+            warn!(err = %e, "Failed to connect to Yahoo getcrumb endpoint");
+            None
+        }
+    }
+}
+
+async fn invalidate_yahoo_crumb(state: &AppState) {
+    let mut lock = state.yahoo_crumb.write().await;
+    *lock = None;
+}
+
+async fn process_fx_quote_item(
+    state: &AppState,
+    inst: &Instrument,
+    item: &YahooQuoteItem,
+    is_weekend: bool,
+) {
+    let regular_price = item.regular_market_price;
+    let regular_time = item.regular_market_time.unwrap_or_else(|| Utc::now().timestamp());
+    let day_high = item.regular_market_day_high;
+    let day_low = item.regular_market_day_low;
+    let prev_close = item.regular_market_previous_close.or(item.previous_close);
+
+    if let Some(price_f64) = regular_price {
+        let pip_size = inst.pip_size.and_then(|p| p.to_f64()).unwrap_or(0.0001);
+        let spread_f64 = pip_size * 0.8;
+        let bid_f64 = item.bid.unwrap_or(price_f64 - spread_f64 / 2.0);
+        let ask_f64 = item.ask.unwrap_or(price_f64 + spread_f64 / 2.0);
+        let spread_bps_f64 = (spread_f64 / price_f64) * 10_000.0;
+
+        let change_24h = item.regular_market_change.or_else(|| prev_close.map(|pc| price_f64 - pc));
+        let change_pct = item.regular_market_change_percent.or_else(|| prev_close.map(|pc| ((price_f64 - pc) / pc) * 100.0));
+
+        let price_dec = Decimal::from_f64_retain(price_f64).unwrap_or(Decimal::ZERO);
+        let bid_dec = Decimal::from_f64_retain(bid_f64).unwrap_or(Decimal::ZERO);
+        let ask_dec = Decimal::from_f64_retain(ask_f64).unwrap_or(Decimal::ZERO);
+        let mid_dec = price_dec;
+        let spread_dec = Decimal::from_f64_retain(spread_f64).unwrap_or(Decimal::ZERO);
+        let spread_bps_dec = Decimal::from_f64_retain(spread_bps_f64).unwrap_or(Decimal::ZERO);
+
+        let quote_tick = QuoteTick {
+            instrument: inst.id.clone(),
+            provider: inst.provider.clone(),
+            provider_symbol: inst.provider_symbol.clone(),
+            bid: bid_dec,
+            ask: ask_dec,
+            mid: mid_dec,
+            spread: spread_dec,
+            spread_bps: spread_bps_dec,
+            provider_ts_ns: regular_time * 1_000_000_000,
+            ingest_ts_ns: Utc::now().timestamp_nanos_opt().unwrap_or(0),
+            sequence: None,
+            tradeable: Some(!is_weekend),
+            bid_size: None,
+            ask_size: None,
+        };
+
+        let session_state_str = if is_weekend { "closed" } else { "open" };
+        let data_quality_str = if is_weekend { "last_known" } else { "realtime_venue" };
+
+        let ticker = TickerState {
+            instrument: inst.id.clone(),
+            provider: inst.provider.clone(),
+            price: price_dec,
+            bid: Some(bid_dec),
+            ask: Some(ask_dec),
+            mid: Some(mid_dec),
+            spread: Some(spread_dec),
+            spread_bps: Some(spread_bps_dec),
+            open_24h: prev_close.and_then(Decimal::from_f64_retain),
+            high_24h: day_high.and_then(Decimal::from_f64_retain),
+            low_24h: day_low.and_then(Decimal::from_f64_retain),
+            volume_24h: Some(Decimal::ZERO),
+            quote_volume_24h: Some(Decimal::ZERO),
+            change_24h: change_24h.and_then(Decimal::from_f64_retain),
+            change_percent_24h: change_pct.and_then(Decimal::from_f64_retain),
+            updated_at_ns: regular_time * 1_000_000_000,
+            session_state: Some(session_state_str.into()),
+            session_segment: if is_weekend { None } else { Some("REGULAR".into()) },
+            data_quality: Some(data_quality_str.into()),
+            market: Some("FX".into()),
+            currency: Some(inst.quote.clone()),
+            previous_close: prev_close.and_then(Decimal::from_f64_retain),
+        };
+
+        {
+            let mut lock = state.latest_tickers.write().await;
+            lock.insert(inst.id.clone(), ticker.clone());
+        }
+
+        let _ = state.broadcast_tx.send(ServerWsEvent::Ticker { ticker });
+        let _ = state.broadcast_tx.send(ServerWsEvent::FxQuote { quote: quote_tick });
+
+        // Update active 1m candle
+        let ts_minute = (regular_time / 60) * 60;
+        let candle_ts_ns = ts_minute * 1_000_000_000;
+        let key = format!("1m:{}", inst.id.as_str());
+        let mut candle_to_broadcast = None;
+
+        {
+            let mut lock = state.latest_candles.write().await;
+            if let Some(existing) = lock.get_mut(&key) {
+                if existing.open_time_ns == candle_ts_ns {
+                    if price_dec > existing.high {
+                        existing.high = price_dec;
+                    }
+                    if price_dec < existing.low {
+                        existing.low = price_dec;
+                    }
+                    existing.close = price_dec;
+                    candle_to_broadcast = Some(existing.clone());
+                } else if candle_ts_ns > existing.open_time_ns {
+                    let mut new_c = Candle::new(
+                        inst.id.clone(),
+                        Interval::Min1,
+                        candle_ts_ns,
+                        price_dec,
+                        Decimal::ONE,
+                        inst.provider.clone(),
+                    );
+                    new_c.high = day_high.and_then(Decimal::from_f64_retain).unwrap_or(price_dec);
+                    new_c.low = day_low.and_then(Decimal::from_f64_retain).unwrap_or(price_dec);
+                    new_c.close = price_dec;
+                    *existing = new_c.clone();
+                    candle_to_broadcast = Some(new_c);
+                }
+            } else {
+                let mut new_c = Candle::new(
+                    inst.id.clone(),
+                    Interval::Min1,
+                    candle_ts_ns,
+                    price_dec,
+                    Decimal::ONE,
+                    inst.provider.clone(),
+                );
+                new_c.high = day_high.and_then(Decimal::from_f64_retain).unwrap_or(price_dec);
+                new_c.low = day_low.and_then(Decimal::from_f64_retain).unwrap_or(price_dec);
+                new_c.close = price_dec;
+                lock.insert(key, new_c.clone());
+                candle_to_broadcast = Some(new_c);
+            }
+        }
+
+        if let Some(c) = candle_to_broadcast {
+            let _ = state.broadcast_tx.send(ServerWsEvent::Candle { candle: c });
+        }
+    }
+}
+
+async fn process_equity_quote_item(
+    state: &AppState,
+    inst: &Instrument,
+    item: &YahooQuoteItem,
+    is_us: bool,
+    active_state: MarketSessionState,
+    now: DateTime<Utc>,
+    us_cal: &UsMarketCalendar,
+    id_cal: &IdxMarketCalendar,
+) {
+    let regular_price = item.regular_market_price;
+    let regular_time = item.regular_market_time.unwrap_or_else(|| now.timestamp());
+    let day_high = item.regular_market_day_high;
+    let day_low = item.regular_market_day_low;
+    let prev_close = item.regular_market_previous_close.or(item.previous_close);
+    let day_volume = item.regular_market_volume.unwrap_or(0.0);
+
+    if let Some(price_f64) = regular_price {
+        let change_24h = item.regular_market_change.or_else(|| prev_close.map(|pc| price_f64 - pc));
+        let change_pct = item.regular_market_change_percent.or_else(|| prev_close.map(|pc| ((price_f64 - pc) / pc) * 100.0));
+
+        let price_dec = Decimal::from_f64_retain(price_f64).unwrap_or(Decimal::ZERO);
+        let market_name = if is_us { "US" } else { "ID" };
+        let currency_name = if is_us { "USD" } else { "IDR" };
+        let is_regular = active_state == MarketSessionState::Regular;
+
+        let data_quality_str = if is_us {
+            if is_regular { "realtime_venue" } else { "last_known" }
+        } else {
+            if is_regular { "delayed" } else { "last_known" }
+        };
+
+        let session_state_str = match active_state {
+            MarketSessionState::Regular => "regular",
+            MarketSessionState::PreMarket => "pre_market",
+            MarketSessionState::AfterHours => "after_hours",
+            MarketSessionState::Break => "break",
+            MarketSessionState::Holiday => "holiday",
+            _ => "closed",
+        };
+
+        let session_segment = if is_us {
+            us_cal.session_segment(now)
+        } else {
+            id_cal.session_segment(now)
+        };
+
+        let bid_dec = item.bid.and_then(Decimal::from_f64_retain).unwrap_or(price_dec);
+        let ask_dec = item.ask.and_then(Decimal::from_f64_retain).unwrap_or(price_dec);
+
+        let ticker = TickerState {
+            instrument: inst.id.clone(),
+            provider: inst.provider.clone(),
+            price: price_dec,
+            bid: Some(bid_dec),
+            ask: Some(ask_dec),
+            mid: Some(price_dec),
+            spread: None,
+            spread_bps: None,
+            open_24h: prev_close.and_then(Decimal::from_f64_retain),
+            high_24h: day_high.and_then(Decimal::from_f64_retain),
+            low_24h: day_low.and_then(Decimal::from_f64_retain),
+            volume_24h: Some(Decimal::from_f64_retain(day_volume).unwrap_or(Decimal::ZERO)),
+            quote_volume_24h: Some(Decimal::ZERO),
+            change_24h: change_24h.and_then(Decimal::from_f64_retain),
+            change_percent_24h: change_pct.and_then(Decimal::from_f64_retain),
+            updated_at_ns: regular_time * 1_000_000_000,
+            session_state: Some(session_state_str.into()),
+            session_segment,
+            data_quality: Some(data_quality_str.into()),
+            market: Some(market_name.into()),
+            currency: Some(currency_name.into()),
+            previous_close: prev_close.and_then(Decimal::from_f64_retain),
+        };
+
+        {
+            let mut lock = state.latest_tickers.write().await;
+            lock.insert(inst.id.clone(), ticker.clone());
+        }
+
+        let _ = state.broadcast_tx.send(ServerWsEvent::Ticker { ticker });
+
+        // Update active 1m candle
+        let ts_minute = (regular_time / 60) * 60;
+        let candle_ts_ns = ts_minute * 1_000_000_000;
+        let key = format!("1m:{}", inst.id.as_str());
+        let mut candle_to_broadcast = None;
+
+        {
+            let mut lock = state.latest_candles.write().await;
+            if let Some(existing) = lock.get_mut(&key) {
+                if existing.open_time_ns == candle_ts_ns {
+                    if price_dec > existing.high {
+                        existing.high = price_dec;
+                    }
+                    if price_dec < existing.low {
+                        existing.low = price_dec;
+                    }
+                    existing.close = price_dec;
+                    candle_to_broadcast = Some(existing.clone());
+                } else if candle_ts_ns > existing.open_time_ns {
+                    let mut new_c = Candle::new(
+                        inst.id.clone(),
+                        Interval::Min1,
+                        candle_ts_ns,
+                        price_dec,
+                        Decimal::from_f64_retain(day_volume).unwrap_or(Decimal::ZERO),
+                        inst.provider.clone(),
+                    );
+                    new_c.high = day_high.and_then(Decimal::from_f64_retain).unwrap_or(price_dec);
+                    new_c.low = day_low.and_then(Decimal::from_f64_retain).unwrap_or(price_dec);
+                    new_c.close = price_dec;
+                    *existing = new_c.clone();
+                    candle_to_broadcast = Some(new_c);
+                }
+            } else {
+                let mut new_c = Candle::new(
+                    inst.id.clone(),
+                    Interval::Min1,
+                    candle_ts_ns,
+                    price_dec,
+                    Decimal::from_f64_retain(day_volume).unwrap_or(Decimal::ZERO),
+                    inst.provider.clone(),
+                );
+                new_c.high = day_high.and_then(Decimal::from_f64_retain).unwrap_or(price_dec);
+                new_c.low = day_low.and_then(Decimal::from_f64_retain).unwrap_or(price_dec);
+                new_c.close = price_dec;
+                lock.insert(key, new_c.clone());
+                candle_to_broadcast = Some(new_c);
+            }
+        }
+
+        if let Some(c) = candle_to_broadcast {
+            let _ = state.broadcast_tx.send(ServerWsEvent::Candle { candle: c });
+        }
+    }
+}
+
+async fn poll_single_chart_fallback(
+    state: &AppState,
+    inst: &Instrument,
+    is_fx: bool,
+    active_equity_state: Option<MarketSessionState>,
+    now: DateTime<Utc>,
+    us_cal: &UsMarketCalendar,
+    id_cal: &IdxMarketCalendar,
+) {
+    let url = format!(
+        "https://query1.finance.yahoo.com/v8/finance/chart/{}?interval=1d&range=1d",
+        inst.provider_symbol
+    );
+
+    if let Ok(res) = state.http_client.get(&url).send().await {
+        if res.status().is_success() {
+            if let Ok(json) = res.json::<serde_json::Value>().await {
+                if let Some(result) = json.pointer("/chart/result/0") {
+                    let meta = result.get("meta");
+                    let regular_price = meta.and_then(|m| m.get("regularMarketPrice")).and_then(|v| v.as_f64());
+                    let regular_time = meta.and_then(|m| m.get("regularMarketTime")).and_then(|v| v.as_i64());
+                    let day_high = meta.and_then(|m| m.get("regularMarketDayHigh")).and_then(|v| v.as_f64());
+                    let day_low = meta.and_then(|m| m.get("regularMarketDayLow")).and_then(|v| v.as_f64());
+                    let prev_close = meta
+                        .and_then(|m| m.get("chartPreviousClose").or_else(|| m.get("previousClose")))
+                        .and_then(|v| v.as_f64());
+                    let day_volume = meta.and_then(|m| m.get("regularMarketVolume")).and_then(|v| v.as_f64());
+
+                    let item = YahooQuoteItem {
+                        symbol: Some(inst.provider_symbol.clone()),
+                        regular_market_price: regular_price,
+                        regular_market_time: regular_time,
+                        regular_market_day_high: day_high,
+                        regular_market_day_low: day_low,
+                        regular_market_previous_close: prev_close,
+                        previous_close: prev_close,
+                        regular_market_volume: day_volume,
+                        regular_market_change: None,
+                        regular_market_change_percent: None,
+                        bid: None,
+                        ask: None,
+                    };
+
+                    if is_fx {
+                        process_fx_quote_item(state, inst, &item, is_forex_weekend(now)).await;
+                    } else if let Some(active_state) = active_equity_state {
+                        let is_us = inst.asset_class == AssetClass::UsStocks || inst.id.as_str().starts_with("US:");
+                        process_equity_quote_item(state, inst, &item, is_us, active_state, now, us_cal, id_cal).await;
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Real live background poller for Forex pairs using Yahoo Batch Quote API
 async fn run_fx_poller(state: AppState) {
     let fx_instruments: Vec<Instrument> = state
         .instruments
@@ -301,157 +732,110 @@ async fn run_fx_poller(state: AppState) {
         return;
     }
 
-    info!(count = fx_instruments.len(), "Starting real Forex live market quote poller");
+    info!(count = fx_instruments.len(), "Starting real Forex live batch quote poller");
+
+    let mut symbol_to_inst: HashMap<String, Instrument> = HashMap::new();
+    for inst in &fx_instruments {
+        symbol_to_inst.insert(inst.provider_symbol.clone(), inst.clone());
+    }
+
+    let mut is_initial_run = true;
+    let mut was_weekend = false;
 
     loop {
-        for inst in &fx_instruments {
-            let url = format!(
-                "https://query1.finance.yahoo.com/v8/finance/chart/{}?interval=1m&range=1d",
-                inst.provider_symbol
-            );
+        let now = Utc::now();
+        let is_weekend = is_forex_weekend(now);
 
-            if let Ok(res) = state.http_client.get(&url).send().await {
-                if res.status().is_success() {
-                    if let Ok(json) = res.json::<serde_json::Value>().await {
-                        if let Some(result) = json.pointer("/chart/result/0") {
-                            let meta = result.get("meta");
-                            let regular_price = meta
-                                .and_then(|m| m.get("regularMarketPrice"))
-                                .and_then(|v| v.as_f64());
-                            let regular_time = meta
-                                .and_then(|m| m.get("regularMarketTime"))
-                                .and_then(|v| v.as_i64())
-                                .unwrap_or_else(|| Utc::now().timestamp());
-                            let day_high = meta
-                                .and_then(|m| m.get("regularMarketDayHigh"))
-                                .and_then(|v| v.as_f64());
-                            let day_low = meta
-                                .and_then(|m| m.get("regularMarketDayLow"))
-                                .and_then(|v| v.as_f64());
-                            let prev_close = meta
-                                .and_then(|m| m.get("chartPreviousClose").or_else(|| m.get("previousClose")))
-                                .and_then(|v| v.as_f64());
+        if is_weekend {
+            if !was_weekend || is_initial_run {
+                was_weekend = true;
+                info!("Forex market is closed for the weekend (Friday 22:00 UTC - Sunday 21:00 UTC)");
+                for inst in &fx_instruments {
+                    let mut lock = state.latest_tickers.write().await;
+                    if let Some(t) = lock.get_mut(&inst.id) {
+                        t.session_state = Some("closed".into());
+                        t.session_segment = None;
+                        t.data_quality = Some("last_known".into());
+                    }
+                }
+            }
+            if !is_initial_run {
+                // Sleep 60 seconds while Forex market is closed for the weekend
+                sleep(Duration::from_secs(60)).await;
+                continue;
+            }
+        } else if was_weekend {
+            was_weekend = false;
+            info!("Forex market opened after weekend");
+        }
 
-                            if let Some(price_f64) = regular_price {
-                                let pip_size = inst.pip_size.and_then(|p| p.to_f64()).unwrap_or(0.0001);
-                                let spread_f64 = pip_size * 0.8;
-                                let bid_f64 = price_f64 - spread_f64 / 2.0;
-                                let ask_f64 = price_f64 + spread_f64 / 2.0;
-                                let spread_bps_f64 = (spread_f64 / price_f64) * 10_000.0;
+        // Process in batch chunks of up to 45 symbols
+        let chunk_size = 45;
+        let chunks: Vec<Vec<Instrument>> = fx_instruments
+            .chunks(chunk_size)
+            .map(|c| c.to_vec())
+            .collect();
 
-                                let change_24h = prev_close.map(|pc| price_f64 - pc);
-                                let change_pct = prev_close.map(|pc| ((price_f64 - pc) / pc) * 100.0);
+        for chunk in chunks {
+            let symbols_query = chunk
+                .iter()
+                .map(|i| i.provider_symbol.as_str())
+                .collect::<Vec<_>>()
+                .join(",");
 
-                                let price_dec = Decimal::from_f64_retain(price_f64).unwrap_or(Decimal::ZERO);
-                                let bid_dec = Decimal::from_f64_retain(bid_f64).unwrap_or(Decimal::ZERO);
-                                let ask_dec = Decimal::from_f64_retain(ask_f64).unwrap_or(Decimal::ZERO);
-                                let mid_dec = price_dec;
-                                let spread_dec = Decimal::from_f64_retain(spread_f64).unwrap_or(Decimal::ZERO);
-                                let spread_bps_dec = Decimal::from_f64_retain(spread_bps_f64).unwrap_or(Decimal::ZERO);
+            let crumb_opt = get_yahoo_crumb(&state).await;
+            let mut batch_success = false;
 
-                                let quote_tick = QuoteTick {
-                                    instrument: inst.id.clone(),
-                                    provider: inst.provider.clone(),
-                                    provider_symbol: inst.provider_symbol.clone(),
-                                    bid: bid_dec,
-                                    ask: ask_dec,
-                                    mid: mid_dec,
-                                    spread: spread_dec,
-                                    spread_bps: spread_bps_dec,
-                                    provider_ts_ns: regular_time * 1_000_000_000,
-                                    ingest_ts_ns: Utc::now().timestamp_nanos_opt().unwrap_or(0),
-                                    sequence: None,
-                                    tradeable: Some(true),
-                                    bid_size: None,
-                                    ask_size: None,
-                                };
+            if let Some(ref crumb) = crumb_opt {
+                let url = format!(
+                    "https://query1.finance.yahoo.com/v7/finance/quote?symbols={}&crumb={}",
+                    symbols_query, crumb
+                );
 
-                                let ticker = TickerState {
-                                    instrument: inst.id.clone(),
-                                    provider: inst.provider.clone(),
-                                    price: price_dec,
-                                    bid: Some(bid_dec),
-                                    ask: Some(ask_dec),
-                                    mid: Some(mid_dec),
-                                    spread: Some(spread_dec),
-                                    spread_bps: Some(spread_bps_dec),
-                                    open_24h: prev_close.and_then(Decimal::from_f64_retain),
-                                    high_24h: day_high.and_then(Decimal::from_f64_retain),
-                                    low_24h: day_low.and_then(Decimal::from_f64_retain),
-                                    volume_24h: Some(Decimal::ZERO),
-                                    quote_volume_24h: Some(Decimal::ZERO),
-                                    change_24h: change_24h.and_then(Decimal::from_f64_retain),
-                                    change_percent_24h: change_pct.and_then(Decimal::from_f64_retain),
-                                    updated_at_ns: regular_time * 1_000_000_000,
-                                    session_state: Some("open".into()),
-                                    session_segment: Some("REGULAR".into()),
-                                    data_quality: Some("realtime_venue".into()),
-                                    market: Some("FX".into()),
-                                    currency: Some(inst.quote.clone()),
-                                    previous_close: prev_close.and_then(Decimal::from_f64_retain),
-                                };
-
-                                {
-                                    let mut lock = state.latest_tickers.write().await;
-                                    lock.insert(inst.id.clone(), ticker.clone());
-                                }
-
-                                let _ = state.broadcast_tx.send(ServerWsEvent::Ticker { ticker });
-                                let _ = state.broadcast_tx.send(ServerWsEvent::FxQuote { quote: quote_tick });
-
-                                // Check if there is an active 1m candle to cache
-                                let timestamps = result.get("timestamp").and_then(|t| t.as_array());
-                                let quote_obj = result.pointer("/indicators/quote/0");
-                                if let (Some(ts_arr), Some(q)) = (timestamps, quote_obj) {
-                                    let opens = q.get("open").and_then(|v| v.as_array());
-                                    let highs = q.get("high").and_then(|v| v.as_array());
-                                    let lows = q.get("low").and_then(|v| v.as_array());
-                                    let closes = q.get("close").and_then(|v| v.as_array());
-
-                                    if let (Some(ts_last), Some(o_arr), Some(h_arr), Some(l_arr), Some(c_arr)) =
-                                        (ts_arr.last().and_then(|v| v.as_i64()), opens, highs, lows, closes)
-                                    {
-                                        let o = o_arr.last().and_then(|v| v.as_f64());
-                                        let h = h_arr.last().and_then(|v| v.as_f64());
-                                        let l = l_arr.last().and_then(|v| v.as_f64());
-                                        let c = c_arr.last().and_then(|v| v.as_f64());
-
-                                        if let (Some(ov), Some(hv), Some(lv), Some(cv)) = (o, h, l, c) {
-                                            let mut candle = Candle::new(
-                                                inst.id.clone(),
-                                                Interval::Min1,
-                                                ts_last * 1_000_000_000,
-                                                Decimal::from_f64_retain(ov).unwrap_or(price_dec),
-                                                Decimal::ONE,
-                                                inst.provider.clone(),
-                                            );
-                                            candle.high = Decimal::from_f64_retain(hv).unwrap_or(price_dec);
-                                            candle.low = Decimal::from_f64_retain(lv).unwrap_or(price_dec);
-                                            candle.close = Decimal::from_f64_retain(cv).unwrap_or(price_dec);
-
-                                            let key = format!("1m:{}", inst.id.as_str());
-                                            {
-                                                let mut lock = state.latest_candles.write().await;
-                                                lock.insert(key, candle.clone());
-                                            }
-                                            let _ = state.broadcast_tx.send(ServerWsEvent::Candle { candle });
+                if let Ok(res) = state.http_client.get(&url).send().await {
+                    let status = res.status();
+                    if status.is_success() {
+                        if let Ok(quote_resp) = res.json::<YahooQuoteResponse>().await {
+                            if let Some(result_list) = quote_resp.quote_response.and_then(|qr| qr.result) {
+                                batch_success = true;
+                                for item in result_list {
+                                    if let Some(ref sym) = item.symbol {
+                                        if let Some(inst) = symbol_to_inst.get(sym) {
+                                            process_fx_quote_item(&state, inst, &item, is_weekend).await;
                                         }
                                     }
                                 }
                             }
                         }
+                    } else if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+                        warn!("Yahoo crumb expired or rejected with status {}, invalidating...", status);
+                        invalidate_yahoo_crumb(&state).await;
                     }
                 }
             }
 
-            sleep(Duration::from_millis(300)).await;
+            // Fallback if batch quote failed: use lightweight interval=1d&range=1d chart for each
+            if !batch_success {
+                warn!("Batch quote request failed for FX chunk, using single-chart fallback");
+                let us_cal = UsMarketCalendar::new();
+                let id_cal = IdxMarketCalendar::new();
+                for inst in &chunk {
+                    poll_single_chart_fallback(&state, inst, true, None, now, &us_cal, &id_cal).await;
+                    sleep(Duration::from_millis(100)).await;
+                }
+            }
+
+            sleep(Duration::from_millis(200)).await;
         }
 
-        sleep(Duration::from_secs(4)).await;
+        is_initial_run = false;
+
+        // Sleep 10s between regular FX polling loops (massive reduction in bandwidth!)
+        sleep(Duration::from_secs(10)).await;
     }
 }
 
-/// Real background supervisor & poller for US & IDX Equities (24/7 session-aware)
+/// Real background supervisor & poller for US & IDX Equities (24/7 session-aware with batch quote)
 async fn run_equity_supervisor_and_poller(state: AppState) {
     let equity_instruments: Vec<Instrument> = state
         .instruments
@@ -470,7 +854,7 @@ async fn run_equity_supervisor_and_poller(state: AppState) {
         return;
     }
 
-    info!(count = equity_instruments.len(), "Starting 24/7 Equity Session Supervisor & Poller");
+    info!(count = equity_instruments.len(), "Starting 24/7 Equity Session Supervisor & Batch Poller");
 
     let us_cal = UsMarketCalendar::new();
     let id_cal = IdxMarketCalendar::new();
@@ -478,6 +862,11 @@ async fn run_equity_supervisor_and_poller(state: AppState) {
     let mut last_us_state = MarketSessionState::Unknown;
     let mut last_id_state = MarketSessionState::Unknown;
     let mut is_initial_run = true;
+
+    let mut symbol_to_inst: HashMap<String, Instrument> = HashMap::new();
+    for inst in &equity_instruments {
+        symbol_to_inst.insert(inst.provider_symbol.clone(), inst.clone());
+    }
 
     loop {
         let now = Utc::now();
@@ -531,187 +920,154 @@ async fn run_equity_supervisor_and_poller(state: AppState) {
             let _ = state.broadcast_tx.send(evt);
         }
 
+        let us_active = is_initial_run
+            || us_state == MarketSessionState::Regular
+            || us_state == MarketSessionState::PreMarket
+            || us_state == MarketSessionState::AfterHours;
+
+        let id_active = is_initial_run
+            || id_state == MarketSessionState::Regular;
+
+        // When a market is closed, update cached ticker session state
+        if !us_active {
+            let session_state_str = match us_state {
+                MarketSessionState::Break => "break",
+                MarketSessionState::Holiday => "holiday",
+                _ => "closed",
+            };
+            for inst in &equity_instruments {
+                let is_us = inst.asset_class == AssetClass::UsStocks || inst.id.as_str().starts_with("US:");
+                if is_us {
+                    let mut lock = state.latest_tickers.write().await;
+                    if let Some(t) = lock.get_mut(&inst.id) {
+                        t.session_state = Some(session_state_str.into());
+                        t.session_segment = us_cal.session_segment(now);
+                        t.data_quality = Some("last_known".into());
+                    }
+                }
+            }
+        }
+
+        if !id_active {
+            let session_state_str = match id_state {
+                MarketSessionState::Break => "break",
+                MarketSessionState::Holiday => "holiday",
+                _ => "closed",
+            };
+            for inst in &equity_instruments {
+                let is_id = inst.asset_class == AssetClass::IdxStocks || inst.id.as_str().starts_with("ID:");
+                if is_id {
+                    let mut lock = state.latest_tickers.write().await;
+                    if let Some(t) = lock.get_mut(&inst.id) {
+                        t.session_state = Some(session_state_str.into());
+                        t.session_segment = id_cal.session_segment(now);
+                        t.data_quality = Some("last_known".into());
+                    }
+                }
+            }
+        }
+
+        // Filter instruments that actually need polling right now
+        let mut active_equities: Vec<Instrument> = Vec::new();
         for inst in &equity_instruments {
             let is_us = inst.asset_class == AssetClass::UsStocks || inst.id.as_str().starts_with("US:");
-            let _is_id = inst.asset_class == AssetClass::IdxStocks || inst.id.as_str().starts_with("ID:");
-            let active_state = if is_us { us_state } else { id_state };
+            let is_id = inst.asset_class == AssetClass::IdxStocks || inst.id.as_str().starts_with("ID:");
+            if (is_us && us_active) || (is_id && id_active) {
+                active_equities.push(inst.clone());
+            }
+        }
 
-            let should_poll = is_initial_run
-                || active_state == MarketSessionState::Regular
-                || active_state == MarketSessionState::PreMarket
-                || active_state == MarketSessionState::AfterHours;
+        // If both markets are closed and not initial run, sleep 60 seconds
+        if active_equities.is_empty() {
+            sleep(Duration::from_secs(60)).await;
+            continue;
+        }
 
-            if should_poll {
+        // Batch poll active equities in chunks of up to 45 symbols
+        let chunk_size = 45;
+        let chunks: Vec<Vec<Instrument>> = active_equities
+            .chunks(chunk_size)
+            .map(|c| c.to_vec())
+            .collect();
+
+        for chunk in chunks {
+            let symbols_query = chunk
+                .iter()
+                .map(|i| i.provider_symbol.as_str())
+                .collect::<Vec<_>>()
+                .join(",");
+
+            let crumb_opt = get_yahoo_crumb(&state).await;
+            let mut batch_success = false;
+
+            if let Some(ref crumb) = crumb_opt {
                 let url = format!(
-                    "https://query1.finance.yahoo.com/v8/finance/chart/{}?interval=1m&range=1d",
-                    inst.provider_symbol
+                    "https://query1.finance.yahoo.com/v7/finance/quote?symbols={}&crumb={}",
+                    symbols_query, crumb
                 );
 
                 if let Ok(res) = state.http_client.get(&url).send().await {
-                    if res.status().is_success() {
-                        if let Ok(json) = res.json::<serde_json::Value>().await {
-                            if let Some(result) = json.pointer("/chart/result/0") {
-                                let meta = result.get("meta");
-                                let regular_price = meta
-                                    .and_then(|m| m.get("regularMarketPrice"))
-                                    .and_then(|v| v.as_f64());
-                                let regular_time = meta
-                                    .and_then(|m| m.get("regularMarketTime"))
-                                    .and_then(|v| v.as_i64())
-                                    .unwrap_or_else(|| Utc::now().timestamp());
-                                let day_high = meta
-                                    .and_then(|m| m.get("regularMarketDayHigh"))
-                                    .and_then(|v| v.as_f64());
-                                let day_low = meta
-                                    .and_then(|m| m.get("regularMarketDayLow"))
-                                    .and_then(|v| v.as_f64());
-                                let prev_close = meta
-                                    .and_then(|m| m.get("chartPreviousClose").or_else(|| m.get("previousClose")))
-                                    .and_then(|v| v.as_f64());
-                                let day_volume = meta
-                                    .and_then(|m| m.get("regularMarketVolume"))
-                                    .and_then(|v| v.as_f64())
-                                    .unwrap_or(0.0);
-
-                                if let Some(price_f64) = regular_price {
-                                    let change_24h = prev_close.map(|pc| price_f64 - pc);
-                                    let change_pct = prev_close.map(|pc| ((price_f64 - pc) / pc) * 100.0);
-
-                                    let price_dec = Decimal::from_f64_retain(price_f64).unwrap_or(Decimal::ZERO);
-                                    let market_name = if is_us { "US" } else { "ID" };
-                                    let currency_name = if is_us { "USD" } else { "IDR" };
-                                    let data_quality_str = if is_us {
-                                        if active_state == MarketSessionState::Regular {
-                                            "realtime_venue"
-                                        } else {
-                                            "last_known"
-                                        }
-                                    } else {
-                                        if active_state == MarketSessionState::Regular {
-                                            "delayed"
-                                        } else {
-                                            "last_known"
-                                        }
-                                    };
-
-                                    let session_state_str = match active_state {
-                                        MarketSessionState::Regular => "regular",
-                                        MarketSessionState::PreMarket => "pre_market",
-                                        MarketSessionState::AfterHours => "after_hours",
-                                        MarketSessionState::Break => "break",
-                                        MarketSessionState::Holiday => "holiday",
-                                        _ => "closed",
-                                    };
-
-                                    let session_segment = if is_us {
-                                        us_cal.session_segment(now)
-                                    } else {
-                                        id_cal.session_segment(now)
-                                    };
-
-                                    let ticker = TickerState {
-                                        instrument: inst.id.clone(),
-                                        provider: inst.provider.clone(),
-                                        price: price_dec,
-                                        bid: Some(price_dec),
-                                        ask: Some(price_dec),
-                                        mid: Some(price_dec),
-                                        spread: None,
-                                        spread_bps: None,
-                                        open_24h: prev_close.and_then(Decimal::from_f64_retain),
-                                        high_24h: day_high.and_then(Decimal::from_f64_retain),
-                                        low_24h: day_low.and_then(Decimal::from_f64_retain),
-                                        volume_24h: Some(Decimal::from_f64_retain(day_volume).unwrap_or(Decimal::ZERO)),
-                                        quote_volume_24h: Some(Decimal::ZERO),
-                                        change_24h: change_24h.and_then(Decimal::from_f64_retain),
-                                        change_percent_24h: change_pct.and_then(Decimal::from_f64_retain),
-                                        updated_at_ns: regular_time * 1_000_000_000,
-                                        session_state: Some(session_state_str.into()),
-                                        session_segment,
-                                        data_quality: Some(data_quality_str.into()),
-                                        market: Some(market_name.into()),
-                                        currency: Some(currency_name.into()),
-                                        previous_close: prev_close.and_then(Decimal::from_f64_retain),
-                                    };
-
-                                    {
-                                        let mut lock = state.latest_tickers.write().await;
-                                        lock.insert(inst.id.clone(), ticker.clone());
-                                    }
-
-                                    let _ = state.broadcast_tx.send(ServerWsEvent::Ticker { ticker });
-
-                                    // Parse latest candle
-                                    let timestamps = result.get("timestamp").and_then(|t| t.as_array());
-                                    let quote_obj = result.pointer("/indicators/quote/0");
-                                    if let (Some(ts_arr), Some(q)) = (timestamps, quote_obj) {
-                                        let opens = q.get("open").and_then(|v| v.as_array());
-                                        let highs = q.get("high").and_then(|v| v.as_array());
-                                        let lows = q.get("low").and_then(|v| v.as_array());
-                                        let closes = q.get("close").and_then(|v| v.as_array());
-                                        let volumes = q.get("volume").and_then(|v| v.as_array());
-
-                                        if let (Some(ts_last), Some(o_arr), Some(h_arr), Some(l_arr), Some(c_arr)) =
-                                            (ts_arr.last().and_then(|v| v.as_i64()), opens, highs, lows, closes)
-                                        {
-                                            let o = o_arr.last().and_then(|v| v.as_f64());
-                                            let h = h_arr.last().and_then(|v| v.as_f64());
-                                            let l = l_arr.last().and_then(|v| v.as_f64());
-                                            let c = c_arr.last().and_then(|v| v.as_f64());
-                                            let v = volumes.and_then(|v_arr| v_arr.last().and_then(|x| x.as_f64())).unwrap_or(0.0);
-
-                                            if let (Some(ov), Some(hv), Some(lv), Some(cv)) = (o, h, l, c) {
-                                                let mut candle = Candle::new(
-                                                    inst.id.clone(),
-                                                    Interval::Min1,
-                                                    ts_last * 1_000_000_000,
-                                                    Decimal::from_f64_retain(ov).unwrap_or(price_dec),
-                                                    Decimal::from_f64_retain(v).unwrap_or(Decimal::ZERO),
-                                                    inst.provider.clone(),
-                                                );
-                                                candle.high = Decimal::from_f64_retain(hv).unwrap_or(price_dec);
-                                                candle.low = Decimal::from_f64_retain(lv).unwrap_or(price_dec);
-                                                candle.close = Decimal::from_f64_retain(cv).unwrap_or(price_dec);
-
-                                                let key = format!("1m:{}", inst.id.as_str());
-                                                {
-                                                    let mut lock = state.latest_candles.write().await;
-                                                    lock.insert(key, candle.clone());
-                                                }
-                                                let _ = state.broadcast_tx.send(ServerWsEvent::Candle { candle });
-                                            }
+                    let status = res.status();
+                    if status.is_success() {
+                        if let Ok(quote_resp) = res.json::<YahooQuoteResponse>().await {
+                            if let Some(result_list) = quote_resp.quote_response.and_then(|qr| qr.result) {
+                                batch_success = true;
+                                for item in result_list {
+                                    if let Some(ref sym) = item.symbol {
+                                        if let Some(inst) = symbol_to_inst.get(sym) {
+                                            let is_us = inst.asset_class == AssetClass::UsStocks || inst.id.as_str().starts_with("US:");
+                                            let active_state = if is_us { us_state } else { id_state };
+                                            process_equity_quote_item(
+                                                &state,
+                                                inst,
+                                                &item,
+                                                is_us,
+                                                active_state,
+                                                now,
+                                                &us_cal,
+                                                &id_cal,
+                                            )
+                                            .await;
                                         }
                                     }
                                 }
                             }
                         }
+                    } else if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+                        warn!("Yahoo crumb expired or rejected with status {}, invalidating...", status);
+                        invalidate_yahoo_crumb(&state).await;
                     }
                 }
-                sleep(Duration::from_millis(250)).await;
-            } else {
-                let mut lock = state.latest_tickers.write().await;
-                if let Some(t) = lock.get_mut(&inst.id) {
-                    let session_state_str = match active_state {
-                        MarketSessionState::Break => "break",
-                        MarketSessionState::Holiday => "holiday",
-                        _ => "closed",
-                    };
-                    t.session_state = Some(session_state_str.into());
-                    t.session_segment = if is_us { us_cal.session_segment(now) } else { id_cal.session_segment(now) };
-                    t.data_quality = Some("last_known".into());
+            }
+
+            // Fallback if batch quote failed
+            if !batch_success {
+                warn!("Batch quote request failed for equity chunk, using single-chart fallback");
+                for inst in &chunk {
+                    let is_us = inst.asset_class == AssetClass::UsStocks || inst.id.as_str().starts_with("US:");
+                    let active_state = if is_us { us_state } else { id_state };
+                    poll_single_chart_fallback(
+                        &state,
+                        inst,
+                        false,
+                        Some(active_state),
+                        now,
+                        &us_cal,
+                        &id_cal,
+                    )
+                    .await;
+                    sleep(Duration::from_millis(100)).await;
                 }
             }
+
+            sleep(Duration::from_millis(200)).await;
         }
 
         is_initial_run = false;
 
-        let any_active = us_state == MarketSessionState::Regular
-            || us_state == MarketSessionState::PreMarket
-            || us_state == MarketSessionState::AfterHours
-            || id_state == MarketSessionState::Regular;
-
-        if any_active {
-            sleep(Duration::from_secs(5)).await;
+        let any_regular = us_state == MarketSessionState::Regular || id_state == MarketSessionState::Regular;
+        if any_regular {
+            sleep(Duration::from_secs(12)).await;
         } else {
             sleep(Duration::from_secs(30)).await;
         }
