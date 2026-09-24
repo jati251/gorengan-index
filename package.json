@@ -12,6 +12,7 @@
     "tail:trades": "node scripts/tail-market.mjs --trades-only",
     "tail:whales": "node scripts/tail-market.mjs --trades-only --min-value=5000",
     "tail:tickers": "node scripts/tail-market.mjs --tickers-only",
+    "bench:ws": "node scripts/ws-benchmark.mjs",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
     "prepare": "husky"
