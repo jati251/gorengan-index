@@ -148,6 +148,9 @@ async fn main() -> Result<()> {
         .route("/v1/news", get(handle_news))
         .route("/v1/sentiment", get(handle_sentiment))
         .route("/v1/stream", get(handle_ws_upgrade))
+        .route("/v1/ws", get(handle_ws_upgrade))
+        .route("/ws", get(handle_ws_upgrade))
+        .route("/stream", get(handle_ws_upgrade))
         .layer(CorsLayer::permissive())
         .with_state(state);
 

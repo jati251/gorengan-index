@@ -7,6 +7,7 @@ COPY packages/shared ./packages/shared
 COPY apps/web ./apps/web
 RUN pnpm install --frozen-lockfile
 ENV NEXT_PUBLIC_API_URL="/v1"
+ENV NEXT_PUBLIC_WS_URL="/v1/stream"
 RUN pnpm --filter @gorengan/shared build
 RUN pnpm --filter web build
 
