@@ -35,7 +35,7 @@ static ACTIVE_WS_CLIENTS: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone)]
 struct YahooCrumbState {
-    crumb: String,
+    crumb: Option<String>,
     fetched_at: std::time::Instant,
 }
 
@@ -341,8 +341,18 @@ async fn get_yahoo_crumb(state: &AppState) -> Option<String> {
     {
         let lock = state.yahoo_crumb.read().await;
         if let Some(ref c) = *lock {
-            if c.fetched_at.elapsed() < Duration::from_secs(3600) {
-                return Some(c.crumb.clone());
+            match c.crumb {
+                Some(ref crumb) => {
+                    if c.fetched_at.elapsed() < Duration::from_secs(3600) {
+                        return Some(crumb.clone());
+                    }
+                }
+                None => {
+                    // Backoff on previous failure for 120 seconds
+                    if c.fetched_at.elapsed() < Duration::from_secs(120) {
+                        return None;
+                    }
+                }
             }
         }
     }
@@ -362,22 +372,37 @@ async fn get_yahoo_crumb(state: &AppState) -> Option<String> {
                 if !crumb.is_empty() && !crumb.contains("<html>") {
                     let mut lock = state.yahoo_crumb.write().await;
                     *lock = Some(YahooCrumbState {
-                        crumb: crumb.clone(),
+                        crumb: Some(crumb.clone()),
                         fetched_at: std::time::Instant::now(),
                     });
                     info!(crumb = %crumb, "Obtained fresh Yahoo Finance crumb");
                     return Some(crumb);
                 }
             }
-            warn!("Failed to parse Yahoo crumb response");
+            warn!("Failed to parse Yahoo crumb response; backing off for 120s");
+            let mut lock = state.yahoo_crumb.write().await;
+            *lock = Some(YahooCrumbState {
+                crumb: None,
+                fetched_at: std::time::Instant::now(),
+            });
             None
         }
         Ok(res) => {
-            warn!(status = %res.status(), "Yahoo getcrumb returned non-success status");
+            warn!(status = %res.status(), "Yahoo getcrumb returned non-success status; backing off for 120s");
+            let mut lock = state.yahoo_crumb.write().await;
+            *lock = Some(YahooCrumbState {
+                crumb: None,
+                fetched_at: std::time::Instant::now(),
+            });
             None
         }
         Err(e) => {
-            warn!(err = %e, "Failed to connect to Yahoo getcrumb endpoint");
+            warn!(err = %e, "Failed to connect to Yahoo getcrumb endpoint; backing off for 120s");
+            let mut lock = state.yahoo_crumb.write().await;
+            *lock = Some(YahooCrumbState {
+                crumb: None,
+                fetched_at: std::time::Instant::now(),
+            });
             None
         }
     }
@@ -385,7 +410,10 @@ async fn get_yahoo_crumb(state: &AppState) -> Option<String> {
 
 async fn invalidate_yahoo_crumb(state: &AppState) {
     let mut lock = state.yahoo_crumb.write().await;
-    *lock = None;
+    *lock = Some(YahooCrumbState {
+        crumb: None,
+        fetched_at: std::time::Instant::now(),
+    });
 }
 
 async fn process_fx_quote_item(
@@ -664,6 +692,7 @@ async fn process_equity_quote_item(
     }
 }
 
+#[allow(dead_code)]
 async fn poll_single_chart_fallback(
     state: &AppState,
     inst: &Instrument,
@@ -769,6 +798,15 @@ async fn run_fx_poller(state: AppState) {
             info!("Forex market opened after weekend");
         }
 
+        let crumb_opt = get_yahoo_crumb(&state).await;
+        if crumb_opt.is_none() {
+            // Rate limited or crumb unavailable; wait 60s and retry gracefully
+            is_initial_run = false;
+            sleep(Duration::from_secs(60)).await;
+            continue;
+        }
+        let crumb = crumb_opt.unwrap();
+
         // Process in batch chunks of up to 45 symbols
         let chunk_size = 45;
         let chunks: Vec<Vec<Instrument>> = fx_instruments
@@ -783,49 +821,38 @@ async fn run_fx_poller(state: AppState) {
                 .collect::<Vec<_>>()
                 .join(",");
 
-            let crumb_opt = get_yahoo_crumb(&state).await;
-            let mut batch_success = false;
+            let url = format!(
+                "https://query1.finance.yahoo.com/v7/finance/quote?symbols={}&crumb={}",
+                symbols_query, crumb
+            );
 
-            if let Some(ref crumb) = crumb_opt {
-                let url = format!(
-                    "https://query1.finance.yahoo.com/v7/finance/quote?symbols={}&crumb={}",
-                    symbols_query, crumb
-                );
-
-                if let Ok(res) = state.http_client.get(&url).send().await {
-                    let status = res.status();
-                    if status.is_success() {
-                        if let Ok(quote_resp) = res.json::<YahooQuoteResponse>().await {
-                            if let Some(result_list) = quote_resp.quote_response.and_then(|qr| qr.result) {
-                                batch_success = true;
-                                for item in result_list {
-                                    if let Some(ref sym) = item.symbol {
-                                        if let Some(inst) = symbol_to_inst.get(sym) {
-                                            process_fx_quote_item(&state, inst, &item, is_weekend).await;
-                                        }
+            if let Ok(res) = state.http_client.get(&url).send().await {
+                let status = res.status();
+                if status.is_success() {
+                    if let Ok(quote_resp) = res.json::<YahooQuoteResponse>().await {
+                        if let Some(result_list) = quote_resp.quote_response.and_then(|qr| qr.result) {
+                            for item in result_list {
+                                if let Some(ref sym) = item.symbol {
+                                    if let Some(inst) = symbol_to_inst.get(sym) {
+                                        process_fx_quote_item(&state, inst, &item, is_weekend).await;
                                     }
                                 }
                             }
                         }
-                    } else if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
-                        warn!("Yahoo crumb expired or rejected with status {}, invalidating...", status);
-                        invalidate_yahoo_crumb(&state).await;
                     }
+                } else if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                    warn!("Yahoo 429 rate limit hit, pausing FX poller for 120s");
+                    invalidate_yahoo_crumb(&state).await;
+                    sleep(Duration::from_secs(120)).await;
+                    break;
+                } else if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+                    warn!("Yahoo crumb expired or rejected with status {}, invalidating...", status);
+                    invalidate_yahoo_crumb(&state).await;
+                    break;
                 }
             }
 
-            // Fallback if batch quote failed: use lightweight interval=1d&range=1d chart for each
-            if !batch_success {
-                warn!("Batch quote request failed for FX chunk, using single-chart fallback");
-                let us_cal = UsMarketCalendar::new();
-                let id_cal = IdxMarketCalendar::new();
-                for inst in &chunk {
-                    poll_single_chart_fallback(&state, inst, true, None, now, &us_cal, &id_cal).await;
-                    sleep(Duration::from_millis(100)).await;
-                }
-            }
-
-            sleep(Duration::from_millis(200)).await;
+            sleep(Duration::from_millis(500)).await;
         }
 
         is_initial_run = false;
@@ -983,6 +1010,15 @@ async fn run_equity_supervisor_and_poller(state: AppState) {
             continue;
         }
 
+        let crumb_opt = get_yahoo_crumb(&state).await;
+        if crumb_opt.is_none() {
+            // Rate limited or crumb unavailable; wait 60s and retry gracefully
+            is_initial_run = false;
+            sleep(Duration::from_secs(60)).await;
+            continue;
+        }
+        let crumb = crumb_opt.unwrap();
+
         // Batch poll active equities in chunks of up to 45 symbols
         let chunk_size = 45;
         let chunks: Vec<Vec<Instrument>> = active_equities
@@ -997,70 +1033,50 @@ async fn run_equity_supervisor_and_poller(state: AppState) {
                 .collect::<Vec<_>>()
                 .join(",");
 
-            let crumb_opt = get_yahoo_crumb(&state).await;
-            let mut batch_success = false;
+            let url = format!(
+                "https://query1.finance.yahoo.com/v7/finance/quote?symbols={}&crumb={}",
+                symbols_query, crumb
+            );
 
-            if let Some(ref crumb) = crumb_opt {
-                let url = format!(
-                    "https://query1.finance.yahoo.com/v7/finance/quote?symbols={}&crumb={}",
-                    symbols_query, crumb
-                );
-
-                if let Ok(res) = state.http_client.get(&url).send().await {
-                    let status = res.status();
-                    if status.is_success() {
-                        if let Ok(quote_resp) = res.json::<YahooQuoteResponse>().await {
-                            if let Some(result_list) = quote_resp.quote_response.and_then(|qr| qr.result) {
-                                batch_success = true;
-                                for item in result_list {
-                                    if let Some(ref sym) = item.symbol {
-                                        if let Some(inst) = symbol_to_inst.get(sym) {
-                                            let is_us = inst.asset_class == AssetClass::UsStocks || inst.id.as_str().starts_with("US:");
-                                            let active_state = if is_us { us_state } else { id_state };
-                                            process_equity_quote_item(
-                                                &state,
-                                                inst,
-                                                &item,
-                                                is_us,
-                                                active_state,
-                                                now,
-                                                &us_cal,
-                                                &id_cal,
-                                            )
-                                            .await;
-                                        }
+            if let Ok(res) = state.http_client.get(&url).send().await {
+                let status = res.status();
+                if status.is_success() {
+                    if let Ok(quote_resp) = res.json::<YahooQuoteResponse>().await {
+                        if let Some(result_list) = quote_resp.quote_response.and_then(|qr| qr.result) {
+                            for item in result_list {
+                                if let Some(ref sym) = item.symbol {
+                                    if let Some(inst) = symbol_to_inst.get(sym) {
+                                        let is_us = inst.asset_class == AssetClass::UsStocks || inst.id.as_str().starts_with("US:");
+                                        let active_state = if is_us { us_state } else { id_state };
+                                        process_equity_quote_item(
+                                            &state,
+                                            inst,
+                                            &item,
+                                            is_us,
+                                            active_state,
+                                            now,
+                                            &us_cal,
+                                            &id_cal,
+                                        )
+                                        .await;
                                     }
                                 }
                             }
                         }
-                    } else if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
-                        warn!("Yahoo crumb expired or rejected with status {}, invalidating...", status);
-                        invalidate_yahoo_crumb(&state).await;
                     }
+                } else if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                    warn!("Yahoo 429 rate limit hit in equity supervisor, pausing for 120s");
+                    invalidate_yahoo_crumb(&state).await;
+                    sleep(Duration::from_secs(120)).await;
+                    break;
+                } else if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+                    warn!("Yahoo crumb expired or rejected with status {}, invalidating...", status);
+                    invalidate_yahoo_crumb(&state).await;
+                    break;
                 }
             }
 
-            // Fallback if batch quote failed
-            if !batch_success {
-                warn!("Batch quote request failed for equity chunk, using single-chart fallback");
-                for inst in &chunk {
-                    let is_us = inst.asset_class == AssetClass::UsStocks || inst.id.as_str().starts_with("US:");
-                    let active_state = if is_us { us_state } else { id_state };
-                    poll_single_chart_fallback(
-                        &state,
-                        inst,
-                        false,
-                        Some(active_state),
-                        now,
-                        &us_cal,
-                        &id_cal,
-                    )
-                    .await;
-                    sleep(Duration::from_millis(100)).await;
-                }
-            }
-
-            sleep(Duration::from_millis(200)).await;
+            sleep(Duration::from_millis(500)).await;
         }
 
         is_initial_run = false;
