@@ -60,6 +60,7 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
     close: number;
     volume: number;
   } | null>(null);
+  const last1sOpenTimeRef = useRef<number>(0);
 
   const selectedTimeframe = useMarketStore((s) => s.selectedTimeframe);
   const showEma20 = useMarketStore((s) => s.showEma20);
@@ -76,6 +77,10 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
   const minMove = precision === 0 ? 1 : 1 / Math.pow(10, precision);
 
   const { data: candlesData, isLoading, isError } = useCandlesQuery(symbol, selectedTimeframe);
+  const candlesDataRef = useRef(candlesData);
+  useEffect(() => {
+    candlesDataRef.current = candlesData;
+  }, [candlesData]);
 
   // OHLC overlay state on hover and streaming updates
   const [hoveredCandle, setHoveredCandle] = useState<OhlcData | null>(null);
@@ -321,6 +326,9 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
   // Subscribe to realtime live candle stream & tick updates from Zustand store
   useEffect(() => {
     let lastProcessedVersion = "";
+    activeBarRef.current = null;
+    last1sOpenTimeRef.current = 0;
+
     const bucketMs = TIMEFRAME_MS[selectedTimeframe] ?? 60_000;
 
     const unsubscribe = useMarketStore.subscribe((state) => {
@@ -338,30 +346,40 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
       if (versionKey === lastProcessedVersion) return;
       lastProcessedVersion = versionKey;
 
-      if (selectedTimeframe === "1s" && (directCandle || candle1s)) {
-        const live = directCandle || candle1s!;
-        const time = toLocalChartTime(live.openTime) as Time;
+      if (selectedTimeframe === "1s") {
+        const live = candle1s || directCandle;
+        const tickPrice = live?.close ?? ticker?.price;
+        if (tickPrice == null || !Number.isFinite(tickPrice)) return;
+
+        const openTime = live?.openTime ?? Math.floor((ticker?.timestamp ?? Date.now()) / 1000) * 1000;
+        const time = toLocalChartTime(openTime) as Time;
+        const open = live?.open ?? tickPrice;
+        const high = Math.max(live?.high ?? tickPrice, tickPrice);
+        const low = Math.min(live?.low ?? tickPrice, tickPrice);
+        const close = tickPrice;
+        const volume = live?.volume ?? 0;
+
         try {
           candleSeriesRef.current.update({
             time,
-            open: live.open,
-            high: live.high,
-            low: live.low,
-            close: live.close,
+            open,
+            high,
+            low,
+            close,
           });
           volumeSeriesRef.current.update({
             time,
-            value: live.volume,
-            color: live.close >= live.open ? CHART_COLORS.volumeUp : CHART_COLORS.volumeDown,
+            value: volume,
+            color: close >= open ? CHART_COLORS.volumeUp : CHART_COLORS.volumeDown,
           });
           setLiveCandleState({
             key: `${symbol}:1s`,
             candle: {
-              open: live.open,
-              high: live.high,
-              low: live.low,
-              close: live.close,
-              volume: live.volume,
+              open,
+              high,
+              low,
+              close,
+              volume,
               time,
             },
           });
@@ -372,74 +390,79 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
       }
 
       // For any non-1s timeframe (1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w):
-      // If direct candle exists (e.g. finalized 1m broadcast), use it
-      if (directCandle) {
-        const time = toLocalChartTime(directCandle.openTime) as Time;
-        try {
-          candleSeriesRef.current.update({
-            time,
-            open: directCandle.open,
-            high: directCandle.high,
-            low: directCandle.low,
-            close: directCandle.close,
-          });
-          volumeSeriesRef.current.update({
-            time,
-            value: directCandle.volume,
-            color: directCandle.close >= directCandle.open ? CHART_COLORS.volumeUp : CHART_COLORS.volumeDown,
-          });
-          setLiveCandleState({
-            key: `${symbol}:${selectedTimeframe}`,
-            candle: {
-              open: directCandle.open,
-              high: directCandle.high,
-              low: directCandle.low,
-              close: directCandle.close,
-              volume: directCandle.volume,
-              time,
-            },
-          });
-        } catch {
-          // Ignore
-        }
-        return;
-      }
-
-      // Otherwise, synthesize/update active open bar from incoming 1s candle or live ticker
-      const tickPrice = candle1s?.close ?? ticker?.price;
+      // Synthesize/update active open bar from incoming 1s candle or live ticker in real time
+      const tickPrice = candle1s?.close ?? ticker?.price ?? directCandle?.close;
       if (tickPrice == null || !Number.isFinite(tickPrice)) return;
 
-      const tickHigh = candle1s?.high ?? tickPrice;
-      const tickLow = candle1s?.low ?? tickPrice;
-      const tickVol = candle1s?.volume ?? 0;
-      const tickTimeMs = candle1s?.openTime ?? ticker?.timestamp ?? Date.now();
+      const tickHigh = Math.max(candle1s?.high ?? tickPrice, ticker?.price ?? tickPrice);
+      const tickLow = Math.min(candle1s?.low ?? tickPrice, ticker?.price ?? tickPrice);
+      const tickTimeMs = candle1s?.openTime ?? ticker?.timestamp ?? directCandle?.openTime ?? Date.now();
 
       const bucketStartMs = Math.floor(tickTimeMs / bucketMs) * bucketMs;
       const chartTime = toLocalChartTime(bucketStartMs) as Time;
 
+      // Track volume additions per 1s candle to avoid duplicating volume on rapid ticker updates
+      let deltaVol = 0;
+      if (candle1s && candle1s.openTime !== last1sOpenTimeRef.current) {
+        last1sOpenTimeRef.current = candle1s.openTime;
+        deltaVol = candle1s.volume ?? 0;
+      }
+
       let bar = activeBarRef.current;
+
+      // If activeBar is not yet initialized in memory, check if historical data already has this open bucket
+      if (!bar && candlesDataRef.current?.candles?.length) {
+        const histCandles = candlesDataRef.current.candles;
+        const lastHist = histCandles[histCandles.length - 1];
+        const lastHistBucketMs = Math.floor(lastHist.openTime / bucketMs) * bucketMs;
+        if (lastHistBucketMs === bucketStartMs) {
+          bar = {
+            bucketStartMs,
+            chartTime,
+            open: lastHist.open,
+            high: Math.max(lastHist.high, tickHigh, tickPrice),
+            low: Math.min(lastHist.low, tickLow, tickPrice),
+            close: tickPrice,
+            volume: lastHist.volume + deltaVol,
+          };
+        }
+      }
+
+      const isDirectMatching = directCandle && directCandle.openTime === bucketStartMs;
+
       if (!bar || bucketStartMs > bar.bucketStartMs) {
         // Start new candle bucket
         bar = {
           bucketStartMs,
           chartTime,
-          open: candle1s?.open ?? tickPrice,
-          high: Math.max(tickPrice, tickHigh),
-          low: Math.min(tickPrice, tickLow),
+          open: isDirectMatching ? directCandle.open : (candle1s?.open ?? tickPrice),
+          high: Math.max(isDirectMatching ? directCandle.high : tickPrice, tickHigh, tickPrice),
+          low: Math.min(isDirectMatching ? directCandle.low : tickPrice, tickLow, tickPrice),
           close: tickPrice,
-          volume: tickVol,
+          volume: isDirectMatching ? Math.max(directCandle.volume, deltaVol) : deltaVol,
         };
-      } else {
-        // Update existing open bucket
+      } else if (bucketStartMs === bar.bucketStartMs) {
+        // Update existing open bucket in real time
+        const newHigh = Math.max(bar.high, tickHigh, tickPrice, isDirectMatching ? directCandle.high : 0);
+        const newLow = Math.min(bar.low, tickLow, tickPrice, isDirectMatching ? directCandle.low : Infinity);
+        const newVol = isDirectMatching
+          ? Math.max(bar.volume + deltaVol, directCandle.volume)
+          : bar.volume + deltaVol;
+
         bar = {
           ...bar,
           chartTime,
-          high: Math.max(bar.high, tickPrice, tickHigh),
-          low: Math.min(bar.low, tickPrice, tickLow),
+          open: isDirectMatching ? directCandle.open : bar.open,
+          high: newHigh,
+          low: newLow,
           close: tickPrice,
-          volume: bar.volume + tickVol,
+          volume: newVol,
         };
+      } else {
+        // Out of order tick; ignore
+        return;
       }
+
       activeBarRef.current = bar;
 
       try {
@@ -474,6 +497,8 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
     });
 
     return () => {
+      activeBarRef.current = null;
+      last1sOpenTimeRef.current = 0;
       unsubscribe();
     };
   }, [symbol, selectedTimeframe]);

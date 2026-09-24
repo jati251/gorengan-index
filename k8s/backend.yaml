@@ -6,6 +6,7 @@ metadata:
   labels:
     app: gorengan-collector
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   selector:
     matchLabels:
@@ -54,6 +55,7 @@ metadata:
   labels:
     app: gorengan-aggregator
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   selector:
     matchLabels:
@@ -100,6 +102,7 @@ metadata:
   labels:
     app: gorengan-gateway
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   selector:
     matchLabels:
