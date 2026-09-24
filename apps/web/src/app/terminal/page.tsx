@@ -32,7 +32,7 @@ export default function TerminalPage() {
   const { dict, interpolate } = useTranslation();
   const [mobileTab, setMobileTab] = useState<MobileTab>("chart");
   const isCompact = useSyncExternalStore(subscribeCompact, getCompact, getServerCompact);
-  const { symbols, symbolIds } = useResolvedSymbols();
+  const { symbols, symbolIds, isLoading } = useResolvedSymbols();
   useMarketsQuery();
   useTerminalWebSocket(symbolIds, { isThrottled: true, throttleMs: isCompact ? 250 : 100 });
   const selectedSymbol = useMarketStore((state) => state.selectedSymbol);
@@ -86,7 +86,7 @@ export default function TerminalPage() {
                   <span>{interpolate(dict.terminal.workspace.symbolsCount, { count: symbols.length })}</span>
                 </div>
                 <CardContent className="p-0">
-                  <MarketOverviewTable symbols={symbols} onSelectSymbol={() => setMobileTab("chart")} />
+                  <MarketOverviewTable symbols={symbols} isLoading={isLoading} onSelectSymbol={() => setMobileTab("chart")} />
                 </CardContent>
               </Card>
             </>

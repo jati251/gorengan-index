@@ -53,7 +53,10 @@ export function useTerminalWebSocket(
     const desired = new Set(symbolsRef.current.map(formatTickerChannel));
     if (state.selectedSymbol) {
       desired.add(formatTickerChannel(state.selectedSymbol));
-      desired.add(formatCandleChannel(state.selectedSymbol, state.selectedTimeframe));
+      desired.add(formatCandleChannel(state.selectedSymbol, "1s"));
+      if (state.selectedTimeframe !== "1s") {
+        desired.add(formatCandleChannel(state.selectedSymbol, state.selectedTimeframe));
+      }
     }
     desired.add("session:*");
 

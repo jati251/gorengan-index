@@ -32,6 +32,12 @@ spec:
           env:
             - name: NATS_URL
               value: "nats://nats-svc.apps.svc.cluster.local:4222"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: gorengan-index-secrets
+                  key: DATABASE_URL
+                  optional: true
           resources:
             requests:
               cpu: "50m"
@@ -128,6 +134,12 @@ spec:
               value: "nats://nats-svc.apps.svc.cluster.local:4222"
             - name: QUESTDB_HTTP_URL
               value: "http://questdb-svc.apps.svc.cluster.local:9000"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: gorengan-index-secrets
+                  key: DATABASE_URL
+                  optional: true
           readinessProbe:
             httpGet:
               path: /v1/health

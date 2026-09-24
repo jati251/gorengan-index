@@ -25,14 +25,17 @@ export function useResolvedSymbols(): ResolvedSymbolsResult {
           symbolMap.set(s.id, s);
         }
       }
+      return Array.from(symbolMap.values());
     }
-    for (const defaultSym of DEFAULT_SYMBOLS) {
-      if (defaultSym.id && !symbolMap.has(defaultSym.id)) {
-        symbolMap.set(defaultSym.id, defaultSym);
+    if (!isLoading) {
+      for (const defaultSym of DEFAULT_SYMBOLS) {
+        if (defaultSym.id && !symbolMap.has(defaultSym.id)) {
+          symbolMap.set(defaultSym.id, defaultSym);
+        }
       }
     }
     return Array.from(symbolMap.values());
-  }, [serverSymbols]);
+  }, [serverSymbols, isLoading]);
 
   const symbolIds = useMemo(() => symbols.map((s) => s.id), [symbols]);
 

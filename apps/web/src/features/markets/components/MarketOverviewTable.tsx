@@ -39,6 +39,7 @@ import {
 interface MarketOverviewTableProps {
   symbols: MarketSymbol[];
   onSelectSymbol?: (symbolId: string) => void;
+  isLoading?: boolean;
 }
 
 export type SortColumn = "symbol" | "price" | "change" | "range" | "high" | "low" | "volume";
@@ -128,7 +129,55 @@ function getTableDirectionArrowClass(direction?: "up" | "down" | "neutral"): str
   return "opacity-0 scale-50";
 }
 
-export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewTableProps) {
+function TableSkeletonRows({ count = 10 }: { count?: number }) {
+  return (
+    <>
+      {Array.from({ length: count }).map((_, i) => (
+        <tr key={`skeleton-${i}`} className="animate-pulse border-b border-white/[0.04]">
+          <td className="py-3 px-3 text-center">
+            <div className="w-3.5 h-3.5 mx-auto rounded-full bg-white/[0.06]" />
+          </td>
+          <td className="py-3 px-3">
+            <div className="flex items-center gap-2">
+              <div className="h-4 w-16 bg-white/[0.08] rounded" />
+              <div className="h-3 w-24 bg-white/[0.04] rounded hidden sm:block" />
+            </div>
+          </td>
+          <td className="py-3 px-3 hidden md:table-cell">
+            <div className="h-3.5 w-14 bg-white/[0.06] rounded" />
+          </td>
+          <td className="py-3 px-3 text-right">
+            <div className="h-4 w-16 bg-white/[0.08] rounded ml-auto" />
+          </td>
+          <td className="py-3 px-3 text-right">
+            <div className="h-5 w-14 bg-white/[0.06] rounded ml-auto" />
+          </td>
+          <td className="py-3 px-3 text-center hidden md:table-cell">
+            <div className="h-2 w-20 bg-white/[0.06] rounded mx-auto" />
+          </td>
+          <td className="py-3 px-3 text-right hidden lg:table-cell">
+            <div className="h-3.5 w-14 bg-white/[0.04] rounded ml-auto" />
+          </td>
+          <td className="py-3 px-3 text-right hidden lg:table-cell">
+            <div className="h-3.5 w-14 bg-white/[0.04] rounded ml-auto" />
+          </td>
+          <td className="py-3 px-3 text-right hidden md:table-cell">
+            <div className="h-3.5 w-16 bg-white/[0.06] rounded ml-auto" />
+          </td>
+          <td className="py-3 px-3 text-center hidden md:table-cell">
+            <div className="h-3.5 w-12 bg-white/[0.04] rounded mx-auto" />
+          </td>
+        </tr>
+      ))}
+    </>
+  );
+}
+
+export function MarketOverviewTable({
+  symbols,
+  onSelectSymbol,
+  isLoading,
+}: MarketOverviewTableProps) {
   const { dict, interpolate, locale } = useTranslation();
 
   const categories: { id: MarketCategory; label: string }[] = useMemo(() => [
@@ -672,7 +721,9 @@ export function MarketOverviewTable({ symbols, onSelectSymbol }: MarketOverviewT
             </tr>
           </thead>
           <tbody className="divide-y divide-white/[0.04]">
-            {visibleRows.length === 0 ? (
+            {isLoading && visibleRows.length === 0 ? (
+              <TableSkeletonRows count={12} />
+            ) : visibleRows.length === 0 ? (
               <tr>
                 <td colSpan={10} className="py-14 px-4 text-center">
                   <div className="flex flex-col items-center justify-center gap-2 font-mono text-slate-400">

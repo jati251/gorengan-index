@@ -29,7 +29,7 @@ export default function LandingPage() {
   const { status } = useSession();
   const isAuthenticated = status === "authenticated";
   const { dict, interpolate, locale } = useTranslation();
-  const { symbols, symbolIds } = useResolvedSymbols();
+  const { symbols, symbolIds, isLoading } = useResolvedSymbols();
   useMarketsQuery();
 
   // Curate 8 representative items for hero snapshot tape
@@ -184,7 +184,7 @@ export default function LandingPage() {
               ) : (
                 <div className="flex flex-col gap-3">
                   <Card className="preview-table">
-                    <MarketOverviewTable symbols={symbols} />
+                    <MarketOverviewTable symbols={symbols} isLoading={isLoading} />
                   </Card>
                   <div className="flex items-center justify-between px-2 py-1 text-xs font-mono text-slate-400">
                     <span>{interpolate(dict.landing.market.showingFeatured, { count: symbols.length })}</span>

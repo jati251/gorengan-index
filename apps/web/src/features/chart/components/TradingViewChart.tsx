@@ -12,6 +12,7 @@ import {
   type HistogramData,
   type Time,
 } from "lightweight-charts";
+import { TIMEFRAME_MS } from "@gorengan/shared";
 import { useCandlesQuery } from "../api/useCandlesQuery";
 import { useMarketStore } from "@/stores/marketStore";
 import { toLocalChartTime } from "@/utils/formatters";
@@ -50,6 +51,15 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const ema20SeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const ema50SeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const activeBarRef = useRef<{
+    bucketStartMs: number;
+    chartTime: Time;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+  } | null>(null);
 
   const selectedTimeframe = useMarketStore((s) => s.selectedTimeframe);
   const showEma20 = useMarketStore((s) => s.showEma20);
@@ -258,6 +268,23 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
       candleSeriesRef.current.setData(formattedCandles);
       volumeSeriesRef.current.setData(formattedVolumes);
 
+      // Track active latest bar for live synthesizing
+      const lastFormatted = formattedCandles[formattedCandles.length - 1];
+      const lastRaw = sorted[sorted.length - 1];
+      if (lastFormatted && lastRaw) {
+        const bucketMs = TIMEFRAME_MS[selectedTimeframe] ?? 60_000;
+        const bucketStartMs = Math.floor(lastRaw.openTime / bucketMs) * bucketMs;
+        activeBarRef.current = {
+          bucketStartMs,
+          chartTime: lastFormatted.time,
+          open: lastFormatted.open,
+          high: lastFormatted.high,
+          low: lastFormatted.low,
+          close: lastFormatted.close,
+          volume: Number(formattedVolumes[formattedVolumes.length - 1]?.value ?? 0),
+        };
+      }
+
       // Calculate and set EMAs
       if (ema20SeriesRef.current) {
         ema20SeriesRef.current.setData(calculateEMA(closeData, 20));
@@ -276,7 +303,7 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
     } catch (err) {
       console.warn("Error setting candle data:", err);
     }
-  }, [candlesData]);
+  }, [candlesData, selectedTimeframe]);
 
   // Dynamically toggle secondsVisible and re-align view when switching to sub-minute timeframes
   useEffect(() => {
@@ -291,51 +318,158 @@ export function TradingViewChart({ symbol, className }: TradingViewChartProps) {
     });
   }, [selectedTimeframe]);
 
-  // Subscribe to realtime live candle stream from Zustand store
+  // Subscribe to realtime live candle stream & tick updates from Zustand store
   useEffect(() => {
-    let lastCandle: ReturnType<typeof useMarketStore.getState>["candles"][string] | undefined;
+    let lastProcessedVersion = "";
+    const bucketMs = TIMEFRAME_MS[selectedTimeframe] ?? 60_000;
+
     const unsubscribe = useMarketStore.subscribe((state) => {
       if (!candleSeriesRef.current || !volumeSeriesRef.current) return;
 
-      const liveCandle =
-        state.candles[`${symbol}:${selectedTimeframe}`] ||
-        (selectedTimeframe === "1m" ? state.candles[`${symbol}:1m`] : undefined);
+      const directCandle = state.candles[`${symbol}:${selectedTimeframe}`];
+      const candle1s = state.candles[`${symbol}:1s`];
+      const ticker = state.tickers[symbol];
 
-      if (!liveCandle || liveCandle === lastCandle) return;
-      lastCandle = liveCandle;
+      // If we have no price source at all, return
+      if (!directCandle && !candle1s && !ticker) return;
 
-      const time = toLocalChartTime(liveCandle.openTime) as Time;
+      // Deduplicate rapid no-op triggers
+      const versionKey = `${directCandle?.openTime}_${directCandle?.close}_${candle1s?.openTime}_${candle1s?.close}_${ticker?.price}_${ticker?.timestamp}`;
+      if (versionKey === lastProcessedVersion) return;
+      lastProcessedVersion = versionKey;
+
+      if (selectedTimeframe === "1s" && (directCandle || candle1s)) {
+        const live = directCandle || candle1s!;
+        const time = toLocalChartTime(live.openTime) as Time;
+        try {
+          candleSeriesRef.current.update({
+            time,
+            open: live.open,
+            high: live.high,
+            low: live.low,
+            close: live.close,
+          });
+          volumeSeriesRef.current.update({
+            time,
+            value: live.volume,
+            color: live.close >= live.open ? CHART_COLORS.volumeUp : CHART_COLORS.volumeDown,
+          });
+          setLiveCandleState({
+            key: `${symbol}:1s`,
+            candle: {
+              open: live.open,
+              high: live.high,
+              low: live.low,
+              close: live.close,
+              volume: live.volume,
+              time,
+            },
+          });
+        } catch {
+          // Ignore duplicate / out-of-order ticks
+        }
+        return;
+      }
+
+      // For any non-1s timeframe (1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w):
+      // If direct candle exists (e.g. finalized 1m broadcast), use it
+      if (directCandle) {
+        const time = toLocalChartTime(directCandle.openTime) as Time;
+        try {
+          candleSeriesRef.current.update({
+            time,
+            open: directCandle.open,
+            high: directCandle.high,
+            low: directCandle.low,
+            close: directCandle.close,
+          });
+          volumeSeriesRef.current.update({
+            time,
+            value: directCandle.volume,
+            color: directCandle.close >= directCandle.open ? CHART_COLORS.volumeUp : CHART_COLORS.volumeDown,
+          });
+          setLiveCandleState({
+            key: `${symbol}:${selectedTimeframe}`,
+            candle: {
+              open: directCandle.open,
+              high: directCandle.high,
+              low: directCandle.low,
+              close: directCandle.close,
+              volume: directCandle.volume,
+              time,
+            },
+          });
+        } catch {
+          // Ignore
+        }
+        return;
+      }
+
+      // Otherwise, synthesize/update active open bar from incoming 1s candle or live ticker
+      const tickPrice = candle1s?.close ?? ticker?.price;
+      if (tickPrice == null || !Number.isFinite(tickPrice)) return;
+
+      const tickHigh = candle1s?.high ?? tickPrice;
+      const tickLow = candle1s?.low ?? tickPrice;
+      const tickVol = candle1s?.volume ?? 0;
+      const tickTimeMs = candle1s?.openTime ?? ticker?.timestamp ?? Date.now();
+
+      const bucketStartMs = Math.floor(tickTimeMs / bucketMs) * bucketMs;
+      const chartTime = toLocalChartTime(bucketStartMs) as Time;
+
+      let bar = activeBarRef.current;
+      if (!bar || bucketStartMs > bar.bucketStartMs) {
+        // Start new candle bucket
+        bar = {
+          bucketStartMs,
+          chartTime,
+          open: candle1s?.open ?? tickPrice,
+          high: Math.max(tickPrice, tickHigh),
+          low: Math.min(tickPrice, tickLow),
+          close: tickPrice,
+          volume: tickVol,
+        };
+      } else {
+        // Update existing open bucket
+        bar = {
+          ...bar,
+          chartTime,
+          high: Math.max(bar.high, tickPrice, tickHigh),
+          low: Math.min(bar.low, tickPrice, tickLow),
+          close: tickPrice,
+          volume: bar.volume + tickVol,
+        };
+      }
+      activeBarRef.current = bar;
+
       try {
         candleSeriesRef.current.update({
-          time,
-          open: liveCandle.open,
-          high: liveCandle.high,
-          low: liveCandle.low,
-          close: liveCandle.close,
+          time: bar.chartTime,
+          open: bar.open,
+          high: bar.high,
+          low: bar.low,
+          close: bar.close,
         });
 
         volumeSeriesRef.current.update({
-          time,
-          value: liveCandle.volume,
-          color:
-            liveCandle.close >= liveCandle.open
-              ? CHART_COLORS.volumeUp
-              : CHART_COLORS.volumeDown,
+          time: bar.chartTime,
+          value: bar.volume,
+          color: bar.close >= bar.open ? CHART_COLORS.volumeUp : CHART_COLORS.volumeDown,
         });
 
         setLiveCandleState({
           key: `${symbol}:${selectedTimeframe}`,
           candle: {
-            open: liveCandle.open,
-            high: liveCandle.high,
-            low: liveCandle.low,
-            close: liveCandle.close,
-            volume: liveCandle.volume,
-            time,
+            open: bar.open,
+            high: bar.high,
+            low: bar.low,
+            close: bar.close,
+            volume: bar.volume,
+            time: bar.chartTime,
           },
         });
       } catch {
-        // Ignore duplicate or out-of-order live tick updates
+        // Ignore duplicate or out-of-order lightweight charts ticks
       }
     });
 
