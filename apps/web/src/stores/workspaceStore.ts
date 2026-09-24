@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-export const widgetKinds = ["overview", "chart", "analysis", "prediction", "composition", "markets", "orderbook", "pulse", "news", "calculator"] as const;
+export const widgetKinds = ["overview", "chart", "analysis", "prediction", "composition", "markets", "orderbook", "pulse", "news", "calculator", "cryptoIntel"] as const;
 export type WidgetKind = typeof widgetKinds[number];
 const defaults: WidgetKind[] = ["overview", "chart", "analysis", "prediction", "composition", "markets", "calculator"];
 interface WorkspaceState {

@@ -1,3 +1,17 @@
+.intel-body { padding: 1rem; display: grid; gap: 1rem; }
+.intel-body a { color: var(--desk-accent); text-decoration: underline; }
+.intel-status { display: flex; flex-direction: column; gap: .35rem; border-left: 3px solid var(--desk-accent); padding: .7rem 1rem; background: var(--desk-raised); }
+.intel-status strong { font-size: 1.45rem; color: var(--desk-accent); }
+.intel-metrics, .intel-checks, .intel-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 175px), 1fr)); gap: 1rem; }
+.intel-metrics > div, .intel-checks > div { display: flex; flex-direction: column; gap: .25rem; border-bottom: 1px solid var(--desk-line); padding-bottom: .65rem; min-width: 0; overflow-wrap: anywhere; }
+.intel-metrics dd { font-size: 1.65rem; font-variant-numeric: tabular-nums; }
+.intel-metrics small, .intel-checks span { color: var(--desk-muted); }
+.intel-field { display: flex; flex-direction: column; gap: .35rem; min-width: 0; }
+.intel-field input { width: 100%; min-height: 44px; background: var(--desk-bg); color: var(--desk-text); border: 1px solid var(--desk-line); padding: .5rem; }
+.intel-notice { padding: .75rem; border: 1px solid var(--desk-accent); color: var(--desk-accent); overflow-wrap: anywhere; }
+.intel-table-wrap { overflow-x: auto; }
+.intel-table { width: 100%; text-align: left; border-collapse: collapse; }
+.intel-table th, .intel-table td { padding: .5rem; border-bottom: 1px solid var(--desk-line); }
 html:has(.terminal-app), body:has(.terminal-app) { overflow-x: clip; }
 .terminal-app {
   --desk-bg: #2a2839;
