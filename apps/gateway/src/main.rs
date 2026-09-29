@@ -62,18 +62,27 @@ async fn main() -> Result<()> {
 
     let cfg = AppConfig::load().context("Failed to load application config")?;
 
-    // Load dynamic instruments directly from PostgreSQL (SSOT)
+    // Load dynamic instruments directly from PostgreSQL (SSOT) with retry logic
     let all_instruments = if let Some(ref db_url) = cfg.database_url {
-        match Instrument::load_from_connection_string(db_url).await {
-            Ok(instruments) => {
-                info!(count = instruments.len(), "Loaded dynamic market instruments directly from PostgreSQL");
-                instruments
-            }
-            Err(e) => {
-                warn!(err = %e, "Failed to load instruments from PostgreSQL; falling back to offline fixtures");
-                Instrument::test_fixtures()
+        let mut loaded = None;
+        for attempt in 1..=15 {
+            match Instrument::load_from_connection_string(db_url).await {
+                Ok(instruments) => {
+                    info!(count = instruments.len(), attempt, "Loaded dynamic market instruments directly from PostgreSQL");
+                    loaded = Some(instruments);
+                    break;
+                }
+                Err(e) => {
+                    if attempt < 15 {
+                        warn!(attempt, err = %e, "Failed to load instruments from PostgreSQL; retrying in 3s...");
+                        sleep(Duration::from_secs(3)).await;
+                    } else {
+                        warn!(attempt, err = %e, "Exhausted retries connecting to PostgreSQL; falling back to offline fixtures");
+                    }
+                }
             }
         }
+        loaded.unwrap_or_else(Instrument::test_fixtures)
     } else {
         info!("No DATABASE_URL configured; using offline fixtures");
         Instrument::test_fixtures()
@@ -105,7 +114,7 @@ async fn main() -> Result<()> {
         http_client: reqwest::Client::builder()
             .timeout(Duration::from_secs(8))
             .cookie_store(true)
-            .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
             .build()?,
         cached_news: Arc::new(RwLock::new((None, Vec::new()))),
         cached_sentiment: Arc::new(RwLock::new((None, SentimentData::default()))),
@@ -338,6 +347,7 @@ struct YahooQuoteItem {
 }
 
 async fn get_yahoo_crumb(state: &AppState) -> Option<String> {
+    // 1. Fast path with read lock
     {
         let lock = state.yahoo_crumb.read().await;
         if let Some(ref c) = *lock {
@@ -348,8 +358,8 @@ async fn get_yahoo_crumb(state: &AppState) -> Option<String> {
                     }
                 }
                 None => {
-                    // Backoff on previous failure for 120 seconds
-                    if c.fetched_at.elapsed() < Duration::from_secs(120) {
+                    // Backoff on previous failure for 60 seconds
+                    if c.fetched_at.elapsed() < Duration::from_secs(60) {
                         return None;
                     }
                 }
@@ -357,12 +367,35 @@ async fn get_yahoo_crumb(state: &AppState) -> Option<String> {
         }
     }
 
+    // 2. Slow path with write lock (to prevent multiple workers fetching crumb concurrently)
+    let mut lock = state.yahoo_crumb.write().await;
+    if let Some(ref c) = *lock {
+        match c.crumb {
+            Some(ref crumb) => {
+                if c.fetched_at.elapsed() < Duration::from_secs(3600) {
+                    return Some(crumb.clone());
+                }
+            }
+            None => {
+                if c.fetched_at.elapsed() < Duration::from_secs(60) {
+                    return None;
+                }
+            }
+        }
+    }
+
     // Set cookie first via fc.yahoo.com
-    let _ = state.http_client.get("https://fc.yahoo.com").send().await;
+    let _ = state
+        .http_client
+        .get("https://fc.yahoo.com")
+        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+        .send()
+        .await;
 
     match state
         .http_client
         .get("https://query1.finance.yahoo.com/v1/test/getcrumb")
+        .header("Accept", "*/*")
         .send()
         .await
     {
@@ -370,7 +403,6 @@ async fn get_yahoo_crumb(state: &AppState) -> Option<String> {
             if let Ok(crumb) = res.text().await {
                 let crumb = crumb.trim().to_string();
                 if !crumb.is_empty() && !crumb.contains("<html>") {
-                    let mut lock = state.yahoo_crumb.write().await;
                     *lock = Some(YahooCrumbState {
                         crumb: Some(crumb.clone()),
                         fetched_at: std::time::Instant::now(),
@@ -379,8 +411,7 @@ async fn get_yahoo_crumb(state: &AppState) -> Option<String> {
                     return Some(crumb);
                 }
             }
-            warn!("Failed to parse Yahoo crumb response; backing off for 120s");
-            let mut lock = state.yahoo_crumb.write().await;
+            warn!("Failed to parse Yahoo crumb response; backing off for 60s");
             *lock = Some(YahooCrumbState {
                 crumb: None,
                 fetched_at: std::time::Instant::now(),
@@ -388,8 +419,7 @@ async fn get_yahoo_crumb(state: &AppState) -> Option<String> {
             None
         }
         Ok(res) => {
-            warn!(status = %res.status(), "Yahoo getcrumb returned non-success status; backing off for 120s");
-            let mut lock = state.yahoo_crumb.write().await;
+            warn!(status = %res.status(), "Yahoo getcrumb returned non-success status; backing off for 60s");
             *lock = Some(YahooCrumbState {
                 crumb: None,
                 fetched_at: std::time::Instant::now(),
@@ -397,8 +427,7 @@ async fn get_yahoo_crumb(state: &AppState) -> Option<String> {
             None
         }
         Err(e) => {
-            warn!(err = %e, "Failed to connect to Yahoo getcrumb endpoint; backing off for 120s");
-            let mut lock = state.yahoo_crumb.write().await;
+            warn!(err = %e, "Failed to connect to Yahoo getcrumb endpoint; backing off for 60s");
             *lock = Some(YahooCrumbState {
                 crumb: None,
                 fetched_at: std::time::Instant::now(),
