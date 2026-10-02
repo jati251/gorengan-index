@@ -62,27 +62,22 @@ async fn main() -> Result<()> {
 
     let cfg = AppConfig::load().context("Failed to load application config")?;
 
-    // Load dynamic instruments directly from PostgreSQL (SSOT) with retry logic
+    // Load dynamic instruments directly from PostgreSQL (SSOT)
     let all_instruments = if let Some(ref db_url) = cfg.database_url {
-        let mut loaded = None;
-        for attempt in 1..=15 {
+        let mut attempt = 1;
+        loop {
             match Instrument::load_from_connection_string(db_url).await {
                 Ok(instruments) => {
                     info!(count = instruments.len(), attempt, "Loaded dynamic market instruments directly from PostgreSQL");
-                    loaded = Some(instruments);
-                    break;
+                    break instruments;
                 }
                 Err(e) => {
-                    if attempt < 15 {
-                        warn!(attempt, err = %e, "Failed to load instruments from PostgreSQL; retrying in 3s...");
-                        sleep(Duration::from_secs(3)).await;
-                    } else {
-                        warn!(attempt, err = %e, "Exhausted retries connecting to PostgreSQL; falling back to offline fixtures");
-                    }
+                    warn!(attempt, err = %e, "Failed to load instruments from PostgreSQL; retrying in 3s...");
+                    sleep(Duration::from_secs(3)).await;
+                    attempt += 1;
                 }
             }
         }
-        loaded.unwrap_or_else(Instrument::test_fixtures)
     } else {
         info!("No DATABASE_URL configured; using offline fixtures");
         Instrument::test_fixtures()
