@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Calculator, Activity, ArrowUpRight, BarChart3, CandlestickChart, ChartNoAxesCombined, ChevronDown, Focus, LayoutGrid, Layers3, Newspaper, PanelLeft, PieChart, Plus, Search, X } from "lucide-react";
+import { Calculator, Activity, ArrowUpRight, BarChart3, CandlestickChart, ChartNoAxesCombined, ChevronDown, Focus, LayoutGrid, Layers3, Newspaper, PanelLeft, PieChart, Plus, Radar, Search, X } from "lucide-react";
 import { MarketHeaderTicker, MarketOverviewTable, MarketStats, BottomStickyTickerTape, useResolvedSymbols, useMarketsQuery } from "@/features/markets";
 import { TradingViewChart, ChartHeader } from "@/features/chart";
 import { WatchlistSidebar } from "@/features/watchlist";
@@ -10,6 +10,7 @@ import { NewsFeed, SentimentGauge } from "@/features/news";
 import { CalculatorPanel, ExchangeRateReference } from "@/features/analysis/components/CalculatorPanel";
 import { AnalysisPanel } from "@/features/analysis/components/AnalysisPanel";
 import { CryptoIntelPanel } from "@/features/analysis/components/CryptoIntelPanel";
+import { WhaleRadarPanel } from "@/features/whale";
 import { MarketComposition } from "@/features/analysis/components/MarketComposition";
 import { MarketMovers, MarketPulse } from "@/features/analysis/components/MarketPulse";
 import { useTerminalWebSocket } from "@/hooks/useTerminalWebSocket";
@@ -17,7 +18,7 @@ import { useMarketStore } from "@/stores/marketStore";
 import { useWorkspaceStore, widgetKinds, type WidgetKind } from "@/stores/workspaceStore";
 import { useTranslation } from "@/features/i18n";
 
-const widgetIcons = { cryptoIntel: Activity, calculator: Calculator, overview: LayoutGrid, chart: CandlestickChart, analysis: Activity, prediction: ChartNoAxesCombined, composition: PieChart, markets: BarChart3, orderbook: Layers3, pulse: Activity, news: Newspaper };
+const widgetIcons = { whaleRadar: Radar, cryptoIntel: Activity, calculator: Calculator, overview: LayoutGrid, chart: CandlestickChart, analysis: Activity, prediction: ChartNoAxesCombined, composition: PieChart, markets: BarChart3, orderbook: Layers3, pulse: Activity, news: Newspaper };
 const compactQuery = "(max-width: 1199px)";
 const subscribeCompact = (callback: () => void) => {
   const query = window.matchMedia(compactQuery);
@@ -56,10 +57,10 @@ export default function TerminalPage() {
     return () => { document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", escape); };
   }, [menuOpen]);
 
-  const labels: Record<WidgetKind, string> = { cryptoIntel: "Crypto Intel", ...(id
+  const labels: Record<WidgetKind, string> = { whaleRadar: id ? "Radar Paus & ETF" : "Whale & ETF Radar", cryptoIntel: "Crypto Intel", ...(id
     ? { calculator: "Kalkulator", overview: "Ringkasan", chart: "Chart", analysis: "Analisa", prediction: "Prediksi", composition: "Komposisi", markets: "Pasar", orderbook: "Order book", pulse: "Statistik", news: "Berita" }
     : { calculator: "Calculator", overview: "Overview", chart: "Chart", analysis: "Analysis", prediction: "Prediction", composition: "Composition", markets: "Markets", orderbook: "Order book", pulse: "Statistics", news: "News" }) };
-  const descriptions: Record<WidgetKind, string> = { cryptoIntel: id ? "Pantau transaksi besar, momentum, derivatif, dan risiko crypto." : "Track large trades, momentum, derivatives and crypto risk.", ...(id
+  const descriptions: Record<WidgetKind, string> = { whaleRadar: id ? "Pantau kepemilikan ETF BlackRock (IBIT), cadangan institusi, dan pergerakan wallet paus on-chain." : "Track BlackRock ETF (IBIT) reserves, institutional flows, and on-chain whale wallets.", cryptoIntel: id ? "Pantau transaksi besar, momentum, derivatif, dan risiko crypto." : "Track large trades, momentum, derivatives and crypto risk.", ...(id
     ? { calculator: "Konversi kurs dan simulasikan hasil transaksi.", overview: "Pasar, indikator, dan pergerakan dalam satu workspace.", chart: "Pergerakan harga dan volume instrumen pilihan.", analysis: "Baca tren, momentum, dan rentang harga historis.", prediction: "Jelajahi skenario harga berdasarkan candle historis.", composition: "Lihat distribusi instrumen dan arah pergerakan pasar.", markets: "Temukan instrumen dan susun daftar pantauan.", orderbook: "Pantau penawaran beli dan jual.", pulse: "Statistik instrumen dan sentimen pasar.", news: "Ikuti berita terbaru yang memengaruhi pasar." }
     : { calculator: "Convert currencies and simulate trade outcomes.", overview: "Markets, signals and price action in one workspace.", chart: "Price action and volume for your selected instrument.", analysis: "Read the trend, momentum and historical price range.", prediction: "Explore price scenarios based on historical candles.", composition: "Explore instrument distribution and market breadth.", markets: "Find instruments and build your watchlist.", orderbook: "Inspect bids and asks for your selected instrument.", pulse: "Instrument statistics and market sentiment.", news: "Follow the stories moving the markets." }) };
 
@@ -111,6 +112,7 @@ export default function TerminalPage() {
         {active === "chart" && <>{chart}<AnalysisPanel mode="summary" /></>}
         {active === "calculator" && <CalculatorPanel />}
         {active === "cryptoIntel" && <CryptoIntelPanel />}
+        {active === "whaleRadar" && <WhaleRadarPanel />}
         {active === "analysis" && <AnalysisPanel />}
         {active === "prediction" && <AnalysisPanel mode="prediction" />}
         {active === "composition" && <><MarketPulse loading={isLoading} symbols={symbols} /><MarketComposition symbols={symbols} loading={isLoading} /><MarketMovers symbols={symbols} onSelect={openChart} /></>}
