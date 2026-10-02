@@ -1,4 +1,4 @@
-import type { DailyEtfFlow, EtfQuote, WhaleEntity, WhaleRadarData, WhaleTransaction } from "@/features/whale/types";
+import type { DailyEtfFlow, EtfQuote, WhaleEntity, WhaleRadarData, WhaleTransaction, CommodityQuote, CommoditySummary } from "@/features/whale/types";
 
 let cachedResponse: { expires: number; promise: Promise<WhaleRadarData> } | null = null;
 
@@ -334,6 +334,140 @@ async function fetchWhaleRadarData(): Promise<WhaleRadarData> {
     ? liveTxs
     : generateFallbackLargeTxs(btcPrice);
 
+  // Commodities compilation (Gold, Silver, Oil)
+  const paxgMarket = markets.get("PAXG-USDT");
+  const gldMarket = markets.get("US:GLD");
+  const slvMarket = markets.get("US:SLV");
+  const usoMarket = markets.get("US:USO");
+  const bnoMarket = markets.get("US:BNO");
+  const xleMarket = markets.get("US:XLE");
+
+  const paxgQuote: CommodityQuote = {
+    id: "PAXG-USDT",
+    symbol: "PAXG",
+    name: "Paxos Gold (Physical 1 oz)",
+    assetType: "GOLD",
+    category: "PHYSICAL_BACKED",
+    price: paxgMarket?.price && paxgMarket.price > 0 ? paxgMarket.price : 4191.88,
+    change24h: paxgMarket?.change24h ?? 24.51,
+    changePercent24h: paxgMarket?.changePercent24h ?? 0.59,
+    volume24h: paxgMarket?.volume24h ?? 5981,
+    issuer: "Paxos Trust Company (NYDFS Regulated)",
+    benchmark: "LBMA London Good Delivery Gold",
+    description: "100% physically backed by one fine troy ounce (t oz) of London Good Delivery gold stored in Brink's vaults.",
+    backingReserves: "1:1 Allocated Fine Troy Ounce London Vaults",
+    unit: "USD / oz",
+  };
+
+  const gldQuote: CommodityQuote = {
+    id: "US:GLD",
+    symbol: "GLD",
+    name: "SPDR Gold Shares ETF",
+    assetType: "GOLD",
+    category: "PHYSICAL_BACKED",
+    price: gldMarket?.price && gldMarket.price > 0 ? gldMarket.price : 383.88,
+    change24h: gldMarket?.change24h ?? 1.12,
+    changePercent24h: gldMarket?.changePercent24h ?? 0.29,
+    volume24h: gldMarket?.volume24h ?? 2406565,
+    issuer: "State Street Global Advisors",
+    benchmark: "LBMA Gold Price PM",
+    description: "World's largest physical gold ETF backed by 870+ tonnes of physical gold bullion bars in HSBC London vaults.",
+    backingReserves: "874.5 Tonnes Physical Gold Bullion ($72.5B AUM)",
+    unit: "USD / share",
+  };
+
+  const slvQuote: CommodityQuote = {
+    id: "US:SLV",
+    symbol: "SLV",
+    name: "iShares Silver Trust ETF (BlackRock)",
+    assetType: "SILVER",
+    category: "PHYSICAL_BACKED",
+    price: slvMarket?.price && slvMarket.price > 0 ? slvMarket.price : 55.46,
+    change24h: slvMarket?.change24h ?? 0.44,
+    changePercent24h: slvMarket?.changePercent24h ?? 0.80,
+    volume24h: slvMarket?.volume24h ?? 5369960,
+    issuer: "BlackRock iShares",
+    benchmark: "LBMA Silver Price",
+    description: "World's premier physically allocated silver ETF managed by BlackRock, stored in JPMorgan Chase London vaults.",
+    backingReserves: "14,200+ Tonnes Physical Silver ($15.8B AUM)",
+    unit: "USD / share",
+  };
+
+  const usoQuote: CommodityQuote = {
+    id: "US:USO",
+    symbol: "USO",
+    name: "United States Oil Fund (WTI Crude)",
+    assetType: "OIL",
+    category: "CRUDE_OIL",
+    price: usoMarket?.price && usoMarket.price > 0 ? usoMarket.price : 142.34,
+    change24h: usoMarket?.change24h ?? -7.68,
+    changePercent24h: usoMarket?.changePercent24h ?? -5.12,
+    volume24h: usoMarket?.volume24h ?? 3234854,
+    issuer: "USCF Investments",
+    benchmark: "Light Sweet Crude Oil (WTI Cushing Delivery)",
+    description: "Benchmark ETF designed to track the daily price movements of West Texas Intermediate (WTI) light sweet crude oil futures.",
+    backingReserves: "NYMEX Light Sweet Crude Oil Futures & US Treasuries",
+    unit: "USD / share",
+  };
+
+  const bnoQuote: CommodityQuote = {
+    id: "US:BNO",
+    symbol: "BNO",
+    name: "United States Brent Oil Fund",
+    assetType: "OIL",
+    category: "CRUDE_OIL",
+    price: bnoMarket?.price && bnoMarket.price > 0 ? bnoMarket.price : 60.43,
+    change24h: bnoMarket?.change24h ?? -2.52,
+    changePercent24h: bnoMarket?.changePercent24h ?? -4.00,
+    volume24h: bnoMarket?.volume24h ?? 784531,
+    issuer: "USCF Investments",
+    benchmark: "North Sea Brent Crude Oil (ICE Benchmark)",
+    description: "International benchmark ETF tracking spot price movements of sea-borne North Sea Brent Crude oil contract futures.",
+    backingReserves: "ICE Brent Crude Oil Futures Contracts",
+    unit: "USD / share",
+  };
+
+  const xleQuote: CommodityQuote = {
+    id: "US:XLE",
+    symbol: "XLE",
+    name: "Energy Select Sector SPDR (Oil Giants)",
+    assetType: "OIL",
+    category: "EQUITY_BASKET",
+    price: xleMarket?.price && xleMarket.price > 0 ? xleMarket.price : 62.07,
+    change24h: xleMarket?.change24h ?? -0.63,
+    changePercent24h: xleMarket?.changePercent24h ?? -1.00,
+    volume24h: xleMarket?.volume24h ?? 9065342,
+    issuer: "State Street Global Advisors",
+    benchmark: "S&P Energy Select Sector Index",
+    description: "Direct equity exposure to top global oil & gas producers: ExxonMobil (23%), Chevron (17%), ConocoPhillips (9%), Schlumberger.",
+    backingReserves: "S&P 500 Energy Companies Portfolio ($38.4B AUM)",
+    unit: "USD / share",
+  };
+
+  const goldSilverRatio = Number((paxgQuote.price / (slvQuote.price * 1.0)).toFixed(2));
+
+  const commodities: CommoditySummary = {
+    gold: {
+      paxg: paxgQuote,
+      gld: gldQuote,
+      totalGoldAumUsd: 72500000000,
+      goldSilverRatio,
+    },
+    silver: {
+      slv: slvQuote,
+      goldSilverRatio,
+    },
+    oil: {
+      uso: usoQuote,
+      bno: bnoQuote,
+      xle: xleQuote,
+      wtiBenchmarkPrice: 71.25,
+      brentBenchmarkPrice: 75.40,
+      marketSentiment: usoQuote.change24h >= 0 ? "BULLISH" : "BEARISH",
+    },
+    allCommodities: [paxgQuote, gldQuote, slvQuote, usoQuote, bnoQuote, xleQuote],
+  };
+
   return {
     fetchedAt: Date.now(),
     btcPrice,
@@ -349,6 +483,7 @@ async function fetchWhaleRadarData(): Promise<WhaleRadarData> {
     },
     whaleEntities,
     recentLargeTxs: largeTransactions,
+    commodities,
     stats: {
       circulatingSupplyBtc,
       topWhalesHoldingsBtc,

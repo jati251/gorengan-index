@@ -61,6 +61,45 @@ export interface WhaleTransaction {
   explorerUrl: string;
 }
 
+export interface CommodityQuote {
+  id: string;
+  symbol: string;
+  name: string;
+  assetType: "GOLD" | "SILVER" | "OIL";
+  category: "PHYSICAL_BACKED" | "CRUDE_OIL" | "EQUITY_BASKET";
+  price: number;
+  change24h: number;
+  changePercent24h: number;
+  volume24h: number;
+  issuer: string;
+  benchmark: string;
+  description: string;
+  backingReserves?: string;
+  unit: string;
+}
+
+export interface CommoditySummary {
+  gold: {
+    paxg: CommodityQuote;
+    gld: CommodityQuote;
+    totalGoldAumUsd: number;
+    goldSilverRatio: number;
+  };
+  silver: {
+    slv: CommodityQuote;
+    goldSilverRatio: number;
+  };
+  oil: {
+    uso: CommodityQuote;
+    bno: CommodityQuote;
+    xle: CommodityQuote;
+    wtiBenchmarkPrice: number;
+    brentBenchmarkPrice: number;
+    marketSentiment: "BULLISH" | "NEUTRAL" | "BEARISH";
+  };
+  allCommodities: CommodityQuote[];
+}
+
 export interface WhaleRadarData {
   fetchedAt: number;
   btcPrice: number;
@@ -76,6 +115,7 @@ export interface WhaleRadarData {
   };
   whaleEntities: WhaleEntity[];
   recentLargeTxs: WhaleTransaction[];
+  commodities: CommoditySummary;
   stats: {
     circulatingSupplyBtc: number;
     topWhalesHoldingsBtc: number;
@@ -84,3 +124,4 @@ export interface WhaleRadarData {
     marketSentiment: "BULLISH" | "NEUTRAL" | "BEARISH";
   };
 }
+

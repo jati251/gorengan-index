@@ -1,14 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { Landmark, Wallet, RefreshCw, AlertCircle, Sparkles } from "lucide-react";
+import { Landmark, Wallet, RefreshCw, AlertCircle, Sparkles, Coins } from "lucide-react";
 import { useWhaleRadarQuery } from "../api/useWhaleRadarQuery";
 import { BlackRockEtfView } from "./BlackRockEtfView";
 import { WhaleWalletsView } from "./WhaleWalletsView";
+import { CommoditiesRadarView } from "./CommoditiesRadarView";
 import { useTranslation } from "@/features/i18n";
 import { formatUsd } from "../utils/formatters";
 
-type RadarTab = "etf" | "whales";
+type RadarTab = "etf" | "whales" | "commodities";
 
 export function WhaleRadarPanel() {
   const { locale } = useTranslation();
@@ -56,11 +57,11 @@ export function WhaleRadarPanel() {
       </div>
 
       {/* Tab Switcher */}
-      <div className="flex items-center gap-2 p-1.5 rounded-xl bg-zinc-950/80 border border-zinc-800/80 max-w-md">
+      <div className="flex flex-wrap items-center gap-2 p-1.5 rounded-xl bg-zinc-950/80 border border-zinc-800/80 max-w-xl">
         <button
           type="button"
           onClick={() => setActiveTab("etf")}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+          className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeTab === "etf"
               ? "bg-amber-500 text-zinc-950 shadow-md font-extrabold"
               : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
@@ -73,7 +74,7 @@ export function WhaleRadarPanel() {
         <button
           type="button"
           onClick={() => setActiveTab("whales")}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+          className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeTab === "whales"
               ? "bg-amber-500 text-zinc-950 shadow-md font-extrabold"
               : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
@@ -82,6 +83,19 @@ export function WhaleRadarPanel() {
           <Wallet size={15} />
           <span>{id ? "Dompet Paus & On-Chain" : "Whale Wallets & On-Chain"}</span>
         </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("commodities")}
+          className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            activeTab === "commodities"
+              ? "bg-amber-500 text-zinc-950 shadow-md font-extrabold"
+              : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
+          }`}
+        >
+          <Coins size={15} />
+          <span>{id ? "Minyak, Emas & Silver" : "Oil, Gold & Silver"}</span>
+        </button>
       </div>
 
       {/* Main Content Area */}
@@ -89,12 +103,12 @@ export function WhaleRadarPanel() {
         <div className="p-12 flex flex-col items-center justify-center text-center space-y-3">
           <RefreshCw size={28} className="animate-spin text-amber-400" />
           <div className="text-sm font-bold text-zinc-300">
-            {id ? "Menghubungkan ke data on-chain & ETF..." : "Loading on-chain and ETF intelligence..."}
+            {id ? "Menghubungkan ke data on-chain, ETF & komoditas..." : "Loading on-chain, ETF and commodity intelligence..."}
           </div>
           <p className="text-xs text-zinc-500 max-w-md">
             {id
-              ? "Mengambil data cadangan brankas institusi, harga spot IBIT, dan aliran transaksi Bitcoin besar."
-              : "Fetching institutional cold reserves, live IBIT spot quotes, and high-value Bitcoin transfers."}
+              ? "Mengambil data cadangan brankas institusi, harga emas, perak, minyak mentah, serta transaksi besar."
+              : "Fetching institutional cold reserves, live gold, silver, crude oil quotes, and high-value transfers."}
           </p>
         </div>
       ) : isError ? (
@@ -117,8 +131,10 @@ export function WhaleRadarPanel() {
       ) : data ? (
         activeTab === "etf" ? (
           <BlackRockEtfView data={data} />
-        ) : (
+        ) : activeTab === "whales" ? (
           <WhaleWalletsView data={data} />
+        ) : (
+          <CommoditiesRadarView data={data} />
         )
       ) : null}
 
