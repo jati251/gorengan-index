@@ -62,3 +62,68 @@ test("pie counts instruments once and preserves missing market changes", () => {
   assert.equal(marketComposition(symbols, tickers, "breadth").find((item) => item.key === "missing")?.count, 1);
   assert.equal(marketComposition(symbols, tickers, "breadth").find((item) => item.key === "flat")?.count, 1);
 });
+
+test("forecast provides sigma envelopes, heuristic scenario weights and Parkinson volatility", () => {
+  const candles = bars(60, (i) => 100 + i * 0.5 + (i % 2 === 0 ? 1 : -1));
+  const result = forecastCandles(candles, 10)!;
+  assert.ok(result.points95.length === 11);
+  // Two-sigma envelope is wider than one-sigma envelope
+  assert.ok(result.points95[10].upper >= result.points[10].upper);
+  assert.ok(result.points95[10].lower <= result.points[10].lower);
+  // Scenario weights sum to 100
+  const { bull, base, bear } = result.scenarios;
+  assert.ok(bull.weight > 0 && base.weight > 0 && bear.weight > 0);
+  assert.equal(bull.weight + base.weight + bear.weight, 100);
+  // Metrics contain valid Parkinson sigma and confidence score
+  assert.ok(result.metrics.parkinsonSigma >= 0);
+  assert.equal(result.metrics.directionalAccuracy, null);
+  assert.equal(result.metrics.evaluation.samples, 0);
+  assert.ok(result.metrics.pivotLevels.r1 > result.metrics.pivotLevels.s1);
+});
+
+
+test("rolling evaluation uses held-out non-overlapping outcomes and a last-price baseline", async () => {
+  const { evaluateForecast } = await import("./analysis");
+  const trend = evaluateForecast(bars(100, (i) => 100 * Math.exp(i * .001)), 10);
+  assert.equal(trend.samples, 4); assert.equal(trend.directionalAccuracy, 100);
+  assert.ok(trend.mape! < 1e-8); assert.ok(trend.baselineMape! > 0);
+  const flat = evaluateForecast(bars(100, () => 100), 10);
+  assert.equal(flat.directionalAccuracy, null); assert.equal(flat.mape, 0);
+  const source = bars(70, (i) => 100 * Math.exp(i * .001));
+  source[69].close = 1;
+  const shock = evaluateForecast(source, 10);
+  assert.equal(shock.samples, 1); assert.equal(shock.directionalAccuracy, 0); assert.ok(shock.mape! > 1000);
+});
+test("future and reversed-time candles cannot enter analysis", () => {
+  const source = bars(60, () => 100);
+  assert.equal(cleanCandles(source, "TEST-USDT", "1h", 3600000).length, 1);
+  assert.equal(cleanCandles([{ ...source[0], closeTime: -1 }], "TEST-USDT", "1h").length, 0);
+});
+
+test("prediction screening withholds weak, stale and cost-dominated projections", async () => {
+  const { evaluateForecast, forecastEvidence } = await import("./analysis");
+  const evaluation = evaluateForecast(bars(400, (i) => 100 * Math.exp(i * .001)), 10);
+  const options = { fresh: true, refreshFailed: false, costBps: 20 };
+  assert.equal(evaluation.recentSamples, 10);
+  assert.equal(forecastEvidence(evaluation, 1, options).eligible, true);
+  assert.equal(forecastEvidence(evaluation, .1, options).eligible, false);
+  assert.ok(forecastEvidence(evaluation, 1, { ...options, fresh: false }).reasons.includes("stale"));
+  assert.ok(forecastEvidence(evaluation, 1, { ...options, refreshFailed: true }).reasons.includes("refresh_failed"));
+  assert.ok(forecastEvidence(evaluation, 1, { ...options, costBps: NaN }).reasons.includes("cost"));
+  assert.equal(forecastEvidence({ ...evaluation, mape: NaN, recentMape: NaN, directionalAccuracy: NaN }, 1, options).eligible, false);
+  const weak = { ...evaluation, mape: evaluation.baselineMape! * 1.1 };
+  assert.ok(forecastEvidence(weak, 1, options).reasons.includes("baseline"));
+  const recentFailure = { ...evaluation, recentMape: evaluation.recentBaselineMape! * 2 };
+  assert.ok(forecastEvidence(recentFailure, 1, options).reasons.includes("recent_baseline"));
+  const short = evaluateForecast(bars(100, (i) => 100 * Math.exp(i * .001)), 10);
+  assert.ok(forecastEvidence(short, 1, options).reasons.includes("insufficient_tests"));
+});
+
+test("recent evaluation reveals deterioration hidden by the full historical average", async () => {
+  const { evaluateForecast } = await import("./analysis");
+  const source = bars(400, (i) => i < 360 ? 100 * Math.exp(i * .001) : 100 * Math.exp(.36 - (i - 360) * .01));
+  const result = evaluateForecast(source, 10);
+  assert.equal(result.recentSamples, 10);
+  assert.ok(result.recentMape! > result.mape!);
+  assert.ok(result.recentBaselineMape! > result.baselineMape!);
+});

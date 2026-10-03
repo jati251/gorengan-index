@@ -8,9 +8,9 @@ export const ENV = {
       const isLocalhost =
         window.location.hostname === "localhost" ||
         window.location.hostname === "127.0.0.1";
-      return isLocalhost ? "http://localhost:9001/v1" : "/v1";
+      return isLocalhost ? "http://localhost:9000/v1" : "/v1";
     }
-    return process.env.MARKET_GATEWAY_INTERNAL_URL || "http://127.0.0.1:9001/v1";
+    return process.env.MARKET_GATEWAY_INTERNAL_URL || "http://127.0.0.1:9000/v1";
   },
 
   // Realtime Market Backend WebSocket stream endpoint
@@ -28,11 +28,11 @@ export const ENV = {
         window.location.hostname === "localhost" ||
         window.location.hostname === "127.0.0.1";
       if (isLocalhost) {
-        return "ws://localhost:9001/v1/stream";
+        return "ws://localhost:9000/v1/stream";
       }
       return `${proto}//${window.location.host}/v1/stream`;
     }
-    return "ws://127.0.0.1:9001/v1/stream";
+    return "ws://127.0.0.1:9000/v1/stream";
   },
 };
 

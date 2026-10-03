@@ -8,15 +8,17 @@ import { WhaleWalletsView } from "./WhaleWalletsView";
 import { CommoditiesRadarView } from "./CommoditiesRadarView";
 import { XVipSocialView } from "./XVipSocialView";
 import { useTranslation } from "@/features/i18n";
+import { SourceStatus } from "./SourceStatus";
+import { InsiderFilingsView } from "@/features/insider/components/InsiderFilingsView";
 import { formatUsd } from "../utils/formatters";
 
-type RadarTab = "etf" | "whales" | "commodities" | "social";
+type RadarTab = "etf" | "whales" | "commodities" | "social" | "insider";
 
 export function WhaleRadarPanel() {
   const { locale } = useTranslation();
   const id = locale === "id";
-  const [activeTab, setActiveTab] = useState<RadarTab>("etf");
-  const { data, isLoading, isError, error, refetch, isFetching } = useWhaleRadarQuery();
+  const [activeTab, setActiveTab] = useState<RadarTab>("insider");
+  const { data, isLoading, isError, error, refetch, isFetching } = useWhaleRadarQuery(activeTab !== "insider");
 
   return (
     <section className="desk-panel space-y-6">
@@ -27,27 +29,27 @@ export function WhaleRadarPanel() {
             <span className="desk-eyebrow text-amber-400 font-mono tracking-wider">
               {id ? "INTELIJEN ON-CHAIN & INSTITUSI" : "ON-CHAIN & INSTITUTIONAL INTEL"}
             </span>
-            {data?.btcPrice && (
+            {data?.btcPrice != null && activeTab !== "insider" && (
               <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700">
                 BTC Ref: {formatUsd(data.btcPrice)}
               </span>
             )}
           </div>
           <h2 className="text-xl md:text-2xl font-bold tracking-tight text-zinc-100 flex items-center gap-2 mt-1">
-            <span>{id ? "Radar Institusi, Paus & VIP Alpha" : "Institutional, Whale & VIP Radar"}</span>
+            <span>{id ? "Radar Insider, Institusi & Paus" : "Insider, Institutional & Whale Radar"}</span>
             <Sparkles size={18} className="text-amber-400" />
           </h2>
         </div>
 
         <div className="flex items-center gap-3">
-          {data?.fetchedAt && (
+          {data?.fetchedAt && activeTab !== "insider" && (
             <span className="text-[11px] text-zinc-500 font-mono hidden sm:inline-block">
               {id ? "Diperbarui" : "Updated"}: {new Date(data.fetchedAt).toLocaleTimeString()}
             </span>
           )}
           <button
             type="button"
-            disabled={isFetching}
+            disabled={isFetching || activeTab === "insider"}
             onClick={() => void refetch()}
             className="desk-button flex items-center gap-1.5 text-xs font-semibold py-1.5 px-3 rounded-lg border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 transition-colors disabled:opacity-50 cursor-pointer"
           >
@@ -57,6 +59,7 @@ export function WhaleRadarPanel() {
         </div>
       </div>
 
+      <button type="button" className="desk-button" aria-pressed={activeTab === "insider"} onClick={() => setActiveTab("insider")}>SEC Form 4 · Insider filings</button>
       {/* Tab Switcher */}
       <div className="flex flex-wrap items-center gap-2 p-1.5 rounded-xl bg-zinc-950/80 border border-zinc-800/80 max-w-3xl">
         <button
@@ -108,12 +111,12 @@ export function WhaleRadarPanel() {
           }`}
         >
           <MessageSquareQuote size={15} />
-          <span>{id ? "X-Alpha: Konglo & Paus" : "X-Alpha: VIP & Whales"}</span>
+          <span>{id ? "Berita Publik" : "Public News"}</span>
         </button>
       </div>
 
       {/* Main Content Area */}
-      {isLoading ? (
+      {activeTab === "insider" ? <InsiderFilingsView /> : isLoading ? (
         <div className="p-12 flex flex-col items-center justify-center text-center space-y-3">
           <RefreshCw size={28} className="animate-spin text-amber-400" />
           <div className="text-sm font-bold text-zinc-300">
@@ -121,8 +124,8 @@ export function WhaleRadarPanel() {
           </div>
           <p className="text-xs text-zinc-500 max-w-md">
             {id
-              ? "Mengambil data cadangan brankas institusi, harga emas, perak, minyak mentah, serta radar cuitan konglomerat & paus pasar."
-              : "Fetching institutional cold reserves, live gold, silver, crude oil quotes, and VIP tycoon social signals."}
+              ? "Mengambil kuotasi, saldo alamat, sampel mempool, dan RSS penerbit."
+              : "Fetching quotes, address balances, mempool samples and publisher RSS."}
           </p>
         </div>
       ) : isError ? (
@@ -154,12 +157,14 @@ export function WhaleRadarPanel() {
         )
       ) : null}
 
+      {activeTab !== "insider" && data && <details className="text-sm"><summary className="cursor-pointer">{id ? "Status & sumber data" : "Data sources & status"}</summary>{data.sources.map((source) => <SourceStatus key={source.url} source={source} />)}</details>}
+
       {/* Informational Disclaimer Footer */}
       <div className="pt-4 border-t border-zinc-800/80 text-[11px] text-zinc-500 leading-relaxed space-y-1">
         <p>
           {id
-            ? "Catatan: Data cadangan ETF BlackRock (IBIT) bersumber dari laporan kepemilikan kustodian fisik Coinbase Prime & SEC filing. Alamat dompet paus dipantau langsung dari public mempool Bitcoin. Bukan saran finansial."
-            : "Note: BlackRock (IBIT) ETF reserves are sourced from physical custody disclosures & SEC filings. Whale wallet addresses are tracked via the public Bitcoin mempool. Not financial advice."}
+            ? "Catatan: Form 4 adalah pengungkapan transaksi, bukan bukti pelanggaran insider trading. Anomali pasar dan perpindahan dompet tidak mengidentifikasi insider."
+            : "Note: Form 4 discloses transactions; it does not establish illegal insider trading. Market anomalies and wallet transfers do not identify insiders."}
         </p>
       </div>
     </section>

@@ -1,4 +1,5 @@
 "use client";
+import { useNow } from "@/hooks/useNow";
 
 import React from "react";
 import { Gauge } from "lucide-react";
@@ -40,7 +41,8 @@ export function SentimentGauge({ compact = false }: { compact?: boolean }) {
   };
 
   const classification = getLocalizedClassification(rawClassification);
-  const valid = sentiment && Number.isFinite(sentiment.value) && sentiment.value >= 0 && sentiment.value <= 100;
+  const now = useNow();
+  const valid = !isError && sentiment && now - Number(sentiment.timestamp) * 1000 < 2 * 86400000 && Number.isFinite(sentiment.value) && sentiment.value >= 0 && sentiment.value <= 100;
   const colorClass = valid ? getSentimentColorClass(value) : "text-slate-300 border-slate-700";
   const barColor = getSentimentBarColor(value);
 
@@ -72,6 +74,7 @@ export function SentimentGauge({ compact = false }: { compact?: boolean }) {
   return (
     <div className="flex flex-col gap-2 p-3.5 rounded-xl bg-white/[0.025] backdrop-blur-xl border border-white/[0.08] shadow-[0_4px_24px_rgba(0,0,0,0.3)] font-mono select-none relative overflow-hidden">
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/[0.15] to-transparent pointer-events-none" />
+      <a href="https://alternative.me/crypto/fear-and-greed-index/" target="_blank" rel="noopener noreferrer" className="text-[10px] underline text-slate-400">Alternative.me · Crypto only · {new Date(Number(sentiment?.timestamp) * 1000).toLocaleDateString()}</a>
       <div className="flex items-center justify-between text-xs">
         <div className="flex items-center gap-1.5 text-slate-300">
           <Gauge className="w-3.5 h-3.5 text-emerald-400" />

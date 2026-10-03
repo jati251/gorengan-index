@@ -12,6 +12,7 @@ export class CandleEngine extends EventEmitter {
   private repository: CandleRepository;
   // Map key: "symbol:1m"
   private activeCandles = new Map<string, Candle>();
+  private lastTradeTimes = new Map<string, number>();
   private checkInterval: NodeJS.Timeout | null = null;
 
   constructor(repository: CandleRepository) {
@@ -21,6 +22,10 @@ export class CandleEngine extends EventEmitter {
   }
 
   public processTrade(trade: NormalizedTrade): void {
+    if (![trade.price, trade.quantity, trade.timestamp].every(Number.isFinite) || trade.price <= 0 || trade.quantity <= 0 || trade.timestamp < 0 || trade.timestamp > Date.now() + 5000) return;
+    const previousTime = this.lastTradeTimes.get(trade.symbol);
+    if (previousTime !== undefined && trade.timestamp < previousTime) return;
+    this.lastTradeTimes.set(trade.symbol, trade.timestamp);
     const key = this.getMapKey(trade.symbol, "1m");
     const bucketOpen = Math.floor(trade.timestamp / 60000) * 60000;
     const bucketClose = bucketOpen + 60000 - 1;

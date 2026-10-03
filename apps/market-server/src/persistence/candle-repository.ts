@@ -13,6 +13,8 @@ export class CandleRepository {
     this.db = db || getDatabase();
   }
 
+  public get databaseConnected(): boolean { return this.db.connected; }
+
   public getSymbols(): MarketSymbol[] {
     return this.symbols;
   }
@@ -62,7 +64,7 @@ export class CandleRepository {
   }
 
   public saveCandle(candle: Candle): void {
-    const key = `${candle.symbol}:1m`;
+    const key = `${candle.symbol}:${candle.timeframe}`;
     let list = this.candleCache.get(key);
     if (!list) {
       list = [];
@@ -78,6 +80,8 @@ export class CandleRepository {
         list.splice(0, list.length - 2000);
       }
     }
+
+    if (candle.timeframe !== "1m") return;
 
     // Persist to QuestDB asynchronously via ILP
     const tsNs = candle.openTime * 1_000_000;
@@ -105,8 +109,8 @@ export class CandleRepository {
     to?: number,
     limit: number = 500
   ): Candle[] {
-    const key = `${symbol}:1m`;
-    const list = this.candleCache.get(key) || [];
+    const exact = this.candleCache.get(`${symbol}:${timeframe}`);
+    const list = exact ?? (timeframeToMs(timeframe) >= 60000 ? this.candleCache.get(`${symbol}:1m`) ?? [] : []);
     let filtered = list;
 
     if (from !== undefined) {
@@ -116,7 +120,7 @@ export class CandleRepository {
       filtered = filtered.filter((c) => c.openTime <= to);
     }
 
-    if (timeframe === "1m") {
+    if (exact || timeframe === "1m") {
       return filtered.slice(-limit);
     }
 
@@ -174,7 +178,8 @@ export class CandleRepository {
         close: last.close,
         volume,
         trades,
-        finalized: true,
+        finalized: list.every((c) => c.finalized) && bucketOpen + bucketMs <= Date.now(),
+        synthetic: list.some((c) => c.synthetic),
         provider: first.provider,
       });
     }

@@ -23,6 +23,7 @@ export function createHttpServer(
   provider: MarketProvider
 ): http.Server {
   const startTime = Date.now();
+  const historyRequests = new Map<string, { expires: number; promise: Promise<void> }>();
 
   const server = http.createServer(async (req: IncomingMessage, res: ServerResponse) => {
     // CORS headers
@@ -52,10 +53,10 @@ export function createHttpServer(
       if (pathname === "/health") {
         const provStatus = provider.getStatus();
         const body: HealthResponse = {
-          status: provStatus.connected ? "ok" : "degraded",
+          status: provStatus.connected && repository.databaseConnected ? "ok" : "degraded",
           version: "0.1.0",
           uptimeSeconds: Math.floor((Date.now() - startTime) / 1000),
-          database: "ok",
+          database: repository.databaseConnected ? "ok" : "error",
           providers: {
             [provider.id]: {
               connected: provStatus.connected,
@@ -115,57 +116,33 @@ export function createHttpServer(
         const toStr = urlObj.searchParams.get("to");
         const limitStr = urlObj.searchParams.get("limit");
 
-        const from = fromStr ? parseInt(fromStr, 10) : undefined;
-        const to = toStr ? parseInt(toStr, 10) : undefined;
+        const from = fromStr ? Number(fromStr) : undefined;
+        const to = toStr ? Number(toStr) : undefined;
         const parsedLimit = limitStr ? parseInt(limitStr, 10) : 500;
         const limit = Number.isNaN(parsedLimit) ? 500 : Math.min(Math.max(parsedLimit, 1), 2000);
 
-        let candles = repository.getCandles(symbol, timeframe, from, to, limit);
-
-        // On-demand seed if repository has no candles for this symbol
-        if (candles.length === 0) {
-          try {
-            const now = Date.now();
-            const seedTo = to ?? now;
-            const durMs = timeframeToMs(timeframe);
-            const seedFrom = from ?? (seedTo - Math.min(limit, 500) * (durMs || 60000));
-            const liveCandles = await provider.getHistoricalCandles({
-              symbol,
-              timeframe: "1m",
-              from: seedFrom,
-              to: seedTo,
-            });
-            if (liveCandles.length > 0) {
-              repository.saveCandles(liveCandles);
-              candles = repository.getCandles(symbol, timeframe, from, to, limit);
-            }
-          } catch (err) {
-            logger.warn({ err, symbol }, "On-demand candle seed failed");
-          }
+        if (!/^[A-Z0-9:.-]{2,30}$/.test(symbol) || !timeframeToMs(timeframe) ||
+            (from !== undefined && (!Number.isSafeInteger(from) || from < 0)) ||
+            (to !== undefined && (!Number.isSafeInteger(to) || to < 0)) ||
+            (from !== undefined && to !== undefined && from > to)) {
+          sendJson(res, 400, { error: "Invalid symbol, timeframe or date range" });
+          return;
         }
-
-        // Fallback for sub-minute timeframes (1s, 5s, 15s) when repository has few candles
-        if (
-          candles.length < 30 &&
-          (timeframe === "1s" || timeframe === "5s" || timeframe === "15s" || timeframe === "30s")
-        ) {
-          try {
-            const now = Date.now();
-            const dur = timeframeToMs(timeframe);
-            const fallbackFrom = from ?? (now - limit * dur);
-            const liveKlines = await provider.getHistoricalCandles({
-              symbol,
-              timeframe: "1s",
-              from: fallbackFrom,
-              to: to ?? now,
-            });
-            if (liveKlines.length > 0) {
-              candles = liveKlines.slice(-limit);
-            }
-          } catch (err) {
-            logger.warn({ err, symbol }, "Could not fetch fallback 1s klines from provider");
-          }
+        const requestKey = `${symbol}:${timeframe}:${from ?? "latest"}:${to ?? "now"}:${limit}`;
+        const cached = historyRequests.get(requestKey);
+        if (cached && cached.expires > Date.now()) await cached.promise;
+        else {
+          if (historyRequests.size >= 128) historyRequests.delete(historyRequests.keys().next().value!);
+          const promise = (async () => {
+            const seedTo = to ?? Date.now();
+            const seedFrom = from ?? seedTo - Math.min(limit, 1000) * timeframeToMs(timeframe);
+            const live = await provider.getHistoricalCandles({ symbol, timeframe, from: seedFrom, to: seedTo });
+            repository.saveCandles(live.filter((c) => c.symbol === symbol && c.timeframe === timeframe));
+          })().catch((err) => { logger.warn({ err, symbol }, "Historical refresh failed"); });
+          historyRequests.set(requestKey, { expires: Date.now() + 15000, promise });
+          await promise;
         }
+        const candles = repository.getCandles(symbol, timeframe, from, to, limit);
 
         const body: CandlesResponse = {
           symbol,

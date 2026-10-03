@@ -11,6 +11,7 @@ import type {
 import { DEFAULT_SYMBOLS } from "@gorengan/shared";
 import type { MarketProvider, ProviderStatus } from "../market-provider.js";
 import { config } from "../../config/index.js";
+import { publicFetch } from "../../utils/public-fetch.js";
 import { logger } from "../../utils/logger.js";
 import { toBinanceSymbol, toCanonicalSymbol } from "./binance-symbols.js";
 import {
@@ -188,18 +189,16 @@ export class BinanceProvider extends EventEmitter implements MarketProvider {
     const url = `${config.BINANCE_REST_URL}/api/v3/klines?symbol=${binanceSymbol}&interval=${interval}&startTime=${params.from}&endTime=${params.to}&limit=1000`;
 
     try {
-      const response = await request(url, {
-        headers: { "User-Agent": "GorenganTerminal/1.0" },
-      });
+      const response = await publicFetch(url, { headers: { "User-Agent": "GorenganTerminal/1.0" } });
 
-      if (response.statusCode !== 200) {
-        const bodyText = await response.body.text();
+      if (response.status !== 200) {
+        const bodyText = await response.text();
         throw new Error(
-          `Binance REST klines HTTP ${response.statusCode}: ${bodyText}`
+          `Binance REST klines HTTP ${response.status}: ${bodyText}`
         );
       }
 
-      const raw = (await response.body.json()) as (string | number)[][];
+      const raw = (await response.json()) as (string | number)[][];
       const candles: Candle[] = raw.map((k) => ({
         symbol: params.symbol,
         timeframe: params.timeframe,
@@ -211,10 +210,22 @@ export class BinanceProvider extends EventEmitter implements MarketProvider {
         close: parseFloat(String(k[4])),
         volume: parseFloat(String(k[5])),
         trades: Number(k[8]),
-        finalized: true,
+        finalized: Number(k[6]) < Date.now(),
         provider: "binance",
       }));
 
+      if (["5s", "15s", "30s"].includes(params.timeframe)) {
+        const duration = Number.parseInt(params.timeframe) * 1000;
+        const groups = new Map<number, Candle[]>();
+        for (const candle of candles) {
+          const time = Math.floor(candle.openTime / duration) * duration;
+          groups.set(time, [...(groups.get(time) ?? []), candle]);
+        }
+        return [...groups].map(([time, bars]) => ({ ...bars[0], openTime: time, closeTime: time + duration - 1,
+          close: bars[bars.length - 1].close, high: Math.max(...bars.map((b) => b.high)), low: Math.min(...bars.map((b) => b.low)),
+          volume: bars.reduce((sum, b) => sum + b.volume, 0), trades: bars.reduce((sum, b) => sum + (b.trades ?? 0), 0),
+          finalized: bars.length === duration / 1000 && bars.every((b) => b.finalized) }));
+      }
       return candles;
     } catch (err) {
       logger.error({ err, symbol: params.symbol }, "Failed to fetch Binance historical klines");

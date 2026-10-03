@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from "react";
+import { useNow } from "@/hooks/useNow";
 import { useMarketStore } from "@/stores/marketStore";
 import { useResolvedSymbols } from "@/features/markets/hooks/useResolvedSymbols";
 import type { OrderBookLevel, OrderBookData, OrderBookViewMode } from "../types";
@@ -43,14 +44,16 @@ interface RawLiveDepth {
   bids: [string, string][];
   asks: [string, string][];
   timestamp: number;
+  symbol: string;
 }
 
 /**
  * Hook to stream and manage live Order Book depth data.
  * Directly consumes Binance depth20@100ms WebSocket for crypto,
- * or derives synthetic Level-1 quote ladder for FX / stocks during render.
+ * Unsupported venues expose an unavailable state.
  */
 export function useOrderBook() {
+  const now = useNow();
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
   const ticker = useMarketStore((s) => s.tickers[selectedSymbol]);
   const fxQuote = useMarketStore((s) => s.fxQuotes[selectedSymbol]);
@@ -104,12 +107,18 @@ export function useOrderBook() {
       return;
     }
 
-    const wsUrl = `wss://stream.binance.com:9443/ws/${binanceSymbol}@depth20@100ms`;
+    const wsUrl = `wss://data-stream.binance.vision:9443/ws/${binanceSymbol}@depth20@100ms`;
+    let disposed = false;
+    let attempts = 0;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const connect = () => {
+    if (disposed) return;
     const ws = new WebSocket(wsUrl);
     activeWsRef.current = ws;
 
     ws.onopen = () => {
       if (activeWsRef.current === ws) {
+        attempts = 0;
         setWsStatus("live");
       }
     };
@@ -119,8 +128,9 @@ export function useOrderBook() {
 
       try {
         const data = JSON.parse(event.data);
-        if (data.bids && data.asks) {
+        if (Array.isArray(data.bids) && Array.isArray(data.asks) && [...data.bids, ...data.asks].every((row: unknown) => Array.isArray(row) && Number.isFinite(Number(row[0])) && Number(row[0]) > 0 && Number.isFinite(Number(row[1])) && Number(row[1]) > 0)) {
           setLiveDepth({
+            symbol: binanceSymbol,
             bids: data.bids,
             asks: data.asks,
             timestamp: Date.now(),
@@ -138,22 +148,25 @@ export function useOrderBook() {
     };
 
     ws.onclose = () => {
-      if (activeWsRef.current === ws) {
+      if (!disposed && activeWsRef.current === ws) {
         setWsStatus("closed");
+        retry = setTimeout(connect, Math.min(30000, 1000 * 2 ** attempts++));
       }
     };
+    };
+    connect();
 
     return () => {
-      ws.close();
-      if (activeWsRef.current === ws) {
-        activeWsRef.current = null;
-      }
+      disposed = true;
+      clearTimeout(retry);
+      activeWsRef.current?.close();
+      activeWsRef.current = null;
     };
   }, [binanceSymbol, isCrypto]);
 
   // Compute Bids & Asks directly in render (Rule 2: Don't use useEffect for derived state)
   const { bids, asks, source } = useMemo(() => {
-    if (isCrypto && liveDepth && liveDepth.bids.length > 0) {
+    if (isCrypto && liveDepth && liveDepth.symbol === binanceSymbol && now - liveDepth.timestamp < 15000 && wsStatus === "live" && liveDepth.bids.length > 0 && liveDepth.asks.length > 0) {
       const rawBids = parseRawLevels(liveDepth.bids.slice(0, MAX_LEVELS), false);
       const rawAsks = parseRawLevels(liveDepth.asks.slice(0, MAX_LEVELS), true);
 
@@ -168,49 +181,8 @@ export function useOrderBook() {
       };
     }
 
-    // Synthetic Ladder for non-crypto or while awaiting WebSocket
-    const basePrice =
-      ticker?.price ||
-      (fxQuote ? fxQuote.mid : 0) ||
-      (selectedSymbol.startsWith("ID:") ? 5000 : 100);
-
-    const spreadFactor = selectedSymbol.startsWith("ID:") ? 0.005 : 0.0003;
-    const halfSpread = basePrice * spreadFactor;
-    const bestBid = basePrice - halfSpread;
-    const bestAsk = basePrice + halfSpread;
-
-    const syntheticBids: { price: number; size: number }[] = [];
-    const syntheticAsks: { price: number; size: number }[] = [];
-
-    const tickStep = basePrice * 0.0005;
-
-    for (let i = 0; i < 10; i++) {
-      const bidP = Math.max(0.000001, bestBid - i * tickStep);
-      const askP = bestAsk + i * tickStep;
-      const sizeMultiplier = Math.max(0.1, 1 + Math.sin(i * 1.2) * 0.5 + i * 0.2);
-      const baseQty = basePrice > 1000 ? 0.5 : basePrice > 10 ? 50 : 5000;
-
-      syntheticBids.push({
-        price: bidP,
-        size: Math.round(baseQty * sizeMultiplier * 100) / 100,
-      });
-
-      syntheticAsks.push({
-        price: askP,
-        size: Math.round(baseQty * (sizeMultiplier * 0.95) * 100) / 100,
-      });
-    }
-
-    const maxBidSum = syntheticBids.reduce((a, b) => a + b.size, 0);
-    const maxAskSum = syntheticAsks.reduce((a, b) => a + b.size, 0);
-    const maxDepth = Math.max(maxBidSum, maxAskSum);
-
-    return {
-      bids: computeLevelsWithDepth(syntheticBids, maxDepth),
-      asks: computeLevelsWithDepth(syntheticAsks, maxDepth),
-      source: isCrypto && wsStatus === "connecting" ? ("connecting" as const) : ("synthetic" as const),
-    };
-  }, [isCrypto, liveDepth, ticker?.price, fxQuote, selectedSymbol, wsStatus]);
+    return { bids: [], asks: [], source: isCrypto && wsStatus === "connecting" ? "connecting" as const : "unavailable" as const };
+  }, [isCrypto, liveDepth, binanceSymbol, wsStatus, now]);
 
   // Computed Spread & Pricing
   const bestBidPrice = bids[0]?.price ?? 0;

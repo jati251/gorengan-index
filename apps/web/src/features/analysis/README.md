@@ -97,3 +97,35 @@ API requests have a 12-second timeout. Missing/nonfinite prices, percentages
 and volumes render as a dash, while actual zero remains zero.
 Charts clear old series on missing history; switching intervals no longer
 uses another interval's placeholder candles. Retry preserves the layout.
+
+## Historical forecast evaluation
+
+The projection now reports rolling-origin results on held-out outcomes. Each
+origin trains on 60 previous closed candles and advances by the chosen horizon
+(5/10/20 candles), keeping evaluation outcomes nonoverlapping. The UI reports
+sample counts, directional accuracy excluding flat forecasts/outcomes, MAPE,
+a last-price baseline MAPE and observed coverage of the two-sigma envelope.
+Missing evaluation history produces no metric. The envelope is not a calibrated
+95% confidence interval and scenario weights are not empirical probabilities.
+These results evaluate the central log-return projection, not scenario weighting
+or the crypto composite score. No trading-profit backtest is claimed.
+
+See the repository [data audit](../../../../../docs/insider-data-audit.md) for
+source research, rate budgets, insider coverage and integration limitations.
+
+## Evidence screening
+
+The prediction panel now shows a screening status separately from its price
+scenarios. A direction is withheld on failed refresh or when the last closed
+bar is older than two selected intervals. The screen requires at least 30
+nonoverlapping test outcomes and 30 nonflat direction outcomes, overall MAPE
+at least 10% below the last-price baseline, lower MAPE over the ten most recent
+outcomes, direction accuracy above 50%, and projected movement larger than the
+user's total cost/slippage estimate. The default is 20 basis points (0.20%
+round trip); empty or invalid cost input fails the screen.
+
+These are conservative product rules, not learned thresholds or a statistical
+proof of profitability. They are applied independently for the selected
+instrument, interval and horizon. Scenario charts remain visible when the
+screen fails. Recent outcomes are shown to expose deterioration that a full
+historical average can hide. No model is silently tuned on these test outcomes.

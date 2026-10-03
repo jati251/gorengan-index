@@ -16,6 +16,6 @@ export interface OrderBookData {
   lastPrice: number;
   timestamp: number;
   isLoading: boolean;
-  source: "binance_live" | "synthetic" | "connecting";
+  source: "binance_live" | "unavailable" | "connecting";
   displayDecimals: number;
 }

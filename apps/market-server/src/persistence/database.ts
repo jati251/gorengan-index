@@ -20,7 +20,7 @@ export class QuestDbClient {
   public async init(): Promise<void> {
     logger.info({ questdbUrl: this.baseUrl }, "Connecting to QuestDB");
     try {
-      const res = await fetch(`${this.baseUrl}/exec?query=SELECT+1`);
+      const res = await fetch(`${this.baseUrl}/exec?query=SELECT+1`, { signal: AbortSignal.timeout(3000) });
       if (res.ok) {
         this.isConnected = true;
         logger.info("Connected to QuestDB successfully");
@@ -53,7 +53,7 @@ export class QuestDbClient {
 
   public async query<T = unknown[]>(sql: string): Promise<QuestDbExecResponse<T>> {
     const url = `${this.baseUrl}/exec?query=${encodeURIComponent(sql)}`;
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
     if (!res.ok) {
       const errText = await res.text().catch(() => "");
       throw new Error(`QuestDB query failed (${res.status}): ${errText}`);
@@ -62,10 +62,11 @@ export class QuestDbClient {
   }
 
   public async writeIlp(lines: string[]): Promise<void> {
-    if (lines.length === 0) return;
+    if (lines.length === 0 || !this.isConnected) return;
     const body = lines.join("\n") + "\n";
     const res = await fetch(`${this.baseUrl}/write`, {
       method: "POST",
+      signal: AbortSignal.timeout(5000),
       body,
     });
     if (!res.ok) {
@@ -73,6 +74,8 @@ export class QuestDbClient {
       throw new Error(`QuestDB write failed (${res.status}): ${errText}`);
     }
   }
+
+  public get connected(): boolean { return this.isConnected; }
 
   public close(): void {
     logger.info("QuestDB client closed");

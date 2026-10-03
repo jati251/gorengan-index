@@ -4,10 +4,10 @@ import type {
   MarketSymbol,
   Timeframe,
   MarketTicker,
-  NormalizedTrade,
 } from "@gorengan/shared";
-import { DEFAULT_SYMBOLS } from "@gorengan/shared";
+import { DEFAULT_SYMBOLS, timeframeToMs } from "@gorengan/shared";
 import type { MarketProvider, ProviderStatus } from "../market-provider.js";
+import { publicFetch } from "../../utils/public-fetch.js";
 import { logger } from "../../utils/logger.js";
 
 interface YahooChartResponse {
@@ -16,6 +16,7 @@ interface YahooChartResponse {
       meta?: {
         symbol?: string;
         regularMarketPrice?: number;
+        regularMarketTime?: number;
         previousClose?: number;
         chartPreviousClose?: number;
         regularMarketDayHigh?: number;
@@ -48,6 +49,8 @@ export class YahooMarketProvider extends EventEmitter implements MarketProvider 
   private symbols: MarketSymbol[] = [];
   private symbolMap = new Map<string, MarketSymbol>();
   private lastEventAt = 0;
+  private polling = false;
+  private cooldownUntil = 0;
 
   constructor(symbols?: MarketSymbol[]) {
     super();
@@ -109,6 +112,7 @@ export class YahooMarketProvider extends EventEmitter implements MarketProvider 
     from: number;
     to: number;
   }): Promise<Candle[]> {
+    if (timeframeToMs(params.timeframe) < 60000 || Date.now() < this.cooldownUntil) return [];
     const meta = this.symbolMap.get(params.symbol);
     const yahooSymbol = meta?.providerSymbol || this.inferYahooSymbol(params.symbol);
     const interval = this.mapTimeframeToYahoo(params.timeframe);
@@ -119,12 +123,14 @@ export class YahooMarketProvider extends EventEmitter implements MarketProvider 
     )}?range=${range}&interval=${interval}`;
 
     try {
-      const res = await fetch(url, {
+      const res = await publicFetch(url, {
+        signal: AbortSignal.timeout(8000),
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         },
       });
 
+      if ([429, 403, 503].includes(res.status)) this.cooldownUntil = Date.now() + Math.max(60000, Number(res.headers.get("retry-after")) * 1000 || 60000);
       if (!res.ok) {
         throw new Error(`Yahoo Finance chart HTTP ${res.status}`);
       }
@@ -141,7 +147,7 @@ export class YahooMarketProvider extends EventEmitter implements MarketProvider 
       if (!quotes) throw new Error("No quotes in Yahoo response");
 
       const candles: Candle[] = [];
-      const stepMs = 60000;
+      const stepMs = interval === "60m" ? 3600000 : timeframeToMs(params.timeframe);
 
       for (let i = 0; i < timestamps.length; i++) {
         const t = timestamps[i] * 1000;
@@ -152,11 +158,12 @@ export class YahooMarketProvider extends EventEmitter implements MarketProvider 
         const v = quotes.volume?.[i] ?? 0;
 
         // Skip incomplete or null bars
-        if (o == null || h == null || l == null || c == null) continue;
+        if (o == null || h == null || l == null || c == null || ![o,h,l,c,v].every(Number.isFinite) || l <= 0 || l > Math.min(o,c) || h < Math.max(o,c) || v < 0) continue;
+        if (t < params.from || t > params.to) continue;
 
         candles.push({
           symbol: params.symbol,
-          timeframe: params.timeframe,
+          timeframe: params.timeframe === "4h" ? "1h" : params.timeframe,
           openTime: t,
           closeTime: t + stepMs - 1,
           open: o,
@@ -164,8 +171,7 @@ export class YahooMarketProvider extends EventEmitter implements MarketProvider 
           low: l,
           close: c,
           volume: v,
-          trades: 1,
-          finalized: true,
+          finalized: t + stepMs <= Date.now(),
           provider: "yahoo",
         });
       }
@@ -176,7 +182,7 @@ export class YahooMarketProvider extends EventEmitter implements MarketProvider 
           const ticker = this.parseTickerFromMeta(params.symbol, result.meta);
           this.emit("ticker", ticker);
         }
-        return candles;
+        return params.timeframe === "4h" ? this.aggregateFourHours(candles) : candles;
       }
 
       throw new Error("Filtered candle bars resulted in 0 valid candles");
@@ -215,16 +221,21 @@ export class YahooMarketProvider extends EventEmitter implements MarketProvider 
   }
 
   private async pollBatchQuotes(): Promise<void> {
+    if (this.polling || Date.now() < this.cooldownUntil) return;
+    this.polling = true;
+    try {
     const symbolsToPoll = [...this.symbols];
-    const chunkSize = 8;
+    const chunkSize = 2;
 
     for (let i = 0; i < symbolsToPoll.length; i += chunkSize) {
+      if (!this.isConnected || Date.now() < this.cooldownUntil) break;
       const chunk = symbolsToPoll.slice(i, i + chunkSize);
       await Promise.allSettled(chunk.map((sym) => this.pollSingleSymbol(sym)));
       if (i + chunkSize < symbolsToPoll.length) {
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     }
+    } finally { this.polling = false; }
   }
 
   private async pollSingleSymbol(marketSym: MarketSymbol): Promise<void> {
@@ -234,12 +245,16 @@ export class YahooMarketProvider extends EventEmitter implements MarketProvider 
         yahooSym
       )}?range=1d&interval=5m`;
 
-      const res = await fetch(url, {
+      const res = await publicFetch(url, {
+        signal: AbortSignal.timeout(8000),
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         },
       });
 
+      if ([429, 403, 503].includes(res.status)) {
+        this.cooldownUntil = Date.now() + Math.max(60000, Number(res.headers.get("retry-after")) * 1000 || 60000);
+      }
       if (!res.ok) return;
 
       const data = (await res.json()) as YahooChartResponse;
@@ -252,16 +267,6 @@ export class YahooMarketProvider extends EventEmitter implements MarketProvider 
       const ticker = this.parseTickerFromMeta(marketSym.id, meta);
       this.emit("ticker", ticker);
 
-      // Emit a synthetic trade to tick candleEngine
-      const trade: NormalizedTrade = {
-        symbol: marketSym.id,
-        price: meta.regularMarketPrice,
-        quantity: Math.round(10 + Math.random() * 50),
-        side: (meta.regularMarketPrice >= (meta.previousClose || meta.regularMarketPrice)) ? "buy" : "sell",
-        timestamp: Date.now(),
-        provider: "yahoo",
-      };
-      this.emit("trade", trade);
     } catch {
       // Quietly ignore polling failures for individual symbols
     }
@@ -275,9 +280,9 @@ export class YahooMarketProvider extends EventEmitter implements MarketProvider 
     const prevClose = meta?.previousClose || meta?.chartPreviousClose || lastPrice;
     const priceChange = lastPrice - prevClose;
     const priceChangePercent = prevClose > 0 ? (priceChange / prevClose) * 100 : 0;
-    const high = meta?.regularMarketDayHigh || Math.max(lastPrice, prevClose);
-    const low = meta?.regularMarketDayLow || Math.min(lastPrice, prevClose);
-    const volume = meta?.regularMarketVolume || 10000;
+    const high = meta?.regularMarketDayHigh;
+    const low = meta?.regularMarketDayLow;
+    const volume = meta?.regularMarketVolume;
 
     const isId = canonicalSymbol.startsWith("ID:");
     const isFx = !isId && !canonicalSymbol.startsWith("US:") && !canonicalSymbol.endsWith("USDT");
@@ -287,18 +292,27 @@ export class YahooMarketProvider extends EventEmitter implements MarketProvider 
     return {
       symbol: canonicalSymbol,
       price: round(lastPrice),
-      bid: round(lastPrice * 0.9998),
-      ask: round(lastPrice * 1.0002),
       open24h: round(prevClose),
-      high24h: round(high),
-      low24h: round(low),
-      volume24h: Math.round(volume),
-      quoteVolume24h: Math.round(volume * lastPrice),
+      high24h: high == null ? undefined : round(high),
+      low24h: low == null ? undefined : round(low),
+      volume24h: volume == null ? undefined : Math.round(volume),
       change24h: round(priceChange),
       changePercent24h: parseFloat(priceChangePercent.toFixed(2)),
-      timestamp: Date.now(),
+      timestamp: (meta?.regularMarketTime ?? 0) * 1000,
       provider: "yahoo",
+      dataQuality: "delayed",
     };
+  }
+
+  private aggregateFourHours(candles: Candle[]): Candle[] {
+    const buckets = new Map<number, Candle[]>();
+    for (const candle of candles) {
+      const time = Math.floor(candle.openTime / 14400000) * 14400000;
+      buckets.set(time, [...(buckets.get(time) ?? []), candle]);
+    }
+    return [...buckets].map(([time, bars]) => ({ ...bars[0], timeframe: "4h", openTime: time, closeTime: time + 14400000 - 1,
+      high: Math.max(...bars.map((b) => b.high)), low: Math.min(...bars.map((b) => b.low)), close: bars[bars.length - 1].close,
+      volume: bars.reduce((sum, b) => sum + b.volume, 0), finalized: bars.every((b) => b.finalized) && time + 14400000 <= Date.now() }));
   }
 
   private inferYahooSymbol(canonical: string): string {

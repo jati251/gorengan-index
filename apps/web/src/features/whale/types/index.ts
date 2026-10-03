@@ -1,173 +1,44 @@
-export type WhaleCategory =
-  | "INSTITUTION"
-  | "EXCHANGE"
-  | "GOVERNMENT"
-  | "FOUNDER"
-  | "CORPORATE";
-
+import type { SourceState } from "@/lib/server/publicData";
+export type WhaleCategory = "INSTITUTION" | "EXCHANGE" | "GOVERNMENT" | "FOUNDER" | "CORPORATE" | "UNATTRIBUTED";
 export interface EtfQuote {
-  symbol: string;
-  name: string;
-  issuer: string;
-  tickerId: string;
-  price: number;
-  change24h: number;
-  changePercent24h: number;
-  volume24h: number;
-  btcHeld: number;
-  aumUsd: number;
-  expenseRatio: number;
-  custodian: string;
-  launchDate: string;
+  symbol: string; name: string; issuer: string; tickerId: string;
+  price: number | null; change24h: number | null; changePercent24h: number | null; volume24h: number | null;
+  btcHeld: number | null; aumUsd: number | null; asOf: number | null; source: SourceState;
 }
-
-export interface DailyEtfFlow {
-  date: string;
-  ibitFlowUsd: number;      // Net flow in millions USD for IBIT
-  fbtcFlowUsd: number;      // Net flow in millions USD for FBTC
-  totalNetFlowUsd: number;  // Total US spot ETF net flow in millions USD
-  btcPrice: number;
-  sentiment: "INFLOW" | "OUTFLOW" | "NEUTRAL";
-}
-
+export interface DailyEtfFlow { date: string; ibitFlowUsd: number; fbtcFlowUsd: number; totalNetFlowUsd: number; btcPrice: number; sentiment: "INFLOW" | "OUTFLOW" | "NEUTRAL" }
 export interface WhaleEntity {
-  id: string;
-  name: string;
-  category: WhaleCategory;
-  address: string;
-  addressShort: string;
-  balanceBtc: number;
-  balanceUsd: number;
-  shareOfCirculatingSupply: number;
-  labelNote: string;
-  verified: boolean;
-  explorerUrl: string;
-  lastActiveDate?: string;
+  id: string; name: string; category: WhaleCategory; address: string; addressShort: string;
+  balanceBtc: number; balanceUsd: number | null; shareOfCirculatingSupply: number | null;
+  labelNote: string; verified: boolean; explorerUrl: string; source: SourceState;
 }
-
-export type WhaleTxType = "INFLOW" | "OUTFLOW" | "TRANSFER";
-
 export interface WhaleTransaction {
-  txid: string;
-  txidShort: string;
-  timestamp: number;
-  amountBtc: number;
-  amountUsd: number;
-  feeBtc: number;
-  type: WhaleTxType;
-  senderLabel: string;
-  receiverLabel: string;
-  status: "CONFIRMED" | "MEMPOOL";
-  explorerUrl: string;
+  txid: string; txidShort: string; timestamp: number; amountBtc: number; amountUsd: number | null;
+  feeBtc: number | null; type: "INFLOW" | "OUTFLOW" | "TRANSFER"; senderLabel: string; receiverLabel: string;
+  status: "CONFIRMED" | "MEMPOOL"; explorerUrl: string;
 }
-
 export interface CommodityQuote {
-  id: string;
-  symbol: string;
-  name: string;
-  assetType: "GOLD" | "SILVER" | "OIL";
-  category: "PHYSICAL_BACKED" | "CRUDE_OIL" | "EQUITY_BASKET";
-  price: number;
-  change24h: number;
-  changePercent24h: number;
-  volume24h: number;
-  issuer: string;
-  benchmark: string;
-  description: string;
-  backingReserves?: string;
-  unit: string;
+  id: string; symbol: string; name: string; assetType: "GOLD" | "SILVER" | "OIL";
+  price: number | null; changePercent24h: number | null; volume24h: number | null; unit: string;
+  asOf: number | null; source: SourceState;
 }
-
-export interface CommoditySummary {
-  gold: {
-    paxg: CommodityQuote;
-    gld: CommodityQuote;
-    totalGoldAumUsd: number;
-    goldSilverRatio: number;
-  };
-  silver: {
-    slv: CommodityQuote;
-    goldSilverRatio: number;
-  };
-  oil: {
-    uso: CommodityQuote;
-    bno: CommodityQuote;
-    xle: CommodityQuote;
-    wtiBenchmarkPrice: number;
-    brentBenchmarkPrice: number;
-    marketSentiment: "BULLISH" | "NEUTRAL" | "BEARISH";
-  };
-  allCommodities: CommodityQuote[];
+export interface NewsItem {
+  id: string; title: string; url: string; publishedAt: number; publisher: string;
+  sentiment: "BULLISH" | "BEARISH" | "NEUTRAL"; assets: string[];
 }
-
-export type XVipCategory =
-  | "KONGLO_TECH"
-  | "BITCOIN_WHALE"
-  | "INSTITUTIONAL"
-  | "MACRO_POLITICS"
-  | "GOLD_COMMODITIES";
-
-export interface XVipPost {
-  id: string;
-  author: {
-    name: string;
-    handle: string;
-    avatarUrl?: string;
-    initials: string;
-    role: string;
-    category: XVipCategory;
-    verifiedType: "BLUE" | "GOLD" | "GOV";
-    followersCount: string;
-  };
-  content: string;
-  timestamp: number;
-  timeAgoText: string;
-  metrics: {
-    likes: number;
-    retweets: number;
-    views: string;
-  };
-  signal: {
-    type: "STRONG_BULLISH" | "BULLISH" | "MACRO_ALERT" | "WHALE_ALERT" | "CONTRARIAN";
-    targetAsset: "BTC" | "ETH" | "GOLD" | "SILVER" | "OIL" | "MACRO" | "TECH";
-    confidenceScore: number;
-    impactLevel: "CRITICAL" | "HIGH" | "MEDIUM";
-    analysisText: string;
-  };
-  url: string;
-}
-
-export interface XVipSummary {
-  vipSentimentScore: number;
-  overallSentiment: "STRONG_BULLISH" | "BULLISH" | "NEUTRAL" | "BEARISH";
-  topMentionedAssets: { asset: string; count: number; sentiment: "BULLISH" | "BEARISH" | "NEUTRAL" }[];
-  posts: XVipPost[];
-}
-
 export interface WhaleRadarData {
-  fetchedAt: number;
-  btcPrice: number;
+  fetchedAt: number; btcPrice: number | null;
   etfSummary: {
-    ibit: EtfQuote;
-    allEtfs: EtfQuote[];
-    totalBtcReserves: number;
-    totalAumUsd: number;
-    totalBtcSupplySharePercent: number;
-    fiveDayNetFlowUsd: number;
-    institutionalSignal: "STRONG_BUY" | "ACCUMULATION" | "NEUTRAL" | "DISTRIBUTION";
-    recentFlows: DailyEtfFlow[];
+    ibit: EtfQuote; allEtfs: EtfQuote[]; totalBtcReserves: number | null; totalAumUsd: number | null;
+    totalBtcSupplySharePercent: number | null; fiveDayNetFlowUsd: number | null;
+    institutionalSignal: "UNAVAILABLE"; recentFlows: DailyEtfFlow[];
+    holdingsAsOf: string | null;
   };
-  whaleEntities: WhaleEntity[];
-  recentLargeTxs: WhaleTransaction[];
-  commodities: CommoditySummary;
-  vipSocialFeed: XVipSummary;
+  whaleEntities: WhaleEntity[]; recentLargeTxs: WhaleTransaction[];
+  commodities: { allCommodities: CommodityQuote[]; goldSilverRatio: number | null };
+  vipSocialFeed: { posts: NewsItem[]; topMentionedAssets: { asset: string; count: number }[]; vipSentimentScore: number | null; overallSentiment: string };
   stats: {
-    circulatingSupplyBtc: number;
-    topWhalesHoldingsBtc: number;
-    topWhalesSupplySharePercent: number;
-    accumulationScore: number; // 0-100
-    marketSentiment: "BULLISH" | "NEUTRAL" | "BEARISH";
+    circulatingSupplyBtc: number | null; topWhalesHoldingsBtc: number | null;
+    topWhalesSupplySharePercent: number | null; accumulationScore: null; marketSentiment: "UNAVAILABLE";
   };
+  sources: SourceState[];
 }
-
-

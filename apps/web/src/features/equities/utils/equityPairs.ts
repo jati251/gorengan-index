@@ -1,7 +1,7 @@
 import type { EquityMetadata } from "../types";
 
 export const EQUITY_UNIVERSE: Record<string, EquityMetadata> = {
-  // US Equities (IEX realtime venue)
+  // Public equity quotes may be delayed.
   "US:AAPL": {
     id: "US:AAPL",
     symbol: "AAPL",
@@ -10,7 +10,7 @@ export const EQUITY_UNIVERSE: Record<string, EquityMetadata> = {
     country: "US",
     currency: "USD",
     flag: "🇺🇸",
-    defaultDataQuality: "realtime_venue",
+    defaultDataQuality: "delayed",
   },
   "US:MSFT": {
     id: "US:MSFT",
@@ -20,7 +20,7 @@ export const EQUITY_UNIVERSE: Record<string, EquityMetadata> = {
     country: "US",
     currency: "USD",
     flag: "🇺🇸",
-    defaultDataQuality: "realtime_venue",
+    defaultDataQuality: "delayed",
   },
   "US:NVDA": {
     id: "US:NVDA",
@@ -30,7 +30,7 @@ export const EQUITY_UNIVERSE: Record<string, EquityMetadata> = {
     country: "US",
     currency: "USD",
     flag: "🇺🇸",
-    defaultDataQuality: "realtime_venue",
+    defaultDataQuality: "delayed",
   },
   "US:TSLA": {
     id: "US:TSLA",
@@ -40,7 +40,7 @@ export const EQUITY_UNIVERSE: Record<string, EquityMetadata> = {
     country: "US",
     currency: "USD",
     flag: "🇺🇸",
-    defaultDataQuality: "realtime_venue",
+    defaultDataQuality: "delayed",
   },
   "US:AMZN": {
     id: "US:AMZN",
@@ -50,7 +50,7 @@ export const EQUITY_UNIVERSE: Record<string, EquityMetadata> = {
     country: "US",
     currency: "USD",
     flag: "🇺🇸",
-    defaultDataQuality: "realtime_venue",
+    defaultDataQuality: "delayed",
   },
   "US:META": {
     id: "US:META",
@@ -60,7 +60,7 @@ export const EQUITY_UNIVERSE: Record<string, EquityMetadata> = {
     country: "US",
     currency: "USD",
     flag: "🇺🇸",
-    defaultDataQuality: "realtime_venue",
+    defaultDataQuality: "delayed",
   },
   "US:GOOGL": {
     id: "US:GOOGL",
@@ -70,7 +70,7 @@ export const EQUITY_UNIVERSE: Record<string, EquityMetadata> = {
     country: "US",
     currency: "USD",
     flag: "🇺🇸",
-    defaultDataQuality: "realtime_venue",
+    defaultDataQuality: "delayed",
   },
   "US:AMD": {
     id: "US:AMD",
@@ -80,7 +80,7 @@ export const EQUITY_UNIVERSE: Record<string, EquityMetadata> = {
     country: "US",
     currency: "USD",
     flag: "🇺🇸",
-    defaultDataQuality: "realtime_venue",
+    defaultDataQuality: "delayed",
   },
   "US:SPY": {
     id: "US:SPY",
@@ -90,7 +90,7 @@ export const EQUITY_UNIVERSE: Record<string, EquityMetadata> = {
     country: "US",
     currency: "USD",
     flag: "🇺🇸",
-    defaultDataQuality: "realtime_venue",
+    defaultDataQuality: "delayed",
   },
   "US:QQQ": {
     id: "US:QQQ",
@@ -100,7 +100,7 @@ export const EQUITY_UNIVERSE: Record<string, EquityMetadata> = {
     country: "US",
     currency: "USD",
     flag: "🇺🇸",
-    defaultDataQuality: "realtime_venue",
+    defaultDataQuality: "delayed",
   },
   "US:PLTR": {
     id: "US:PLTR",
@@ -110,7 +110,7 @@ export const EQUITY_UNIVERSE: Record<string, EquityMetadata> = {
     country: "US",
     currency: "USD",
     flag: "🇺🇸",
-    defaultDataQuality: "realtime_venue",
+    defaultDataQuality: "delayed",
   },
   "US:NFLX": {
     id: "US:NFLX",
@@ -120,7 +120,7 @@ export const EQUITY_UNIVERSE: Record<string, EquityMetadata> = {
     country: "US",
     currency: "USD",
     flag: "🇺🇸",
-    defaultDataQuality: "realtime_venue",
+    defaultDataQuality: "delayed",
   },
   "US:COIN": {
     id: "US:COIN",
@@ -130,7 +130,7 @@ export const EQUITY_UNIVERSE: Record<string, EquityMetadata> = {
     country: "US",
     currency: "USD",
     flag: "🇺🇸",
-    defaultDataQuality: "realtime_venue",
+    defaultDataQuality: "delayed",
   },
   "US:MSTR": {
     id: "US:MSTR",
@@ -140,7 +140,7 @@ export const EQUITY_UNIVERSE: Record<string, EquityMetadata> = {
     country: "US",
     currency: "USD",
     flag: "🇺🇸",
-    defaultDataQuality: "realtime_venue",
+    defaultDataQuality: "delayed",
   },
   "US:INTC": {
     id: "US:INTC",
@@ -150,7 +150,7 @@ export const EQUITY_UNIVERSE: Record<string, EquityMetadata> = {
     country: "US",
     currency: "USD",
     flag: "🇺🇸",
-    defaultDataQuality: "realtime_venue",
+    defaultDataQuality: "delayed",
   },
   "US:AVGO": {
     id: "US:AVGO",
@@ -160,7 +160,7 @@ export const EQUITY_UNIVERSE: Record<string, EquityMetadata> = {
     country: "US",
     currency: "USD",
     flag: "🇺🇸",
-    defaultDataQuality: "realtime_venue",
+    defaultDataQuality: "delayed",
   },
   "US:ARM": {
     id: "US:ARM",
@@ -170,7 +170,7 @@ export const EQUITY_UNIVERSE: Record<string, EquityMetadata> = {
     country: "US",
     currency: "USD",
     flag: "🇺🇸",
-    defaultDataQuality: "realtime_venue",
+    defaultDataQuality: "delayed",
   },
   "US:BABA": {
     id: "US:BABA",
@@ -180,7 +180,7 @@ export const EQUITY_UNIVERSE: Record<string, EquityMetadata> = {
     country: "US",
     currency: "USD",
     flag: "🇺🇸",
-    defaultDataQuality: "realtime_venue",
+    defaultDataQuality: "delayed",
   },
   "US:IWM": {
     id: "US:IWM",
@@ -190,7 +190,7 @@ export const EQUITY_UNIVERSE: Record<string, EquityMetadata> = {
     country: "US",
     currency: "USD",
     flag: "🇺🇸",
-    defaultDataQuality: "realtime_venue",
+    defaultDataQuality: "delayed",
   },
   "US:SMH": {
     id: "US:SMH",
@@ -200,7 +200,7 @@ export const EQUITY_UNIVERSE: Record<string, EquityMetadata> = {
     country: "US",
     currency: "USD",
     flag: "🇺🇸",
-    defaultDataQuality: "realtime_venue",
+    defaultDataQuality: "delayed",
   },
 
   // IDX Equities (Indonesia stock exchange - delayed feed)
@@ -413,7 +413,7 @@ export function getEquityMetadata(symbol: string): EquityMetadata | undefined {
       country: "US",
       currency: "USD",
       flag: "🇺🇸",
-      defaultDataQuality: "realtime_venue",
+      defaultDataQuality: "delayed",
     };
   }
 

@@ -15,7 +15,9 @@
     "bench:ws": "node scripts/ws-benchmark.mjs",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test": "pnpm --filter @gorengan/market-server exec tsx --test src/market/data-integrity.test.ts ../web/src/features/analysis/utils/analysis.test.ts ../web/src/features/analysis/utils/calculator.test.ts ../web/src/features/analysis/utils/cryptoSignals.test.ts ../web/src/features/insider/utils/context.test.ts ../web/src/lib/server/publicData.test.ts ../web/src/lib/server/radarParsers.test.ts",
+    "smoke:live": "node scripts/smoke-intel.mjs"
   },
   "lint-staged": {
     "*.{ts,tsx,js,mjs}": [

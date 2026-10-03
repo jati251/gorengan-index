@@ -42,6 +42,8 @@ export function formatPercent(pct: number | null | undefined, includeSign = true
 
 export function getWhaleCategoryBadge(category: WhaleCategory, isId: boolean): { label: string; bg: string; text: string; border: string } {
   switch (category) {
+    case "UNATTRIBUTED":
+      return { label: isId ? "Belum teratribusi" : "Unattributed", bg: "bg-zinc-800", text: "text-zinc-300", border: "border-zinc-700" };
     case "INSTITUTION":
       return {
         label: isId ? "Institusi ETF" : "Institutional ETF",
