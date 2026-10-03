@@ -100,6 +100,50 @@ export interface CommoditySummary {
   allCommodities: CommodityQuote[];
 }
 
+export type XVipCategory =
+  | "KONGLO_TECH"
+  | "BITCOIN_WHALE"
+  | "INSTITUTIONAL"
+  | "MACRO_POLITICS"
+  | "GOLD_COMMODITIES";
+
+export interface XVipPost {
+  id: string;
+  author: {
+    name: string;
+    handle: string;
+    avatarUrl?: string;
+    initials: string;
+    role: string;
+    category: XVipCategory;
+    verifiedType: "BLUE" | "GOLD" | "GOV";
+    followersCount: string;
+  };
+  content: string;
+  timestamp: number;
+  timeAgoText: string;
+  metrics: {
+    likes: number;
+    retweets: number;
+    views: string;
+  };
+  signal: {
+    type: "STRONG_BULLISH" | "BULLISH" | "MACRO_ALERT" | "WHALE_ALERT" | "CONTRARIAN";
+    targetAsset: "BTC" | "ETH" | "GOLD" | "SILVER" | "OIL" | "MACRO" | "TECH";
+    confidenceScore: number;
+    impactLevel: "CRITICAL" | "HIGH" | "MEDIUM";
+    analysisText: string;
+  };
+  url: string;
+}
+
+export interface XVipSummary {
+  vipSentimentScore: number;
+  overallSentiment: "STRONG_BULLISH" | "BULLISH" | "NEUTRAL" | "BEARISH";
+  topMentionedAssets: { asset: string; count: number; sentiment: "BULLISH" | "BEARISH" | "NEUTRAL" }[];
+  posts: XVipPost[];
+}
+
 export interface WhaleRadarData {
   fetchedAt: number;
   btcPrice: number;
@@ -116,6 +160,7 @@ export interface WhaleRadarData {
   whaleEntities: WhaleEntity[];
   recentLargeTxs: WhaleTransaction[];
   commodities: CommoditySummary;
+  vipSocialFeed: XVipSummary;
   stats: {
     circulatingSupplyBtc: number;
     topWhalesHoldingsBtc: number;
@@ -124,4 +169,5 @@ export interface WhaleRadarData {
     marketSentiment: "BULLISH" | "NEUTRAL" | "BEARISH";
   };
 }
+
 

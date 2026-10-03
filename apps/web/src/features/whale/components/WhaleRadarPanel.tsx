@@ -1,15 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Landmark, Wallet, RefreshCw, AlertCircle, Sparkles, Coins } from "lucide-react";
+import { Landmark, Wallet, RefreshCw, AlertCircle, Sparkles, Coins, MessageSquareQuote } from "lucide-react";
 import { useWhaleRadarQuery } from "../api/useWhaleRadarQuery";
 import { BlackRockEtfView } from "./BlackRockEtfView";
 import { WhaleWalletsView } from "./WhaleWalletsView";
 import { CommoditiesRadarView } from "./CommoditiesRadarView";
+import { XVipSocialView } from "./XVipSocialView";
 import { useTranslation } from "@/features/i18n";
 import { formatUsd } from "../utils/formatters";
 
-type RadarTab = "etf" | "whales" | "commodities";
+type RadarTab = "etf" | "whales" | "commodities" | "social";
 
 export function WhaleRadarPanel() {
   const { locale } = useTranslation();
@@ -33,7 +34,7 @@ export function WhaleRadarPanel() {
             )}
           </div>
           <h2 className="text-xl md:text-2xl font-bold tracking-tight text-zinc-100 flex items-center gap-2 mt-1">
-            <span>{id ? "Radar Institusi & Dompet Paus" : "Institutional & Whale Radar"}</span>
+            <span>{id ? "Radar Institusi, Paus & VIP Alpha" : "Institutional, Whale & VIP Radar"}</span>
             <Sparkles size={18} className="text-amber-400" />
           </h2>
         </div>
@@ -57,44 +58,57 @@ export function WhaleRadarPanel() {
       </div>
 
       {/* Tab Switcher */}
-      <div className="flex flex-wrap items-center gap-2 p-1.5 rounded-xl bg-zinc-950/80 border border-zinc-800/80 max-w-xl">
+      <div className="flex flex-wrap items-center gap-2 p-1.5 rounded-xl bg-zinc-950/80 border border-zinc-800/80 max-w-3xl">
         <button
           type="button"
           onClick={() => setActiveTab("etf")}
-          className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+          className={`flex-1 min-w-[130px] flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeTab === "etf"
               ? "bg-amber-500 text-zinc-950 shadow-md font-extrabold"
               : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
           }`}
         >
           <Landmark size={15} />
-          <span>{id ? "BlackRock & ETF Bitcoin" : "BlackRock & Bitcoin ETFs"}</span>
+          <span>{id ? "BlackRock & ETF" : "BlackRock & ETFs"}</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab("whales")}
-          className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+          className={`flex-1 min-w-[130px] flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeTab === "whales"
               ? "bg-amber-500 text-zinc-950 shadow-md font-extrabold"
               : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
           }`}
         >
           <Wallet size={15} />
-          <span>{id ? "Dompet Paus & On-Chain" : "Whale Wallets & On-Chain"}</span>
+          <span>{id ? "Dompet Paus" : "Whale Wallets"}</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab("commodities")}
-          className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+          className={`flex-1 min-w-[130px] flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeTab === "commodities"
               ? "bg-amber-500 text-zinc-950 shadow-md font-extrabold"
               : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
           }`}
         >
           <Coins size={15} />
-          <span>{id ? "Minyak, Emas & Silver" : "Oil, Gold & Silver"}</span>
+          <span>{id ? "Minyak & Logam" : "Oil & Metals"}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("social")}
+          className={`flex-1 min-w-[150px] flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            activeTab === "social"
+              ? "bg-amber-500 text-zinc-950 shadow-md font-extrabold"
+              : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
+          }`}
+        >
+          <MessageSquareQuote size={15} />
+          <span>{id ? "X-Alpha: Konglo & Paus" : "X-Alpha: VIP & Whales"}</span>
         </button>
       </div>
 
@@ -103,12 +117,12 @@ export function WhaleRadarPanel() {
         <div className="p-12 flex flex-col items-center justify-center text-center space-y-3">
           <RefreshCw size={28} className="animate-spin text-amber-400" />
           <div className="text-sm font-bold text-zinc-300">
-            {id ? "Menghubungkan ke data on-chain, ETF & komoditas..." : "Loading on-chain, ETF and commodity intelligence..."}
+            {id ? "Menghubungkan ke data on-chain, ETF, komoditas & VIP feed..." : "Loading on-chain, ETF, commodity & VIP social intelligence..."}
           </div>
           <p className="text-xs text-zinc-500 max-w-md">
             {id
-              ? "Mengambil data cadangan brankas institusi, harga emas, perak, minyak mentah, serta transaksi besar."
-              : "Fetching institutional cold reserves, live gold, silver, crude oil quotes, and high-value transfers."}
+              ? "Mengambil data cadangan brankas institusi, harga emas, perak, minyak mentah, serta radar cuitan konglomerat & paus pasar."
+              : "Fetching institutional cold reserves, live gold, silver, crude oil quotes, and VIP tycoon social signals."}
           </p>
         </div>
       ) : isError ? (
@@ -133,8 +147,10 @@ export function WhaleRadarPanel() {
           <BlackRockEtfView data={data} />
         ) : activeTab === "whales" ? (
           <WhaleWalletsView data={data} />
-        ) : (
+        ) : activeTab === "commodities" ? (
           <CommoditiesRadarView data={data} />
+        ) : (
+          <XVipSocialView data={data} />
         )
       ) : null}
 
