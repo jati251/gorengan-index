@@ -2,14 +2,11 @@
 
 import { useState, useMemo } from "react";
 import {
-  MessageSquareQuote,
   CheckCircle2,
   ExternalLink,
   Search,
   Filter,
   Flame,
-  TrendingUp,
-  AlertTriangle,
   Radio,
   Repeat2,
   Heart,
@@ -34,7 +31,7 @@ export function XVipSocialView({ data }: XVipSocialViewProps) {
   const openWorkspace = useWorkspaceStore((s) => s.open);
 
   const vipFeed = data.vipSocialFeed;
-  const posts = vipFeed?.posts || [];
+  const posts = useMemo(() => vipFeed?.posts || [], [vipFeed?.posts]);
 
   const [selectedCategory, setSelectedCategory] = useState<XVipCategory | "ALL">("ALL");
   const [selectedAssetFilter, setSelectedAssetFilter] = useState<string | null>(null);

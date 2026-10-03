@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ExternalLink, Copy, Check, Filter, Activity, ArrowUpRight, ArrowDownLeft, RefreshCw, ShieldAlert, Wallet } from "lucide-react";
+import { ExternalLink, Copy, Check, Activity, ArrowUpRight, ArrowDownLeft, RefreshCw, ShieldAlert, Wallet } from "lucide-react";
 import type { WhaleCategory, WhaleRadarData } from "../types";
 import { formatBtc, formatUsd, formatPercent, getWhaleCategoryBadge } from "../utils/formatters";
 import { useTranslation } from "@/features/i18n";

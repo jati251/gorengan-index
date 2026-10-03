@@ -1,8 +1,8 @@
 "use client";
 
-import { ArrowUpRight, Flame, Sparkles, TrendingDown, TrendingUp, ShieldCheck, Factory, Droplet, Coins, Layers } from "lucide-react";
+import { ArrowUpRight, Sparkles, TrendingDown, TrendingUp, Droplet, Coins } from "lucide-react";
 import type { WhaleRadarData } from "../types";
-import { formatPercent, formatUsd } from "../utils/formatters";
+import { formatPercent } from "../utils/formatters";
 import { useTranslation } from "@/features/i18n";
 import { useMarketStore } from "@/stores/marketStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";

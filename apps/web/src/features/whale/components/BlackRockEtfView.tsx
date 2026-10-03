@@ -17,7 +17,7 @@ export function BlackRockEtfView({ data }: BlackRockEtfViewProps) {
   const setSelectedSymbol = useMarketStore((s) => s.setSelectedSymbol);
   const openWorkspace = useWorkspaceStore((s) => s.open);
 
-  const { etfSummary, btcPrice } = data;
+  const { etfSummary } = data;
   const ibit = etfSummary.ibit;
   const signal = getSignalBadge(etfSummary.institutionalSignal, id);
 
