@@ -152,6 +152,19 @@ html:has(.terminal-app), body:has(.terminal-app) { overflow-x: clip; }
 .desk-empty .desk-button { margin-top: .45rem; }
 .desk-spin { animation: desk-spin 1.2s linear infinite; }
 @keyframes desk-spin { to { transform: rotate(360deg); } }
+@keyframes desk-pulse-glow {
+  0%, 100% { opacity: 0.6; filter: drop-shadow(0 0 2px var(--desk-accent)); }
+  50% { opacity: 1; filter: drop-shadow(0 0 8px var(--desk-accent)); }
+}
+@keyframes pulse-ekg {
+  0% { stroke-dashoffset: 60; opacity: 0.35; }
+  50% { stroke-dashoffset: 0; opacity: 1; filter: drop-shadow(0 0 6px #f4c41b); }
+  100% { stroke-dashoffset: -60; opacity: 0.35; }
+}
+.desk-pulse-ekg path {
+  stroke-dasharray: 30;
+  animation: pulse-ekg 2s ease-in-out infinite;
+}
 .prediction-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.5rem 1.25rem .5rem; }
 .prediction-heading > div:first-child { display: flex; flex-direction: column; gap: .25rem; }
 .prediction-heading strong { font-size: clamp(1.7rem, 3.4vw, 2.7rem); font-weight: 500; letter-spacing: -.055em; font-variant-numeric: tabular-nums; }
@@ -372,12 +385,16 @@ html:has(.terminal-app), body:has(.terminal-app) { overflow-x: clip; }
 .exchange-reference b { font-weight: 400; }
 @media (max-width: 767px) {
   .terminal-app .terminal-brand { font-size: .48rem; }
-  .desk-toolbar { flex-wrap: wrap; }
-  .desk-toolbar-actions { width: 100%; justify-content: space-between; }
+  .desk-toolbar { flex-wrap: wrap; gap: .6rem; }
+  .desk-toolbar-actions { width: 100%; display: flex; align-items: center; justify-content: flex-end; gap: .5rem; }
+  .desk-toolbar-actions .exchange-reference { margin-right: auto; }
   .desk-toolbar-actions .exchange-reference span { display: inline; }
   .desk-panel-head h2 { font-size: .55rem; }
   .forecast-plot text { font-size: 18px; }
-  .calculator-inputs, .calculator-results { gap: .75rem; }
+  .calculator-inputs, .calculator-results { grid-template-columns: 1fr; gap: .75rem; }
+  .prediction-range { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
+  .intel-form { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: .75rem; }
+  .intel-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
 }
 @media (max-width: 380px) {
   .terminal-app .terminal-brand { font-size: .4rem; }

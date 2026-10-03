@@ -117,7 +117,7 @@ export function AnalysisPanel({ mode = "analysis" }: { mode?: "analysis" | "pred
     <div className="desk-panel-head"><div><span className="desk-eyebrow">{symbol} · {timeframe}</span><h2>{title}</h2></div><button className="desk-icon-button" type="button" disabled={isFetching} onClick={() => refetch()} aria-label={id ? "Muat ulang analisa" : "Refresh analysis"}><RefreshCw size={16} className={isFetching ? "desk-spin" : ""} /></button></div>
     {mode !== "summary" && <div className="analysis-toolbar"><span>{id ? "Interval candle" : "Candle interval"}</span><TimeframeSelector /></div>}
     {!available ? <div className="desk-empty" role="status">
-      <span className="desk-empty-symbol"><ActivityMark /></span>
+      <span className="desk-empty-symbol"><ActivityMark isPending={isPending} /></span>
       <h3>{isPending ? (id ? "Mengambil riwayat harga" : "Loading price history") : isError ? (id ? "Riwayat belum tersedia" : "Price history unavailable") : (id ? "Perlu lebih banyak candle" : "More candles needed")}</h3>
       <p>{isPending ? (id ? "Indikator dihitung setelah data diterima." : "Indicators will appear when data arrives.") : isError ? (id ? "Coba muat ulang atau pilih interval lain." : "Refresh or choose another interval.") : (id ? `Tersedia ${candles.length} candle valid. Minimal ${required} candle selesai diperlukan; candle sintetis tidak digunakan.` : `${candles.length} valid bars available. At least ${required} closed bars are required; synthetic bars are excluded.`)}</p>
       {!isPending && <button type="button" className="desk-button" onClick={() => refetch()} disabled={isFetching}>{id ? "Coba lagi" : "Try again"}</button>}
@@ -135,7 +135,7 @@ export function AnalysisPanel({ mode = "analysis" }: { mode?: "analysis" | "pred
       </div>
       <div className="prediction-heading">
         <div>
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex flex-wrap items-center gap-2 mb-1">
             <span className="desk-muted">{id ? "Skenario tengah" : "Central scenario"} · +{horizon} {id ? "candle" : "bars"}</span>
             <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
               {forecast.metrics.evaluation.samples} {id ? "uji historis" : "historical tests"}
@@ -259,6 +259,6 @@ export function AnalysisPanel({ mode = "analysis" }: { mode?: "analysis" | "pred
   </section>;
 }
 
-function ActivityMark() {
-  return <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M2 23h7l5-14 5 18 5-10h6" stroke="currentColor" strokeWidth="1.5" /></svg>;
+function ActivityMark({ isPending = false }: { isPending?: boolean }) {
+  return <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true" className={isPending ? "desk-pulse-ekg text-amber-400" : ""}><path d="M2 23h7l5-14 5 18 5-10h6" stroke="currentColor" strokeWidth="1.5" /></svg>;
 }

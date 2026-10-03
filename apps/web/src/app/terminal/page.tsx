@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Calculator, Activity, ArrowUpRight, BarChart3, CandlestickChart, ChartNoAxesCombined, ChevronDown, Focus, LayoutGrid, Layers3, Newspaper, PanelLeft, PieChart, Plus, Radar, Search, X } from "lucide-react";
 import { MarketHeaderTicker, MarketOverviewTable, MarketStats, BottomStickyTickerTape, useResolvedSymbols, useMarketsQuery } from "@/features/markets";
 import { TradingViewChart, ChartHeader } from "@/features/chart";
@@ -46,7 +47,12 @@ export default function TerminalPage() {
 
   useEffect(() => { void useWorkspaceStore.persist.rehydrate(); }, []);
   useEffect(() => {
-    tabList.current?.querySelector<HTMLButtonElement>(`#workspace-tab-${active}`)?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    const el = tabList.current?.querySelector<HTMLButtonElement>(`#workspace-tab-${active}`);
+    if (el && tabList.current) {
+      const container = tabList.current;
+      const left = el.offsetLeft - container.offsetLeft - 16;
+      container.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
+    }
   }, [active, isCompact]);
   useEffect(() => {
     if (!menuOpen) return;
@@ -108,18 +114,29 @@ export default function TerminalPage() {
       <section id="workspace-panel" role="tabpanel" aria-labelledby={`workspace-tab-${active}`} className="workspace-content">
         <p className="workspace-description">{descriptions[active]}</p>
         {isError && <div className="desk-data-note" role="status"><span>{id ? "Daftar instrumen cadangan digunakan." : "Using the fallback instrument list."}</span><button type="button" onClick={() => refetchSymbols()}>{id ? "Muat ulang daftar" : "Reload instruments"}</button></div>}
-        {active === "overview" && <><MarketPulse loading={isLoading} symbols={symbols} />{chart}<div className="overview-analysis"><AnalysisPanel mode="summary" /><button type="button" className="projection-entry" onClick={() => open("prediction")}><ChartNoAxesCombined size={25} /><span className="desk-eyebrow">{id ? "Langkah berikutnya" : "Look ahead"}</span><strong>{id ? "Baca skenario harga" : "Explore price scenarios"}</strong><p>{id ? "Proyeksi 5, 10, atau 20 candle dengan rentang volatilitas historis." : "Project 5, 10 or 20 candles with a historical volatility range."}</p><span>{id ? "Buka prediksi" : "Open prediction"}<ArrowUpRight size={16} /></span></button></div>{isCompact && <MarketComposition symbols={symbols} loading={isLoading} />}{marketBoard}</>}
-        {active === "chart" && <>{chart}<AnalysisPanel mode="summary" /></>}
-        {active === "calculator" && <CalculatorPanel />}
-        {active === "cryptoIntel" && <CryptoIntelPanel />}
-        {active === "whaleRadar" && <WhaleRadarPanel />}
-        {active === "analysis" && <AnalysisPanel />}
-        {active === "prediction" && <AnalysisPanel mode="prediction" />}
-        {active === "composition" && <><MarketPulse loading={isLoading} symbols={symbols} /><MarketComposition symbols={symbols} loading={isLoading} /><MarketMovers symbols={symbols} onSelect={openChart} /></>}
-        {active === "markets" && marketBoard}
-        {active === "orderbook" && <section className="desk-panel standalone-widget"><div className="desk-panel-head"><h2>{labels.orderbook}</h2><span className="desk-muted">{symbol}</span></div><OrderBook className="flex-1 min-h-0" /></section>}
-        {active === "pulse" && <section className="desk-panel stats-widget"><div className="desk-panel-head"><h2>{labels.pulse}</h2><span>{symbol}</span></div><div className="desk-panel-body"><MarketStats /><SentimentGauge /></div></section>}
-        {active === "news" && <section className="desk-panel standalone-widget"><div className="desk-panel-head"><h2>{labels.news}</h2></div><NewsFeed /></section>}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={active}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.15, ease: "easeOut" }}
+            className="flex flex-col gap-4 min-w-0"
+          >
+            {active === "overview" && <><MarketPulse loading={isLoading} symbols={symbols} />{chart}<div className="overview-analysis"><AnalysisPanel mode="summary" /><button type="button" className="projection-entry" onClick={() => open("prediction")}><ChartNoAxesCombined size={25} /><span className="desk-eyebrow">{id ? "Langkah berikutnya" : "Look ahead"}</span><strong>{id ? "Baca skenario harga" : "Explore price scenarios"}</strong><p>{id ? "Proyeksi 5, 10, atau 20 candle dengan rentang volatilitas historis." : "Project 5, 10 or 20 candles with a historical volatility range."}</p><span>{id ? "Buka prediksi" : "Open prediction"}<ArrowUpRight size={16} /></span></button></div>{isCompact && <MarketComposition symbols={symbols} loading={isLoading} />}{marketBoard}</>}
+            {active === "chart" && <>{chart}<AnalysisPanel mode="summary" /></>}
+            {active === "calculator" && <CalculatorPanel />}
+            {active === "cryptoIntel" && <CryptoIntelPanel />}
+            {active === "whaleRadar" && <WhaleRadarPanel />}
+            {active === "analysis" && <AnalysisPanel />}
+            {active === "prediction" && <AnalysisPanel mode="prediction" />}
+            {active === "composition" && <><MarketPulse loading={isLoading} symbols={symbols} /><MarketComposition symbols={symbols} loading={isLoading} /><MarketMovers symbols={symbols} onSelect={openChart} /></>}
+            {active === "markets" && marketBoard}
+            {active === "orderbook" && <section className="desk-panel standalone-widget"><div className="desk-panel-head"><h2>{labels.orderbook}</h2><span className="desk-muted">{symbol}</span></div><OrderBook className="flex-1 min-h-0" /></section>}
+            {active === "pulse" && <section className="desk-panel stats-widget"><div className="desk-panel-head"><h2>{labels.pulse}</h2><span>{symbol}</span></div><div className="desk-panel-body"><MarketStats /><SentimentGauge /></div></section>}
+            {active === "news" && <section className="desk-panel standalone-widget"><div className="desk-panel-head"><h2>{labels.news}</h2></div><NewsFeed /></section>}
+          </motion.div>
+        </AnimatePresence>
       </section>
       {!isCompact && <aside className="context-panel">{active === "composition"
         ? <section className="desk-panel"><div className="desk-panel-head"><div><span className="desk-eyebrow">{symbol}</span><h2>{labels.pulse}</h2></div></div><div className="desk-panel-body"><MarketStats /><SentimentGauge /></div></section>

@@ -1,5 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { RefreshCw } from "lucide-react";
 import { useFilingWatchStore } from "../stores/filingWatchStore";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "@/features/i18n";
@@ -14,13 +16,53 @@ async function read<T>(url: string, signal: AbortSignal): Promise<T> {
   if (!response.ok) throw new Error(`Request failed (${response.status})`);
   return response.json();
 }
+
+function FilingDetailsSkeleton({ id }: { id: boolean }) {
+  return (
+    <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-950/60 space-y-3 animate-pulse" role="status">
+      <div className="flex items-center gap-2 text-xs font-mono text-amber-400">
+        <RefreshCw size={13} className="animate-spin" />
+        <span>{id ? "Mengurai XML kepemilikan SEC…" : "Parsing SEC ownership XML document…"}</span>
+      </div>
+      <div className="h-4 w-44 bg-zinc-800 rounded" />
+      <div className="h-3 w-64 bg-zinc-800/60 rounded" />
+      <div className="h-20 w-full bg-zinc-900/80 rounded border border-zinc-800/60" />
+    </div>
+  );
+}
+
+function FilingsSkeleton({ id }: { id: boolean }) {
+  return (
+    <div className="space-y-3" role="status" aria-label={id ? "Memuat filing..." : "Loading filings..."}>
+      <div className="flex items-center gap-2 text-xs font-mono text-amber-400 py-1">
+        <RefreshCw size={13} className="animate-spin" />
+        <span>{id ? "Mengambil filing terbaru dari SEC EDGAR…" : "Querying latest SEC EDGAR public filings…"}</span>
+      </div>
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div key={i} className="border border-zinc-800/80 rounded-xl bg-zinc-900/30 p-4 space-y-3 animate-pulse">
+          <div className="flex items-center justify-between gap-2">
+            <div className="h-4 w-52 sm:w-72 bg-zinc-800 rounded" />
+            <div className="h-5 w-16 bg-zinc-800 rounded" />
+          </div>
+          <div className="h-3 w-44 bg-zinc-800/60 rounded" />
+          <div className="h-3 w-64 bg-zinc-800/40 rounded" />
+          <div className="flex gap-3 pt-1">
+            <div className="h-7 w-28 bg-zinc-800/70 rounded" />
+            <div className="h-7 w-32 bg-zinc-800/70 rounded" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function FilingDetails({ filing }: { filing: InsiderFiling }) {
   const id = useTranslation().locale === "id";
   const [imported, setImported] = useState<{ name: string; detail: ReturnType<typeof parseOwnershipXml> } | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const query = new URLSearchParams({ cik: filing.cik, accession: filing.accession, document: filing.document });
   const { data, isPending, error } = useQuery({ queryKey: ["insider-filing", filing.accession], queryFn: ({ signal }) => read<PublicResult<ReturnType<typeof parseOwnershipXml>>>(`/api/insider-filings/detail?${query}`, signal), staleTime: 86400000, retry: false });
-  if (isPending) return <p role="status">{id ? "Mengambil XML transaksi…" : "Loading transaction XML…"}</p>;
+  if (isPending) return <FilingDetailsSkeleton id={id} />;
   const detail = imported?.detail ?? data?.data;
   async function importXml(file: File | undefined) {
     if (!file) return;
@@ -72,25 +114,90 @@ export function InsiderFilingsView() {
       const split = key.indexOf(":"), savedDays = Number(key.slice(0, split)), keywords = key.slice(split + 1);
       return <button key={key} type="button" className="desk-button" aria-pressed={watchKey === key} onClick={() => { setInput(keywords); setSearch(keywords); setDays(savedDays); setOffset(0); setExpanded(null); }}>{keywords || (id ? "Semua filing" : "All filings")} · {savedDays} {id ? "hari" : "days"}</button>;
     })}</div></div>}
-    <form onSubmit={(e) => { e.preventDefault(); setSearch(input.trim()); setOffset(0); setExpanded(null); }} className="flex flex-wrap items-end gap-3">
-      <label className="text-xs flex-1 min-w-48">{id ? "Kata kunci" : "Keywords"}<input maxLength={80} className="block bg-zinc-900 border border-zinc-700 rounded p-2 mt-1 w-full" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Apple, NVIDIA, AAPL…" /></label>
-      <label className="text-xs">{id ? "Periode" : "Window"}<select className="block bg-zinc-900 border border-zinc-700 rounded p-2 mt-1" value={days} onChange={(e) => { setDays(Number(e.target.value)); setOffset(0); }}>{[7, 30, 90].map((d) => <option value={d} key={d}>{d} {id ? "hari" : "days"}</option>)}</select></label>
-      <button type="submit" className="desk-button">{id ? "Cari" : "Search"}</button><button type="button" className="desk-button" disabled={isFetching} onClick={() => void refetch()}>{id ? "Segarkan" : "Refresh"}</button><a className="desk-button" aria-disabled={!data?.filings.length} href={data?.filings.length ? `/api/insider-filings?${query}&format=csv` : undefined} download>CSV</a>
+    <form onSubmit={(e) => { e.preventDefault(); setSearch(input.trim()); setOffset(0); setExpanded(null); }} className="space-y-3">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3">
+        <label className="text-xs flex-1">
+          <span className="text-zinc-300 font-medium">{id ? "Kata kunci" : "Keywords"}</span>
+          <input maxLength={80} className="block bg-zinc-900 border border-zinc-700 rounded-lg p-2.5 mt-1 w-full text-zinc-100 font-mono text-sm" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Apple, NVIDIA, AAPL…" />
+        </label>
+        <label className="text-xs w-full sm:w-auto shrink-0">
+          <span className="text-zinc-300 font-medium">{id ? "Periode" : "Window"}</span>
+          <select className="block bg-zinc-900 border border-zinc-700 rounded-lg p-2.5 mt-1 w-full text-zinc-100 font-mono text-sm" value={days} onChange={(e) => { setDays(Number(e.target.value)); setOffset(0); }}>
+            {[7, 30, 90].map((d) => <option value={d} key={d}>{d} {id ? "hari" : "days"}</option>)}
+          </select>
+        </label>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="submit" className="desk-button">{id ? "Cari" : "Search"}</button>
+        <button type="button" className="desk-button" disabled={isFetching} onClick={() => void refetch()}>{id ? "Segarkan" : "Refresh"}</button>
+        <a className="desk-button" aria-disabled={!data?.filings.length} href={data?.filings.length ? `/api/insider-filings?${query}&format=csv` : undefined} download>CSV</a>
+      </div>
     </form>
-    {data && <div className="flex gap-3 flex-wrap items-center text-xs"><button type="button" className="desk-button" disabled={offset !== 0 || !data.filings.length || data.source.status === "stale" || data.source.status === "unavailable"} onClick={() => markSeen(watchKey, data.filings.map((f) => f.accession))}>{baseline ? (id ? "Tandai halaman sudah dilihat" : "Mark page seen") : (id ? "Pantau pencarian ini" : "Watch this search")}</button>{baseline && <><button type="button" className="desk-button" onClick={() => stopWatch(watchKey)}>{id ? "Hentikan pantauan" : "Stop watching"}</button><span role="status">{data.filings.filter((f) => !baseline.includes(f.accession)).length} {id ? "filing belum dilihat di halaman ini" : "unseen filings on this page"}</span></>}<span>{id ? "Pantauan lokal browser; polling aktif hanya saat panel terbuka." : "Saved in this browser; polling runs only while the panel is open."}</span></div>}
-    {isPending && <p role="status">{id ? "Mengambil filing SEC…" : "Fetching SEC filings…"}</p>}{error && <p role="alert">{error.message}</p>}
+    {data && (
+      <div className="p-3 rounded-xl bg-zinc-900/40 border border-zinc-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button type="button" className="desk-button" disabled={offset !== 0 || !data.filings.length || data.source.status === "stale" || data.source.status === "unavailable"} onClick={() => markSeen(watchKey, data.filings.map((f) => f.accession))}>
+            {baseline ? (id ? "Tandai halaman sudah dilihat" : "Mark page seen") : (id ? "Pantau pencarian ini" : "Watch this search")}
+          </button>
+          {baseline && (
+            <>
+              <button type="button" className="desk-button" onClick={() => stopWatch(watchKey)}>
+                {id ? "Hentikan pantauan" : "Stop watching"}
+              </button>
+              <span role="status" className="font-mono text-amber-400">
+                {data.filings.filter((f) => !baseline.includes(f.accession)).length} {id ? "filing belum dilihat" : "unseen filings"}
+              </span>
+            </>
+          )}
+        </div>
+        <span className="text-zinc-400 text-[11px]">{id ? "Pantauan lokal browser; polling aktif saat panel terbuka." : "Saved in browser; polling runs while panel is open."}</span>
+      </div>
+    )}
+    {isPending && <FilingsSkeleton id={id} />}
+    {error && <p role="alert" className="text-sm text-rose-400 p-3 rounded-lg bg-rose-500/10 border border-rose-500/20">{error.message}</p>}
     {data && <><SourceStatus source={data.source} /><p className="text-xs text-zinc-400">{data.total.toLocaleString()}{data.totalIsLowerBound ? "+" : ""} {id ? "hasil; menampilkan" : "results; showing"} {data.filings.length} · {offset + 1}–{offset + data.filings.length}</p>
       {!data.filings.length && <p role="status">{data.source.status === "unavailable" ? (id ? "Sumber SEC tidak tersedia. Ini tidak berarti tidak ada transaksi." : "SEC unavailable. This does not mean no transactions occurred.") : (id ? "Tidak ada filing cocok dalam jendela ini." : "No matching filings in this window.")}</p>}
-      {data.filings.map((filing) => {
+      {data.filings.map((filing, index) => {
         const context = filingContext(filing);
-        return <article className="border border-zinc-700 rounded p-4 space-y-2" key={filing.accession}>
-        <div className="flex flex-wrap justify-between gap-2"><strong className="text-sm break-words">{filing.names.join(" · ")}</strong><span className="text-xs font-mono">{filing.form}{baseline && !baseline.includes(filing.accession) ? " · NEW" : ""}</span></div>
-        <p className="text-xs text-zinc-400">Filed: {filing.filedAt} · Period: {filing.period ?? "—"} · {filing.accession}</p>
+        return <motion.article
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: Math.min(index * 0.03, 0.3), duration: 0.2 }}
+          className="border border-zinc-700/80 rounded-xl bg-zinc-900/40 p-4 space-y-2"
+          key={filing.accession}
+        >
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2">
+          <strong className="text-sm font-semibold text-zinc-100 break-words">{filing.names.join(" · ")}</strong>
+          <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-zinc-800 text-amber-400 border border-zinc-700 shrink-0 self-start sm:self-auto">
+            {filing.form}{baseline && !baseline.includes(filing.accession) ? " · NEW" : ""}
+          </span>
+        </div>
+        <p className="text-xs text-zinc-400 font-mono">Filed: {filing.filedAt} · Period: {filing.period ?? "—"} · {filing.accession}</p>
         <p className="text-xs text-zinc-400">{context.amended ? (id ? "Amendemen · rekonsiliasi dengan filing asli. " : "Amendment · reconcile with the original. ") : ""}{context.periodGapDays !== null ? (id ? `${context.periodGapDays} hari kalender dari periode laporan ke filing; bukan uji keterlambatan legal.` : `${context.periodGapDays} calendar days from report period to filing; not a legal lateness test.`) : ""}</p>
-        <div className="flex flex-wrap gap-3 text-xs"><a className="underline text-amber-300" href={filing.url} target="_blank" rel="noopener noreferrer">{id ? "Dokumen SEC asli" : "Original SEC document"}</a><button type="button" className="underline" aria-expanded={expanded === filing.accession} onClick={() => setExpanded(expanded === filing.accession ? null : filing.accession)}>{id ? "Detail transaksi" : "Transaction details"}</button></div>
-        {expanded === filing.accession && <FilingDetails filing={filing} />}
-      </article>; })}
-      <div className="flex gap-3"><button type="button" className="desk-button" disabled={offset === 0 || isFetching} onClick={() => setOffset(offset - 100)}>{id ? "Sebelumnya" : "Previous"}</button><button type="button" className="desk-button" disabled={isFetching || offset >= 900 || offset + 100 >= data.total} onClick={() => setOffset(offset + 100)}>{id ? "Berikutnya" : "Next"}</button></div>
+        <div className="flex flex-wrap items-center gap-3 text-xs pt-1">
+          <a className="underline text-amber-300 font-medium hover:text-amber-200" href={filing.url} target="_blank" rel="noopener noreferrer">{id ? "Dokumen SEC asli" : "Original SEC document"}</a>
+          <button type="button" className="desk-button py-1 px-2.5 text-xs" aria-expanded={expanded === filing.accession} onClick={() => setExpanded(expanded === filing.accession ? null : filing.accession)}>
+            {expanded === filing.accession ? (id ? "Tutup detail" : "Close details") : (id ? "Detail transaksi" : "Transaction details")}
+          </button>
+        </div>
+        <AnimatePresence>
+          {expanded === filing.accession && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.22, ease: "easeOut" }}
+              className="overflow-hidden"
+            >
+              <FilingDetails filing={filing} />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.article>; })}
+      <div className="flex gap-3 justify-center sm:justify-start">
+        <button type="button" className="desk-button" disabled={offset === 0 || isFetching} onClick={() => setOffset(offset - 100)}>{id ? "Sebelumnya" : "Previous"}</button>
+        <button type="button" className="desk-button" disabled={isFetching || offset >= 900 || offset + 100 >= data.total} onClick={() => setOffset(offset + 100)}>{id ? "Berikutnya" : "Next"}</button>
+      </div>
     </>}
     <a href="https://www.idx.co.id/id/perusahaan-tercatat/keterbukaan-informasi/" target="_blank" rel="noopener noreferrer" className="block text-xs underline text-amber-300">{id ? "Keterbukaan informasi resmi IDX (pemeriksaan manual)" : "Official IDX disclosures (manual review)"}</a>
     <p className="text-xs text-zinc-400">{id ? "Cakupan: SEC AS. Filing IDX/OJK belum terintegrasi; sinyal crypto adalah data pasar anonim. Maksimum penelusuran 1.000 hasil per pencarian, persempit kata kunci untuk cakupan lebih baik." : "Coverage: US SEC. IDX/OJK filings are not integrated; crypto signals use anonymous market data. Search is capped at 1,000 results; narrow keywords for better coverage."}</p>

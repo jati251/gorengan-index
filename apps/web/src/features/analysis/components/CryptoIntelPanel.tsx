@@ -89,14 +89,14 @@ function CryptoIntelWorkspace() {
     <div className="space-y-6">
       {/* Main Intel Panel */}
       <section className="desk-panel">
-        <div className="desk-panel-head">
+        <div className="desk-panel-head flex-wrap gap-2">
           <div>
             <span className="desk-eyebrow">{symbol} · {timeframe}</span>
             <h2>{t("Intel Kuantitatif & Aliran Pasar Crypto", "Crypto Quantitative Intel & Market Flow")}</h2>
           </div>
           <button
             type="button"
-            className="desk-button inline-flex items-center gap-1.5 cursor-pointer"
+            className="desk-button inline-flex items-center gap-1.5 cursor-pointer shrink-0"
             disabled={flow.isFetching || history.isFetching}
             onClick={() => {
               void flow.refetch();
@@ -445,12 +445,19 @@ function CryptoIntelWorkspace() {
 
           {/* Stale / Pending Data Alert */}
           {(flow.isPending || staleFlow || !!flow.data?.unavailable.length) && (
-            <p role="status" className="intel-notice">
-              {flow.isPending
-                ? t("Mengambil data live bursa Binance…", "Loading live Binance exchange data…")
-                : t("Sebagian data tidak tersedia atau kedaluwarsa", "Some data is unavailable or stale")}
-              {flow.data?.unavailable.length ? `: ${flow.data.unavailable.join(", ")}.` : ""}
-            </p>
+            <div role="status" className="intel-notice flex items-center gap-2 font-mono text-xs">
+              {flow.isPending ? (
+                <>
+                  <RefreshCw size={13} className="desk-spin shrink-0 text-amber-400" />
+                  <span>{t("Mengambil data live aliran pasar Binance…", "Acquiring live Binance market flow…")}</span>
+                </>
+              ) : (
+                <>
+                  <span>{t("Sebagian data tidak tersedia atau kedaluwarsa", "Some data is unavailable or stale")}</span>
+                  {flow.data?.unavailable.length ? `: ${flow.data.unavailable.join(", ")}.` : ""}
+                </>
+              )}
+            </div>
           )}
         </div>
       </section>
@@ -461,20 +468,21 @@ function CryptoIntelWorkspace() {
           <h2>{t("Radar Transaksi Besar & Agresor Paus", "Large-Trade & Whale Aggressor Radar")}</h2>
         </div>
         <div className="intel-body">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <label className="intel-field">
-              {t("Ambang Nilai USDT", "Notional Threshold USDT")}
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+            <label className="intel-field max-w-xs">
+              <span className="text-xs text-zinc-300 font-mono">{t("Ambang Nilai USDT", "Notional Threshold USDT")}</span>
               <input
                 type="number"
                 min="0"
                 step="10000"
                 value={threshold}
                 onChange={(e) => setThreshold(Math.max(0, Number(e.target.value)))}
+                className="w-full"
               />
             </label>
 
             {trades && (
-              <div className="flex items-center gap-4 text-xs font-mono">
+              <div className="flex items-center gap-4 text-xs font-mono p-2.5 rounded-lg bg-zinc-950/50 border border-zinc-800 self-start sm:self-auto">
                 <div>
                   <span className="text-zinc-500">{t("Whale Beli:", "Whale Buys:")}</span>
                   <span className="font-bold text-emerald-400 ml-1.5">
@@ -544,14 +552,14 @@ function CryptoIntelWorkspace() {
 
       {/* Spot / Long Risk Plan (Position Sizer) */}
       <section className="desk-panel">
-        <div className="desk-panel-head">
+        <div className="desk-panel-head flex-wrap gap-2">
           <div>
             <span className="desk-eyebrow">{t("Kalkulator Manajemen Risiko", "Risk Management Desk")}</span>
             <h2>{t("Rencana Posisi Spot & Manajemen Modal", "Spot Position & Risk Budgeting Plan")}</h2>
           </div>
           <button
             type="button"
-            className="desk-button cursor-pointer"
+            className="desk-button cursor-pointer shrink-0"
             disabled={staleCandles || !signals || signals.atr <= 0 || signals.last.close <= signals.atr * 2}
             onClick={() => {
               if (signals) {
