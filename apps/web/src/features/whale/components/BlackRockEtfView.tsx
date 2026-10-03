@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import type { WhaleRadarData } from "../types";
 import { formatUsd, formatPercent, formatBtc } from "../utils/formatters";
 import { useTranslation } from "@/features/i18n";
+import { IbitActivityView } from "./IbitActivityView";
 import { SourceStatus } from "./SourceStatus";
 
 export function BlackRockEtfView({ data }: { data: WhaleRadarData }) {
@@ -11,8 +12,8 @@ export function BlackRockEtfView({ data }: { data: WhaleRadarData }) {
     <div className="space-y-4">
       <p className="text-sm text-zinc-300">
         {id
-          ? "Harga ETF adalah kuotasi tertunda atau penutupan terakhir. Volume saham bukan arus dana bersih ETF. Cadangan IBIT dibaca dari CSV resmi BlackRock; net inflow belum tersedia."
-          : "ETF prices are delayed quotes or the last close. Share volume is not ETF net flow. IBIT reserves come from the official BlackRock CSV; net flows are unavailable."}
+          ? "Harga ETF adalah kuotasi tertunda atau penutupan terakhir. Volume saham bukan arus dana bersih ETF. Cadangan IBIT dibaca dari CSV resmi BlackRock; riwayat aktivitas tersedia di bawah."
+          : "ETF prices are delayed quotes or the last close. Share volume is not ETF net flow. IBIT reserves come from the official BlackRock CSV; dated activity is shown below."}
       </p>
 
       {/* Featured IBIT Holdings Card */}
@@ -32,6 +33,8 @@ export function BlackRockEtfView({ data }: { data: WhaleRadarData }) {
         </div>
         <p className="text-xs text-zinc-400">{id ? "Nilai pasar kepemilikan BTC, bukan total AUM semua ETF." : "BTC holdings market value, not all-ETF AUM."}</p>
       </motion.div>
+
+      <IbitActivityView activity={data.etfSummary.activity} id={id} />
 
       {/* Grid of all ETFs */}
       <div className="grid gap-3 sm:grid-cols-2">

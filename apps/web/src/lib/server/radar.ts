@@ -1,3 +1,4 @@
+import { getEtfActivity } from "./etfActivity";
 import { publicData, finite, type SourceState, type PublicResult } from "./publicData";
 import { parseYahooQuote, parseBitcoinTransactions, parseNews, parseIbitHoldings } from "./radarParsers";
 import type { WhaleRadarData, EtfQuote, CommodityQuote, WhaleEntity } from "../../features/whale/types";
@@ -43,6 +44,7 @@ export async function getRadar(): Promise<WhaleRadarData> {
     } }), readNews(),
     publicData.read("https://www.ishares.com/us/products/333011/ishares-bitcoin-trust-etf/latest-holdings.csv", { source: "BlackRock IBIT holdings", ttlMs: 3_600_000, maxStaleMs: 86_400_000, parse: parseIbitHoldings }),
   ]);
+  const activity = await getEtfActivity(holdings.data);
   // A reference USD valuation is only used while its source quote remains recent.
   const btcPrice = btc.data && Date.now() - btc.data.asOf < 300_000 && btc.data.asOf <= Date.now() + 60_000 ? btc.data.price : null;
   const allEtfs: EtfQuote[] = etfs.map(([symbol, name, issuer], i) => ({ symbol, name, issuer, tickerId: `US:${symbol}`,
@@ -72,13 +74,13 @@ export async function getRadar(): Promise<WhaleRadarData> {
   const gold = allCommodities[0], silver = allCommodities[1];
   return { fetchedAt: Date.now(), btcPrice,
     etfSummary: { ibit: allEtfs[0], allEtfs, totalBtcReserves: null, totalAumUsd: null, totalBtcSupplySharePercent: null,
-      fiveDayNetFlowUsd: null, institutionalSignal: "UNAVAILABLE", recentFlows: [], holdingsAsOf: holdings.data?.asOf ?? null },
+      fiveDayNetFlowUsd: null, institutionalSignal: "UNAVAILABLE", recentFlows: [], holdingsAsOf: holdings.data?.asOf ?? null, activity },
     whaleEntities, recentLargeTxs: (txs.data ?? []).map((tx) => ({ ...tx, amountUsd: btcPrice === null ? null : tx.amountBtc * btcPrice })),
     commodities: { allCommodities, goldSilverRatio: gold.price && silver.price && gold.asOf && silver.asOf && Math.abs(gold.asOf - silver.asOf) <= 3600000 ? gold.price / silver.price : null },
     vipSocialFeed: { posts, topMentionedAssets: [...mentions].map(([asset, count]) => ({ asset, count })).sort((a, b) => b.count - a.count),
       vipSentimentScore: score, overallSentiment: score === null ? "UNAVAILABLE" : score > 60 ? "BULLISH" : score < 40 ? "BEARISH" : "NEUTRAL" },
     stats: { circulatingSupplyBtc: supply.data, topWhalesHoldingsBtc: total, topWhalesSupplySharePercent: total !== null && supply.data ? total / supply.data * 100 : null,
       accumulationScore: null, marketSentiment: "UNAVAILABLE" },
-    sources: [btc, ...quotes, ...commodityQuotes, txs, balances, supply, news, holdings].map(sourceState),
+    sources: [btc, ...quotes, ...commodityQuotes, txs, balances, supply, news, holdings].map(sourceState).concat(activity.sources),
   };
 }

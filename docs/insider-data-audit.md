@@ -112,3 +112,18 @@ monitoring still runs only while the panel is open.
 Transaction categories were checked against the [SEC insider transactions
 bulletin](https://www.sec.gov/files/forms-3-4-5.pdf). Evaluation remains based on
 [chronological rolling-origin tests](https://otexts.com/fpp3/tscv.html).
+
+## IBIT activity by disclosure date
+
+The BlackRock & ETF tab now joins three explicitly separate concepts: issuer BTC holdings, net changes between available disclosures, and reported USD ETF net flows. XOOMAR's public API provides an issuer-derived holdings archive (history starts 2026-08-20); its `flowUsd` is an estimate derived from holdings changes, not reported net subscriptions. The interface and CSV keep that estimate separate from Farside's reported ETF flow. No spot-volume or current-price proxy is substituted for missing flow. A corrected issuer snapshot suppresses an inconsistent archived USD estimate.
+
+Sources:
+- https://xoomar.com/markets/api/etf-flows — schema, attribution, methodology, 10 unauthenticated requests/minute.
+- https://farside.co.uk/bitcoin-etf-flow-all-data/ — historical reported ETF net flow table, USD millions.
+- https://www.ishares.com/us/products/333011/ishares-bitcoin-trust-etf/latest-holdings.csv — latest issuer disclosure; a date query parameter was tested and does **not** retrieve historical dates.
+
+Live server checks found XOOMAR accessible and Farside blocked with HTTP 403. The table therefore has real BTC history and estimated USD changes while reported net flow is unavailable on this network. Both providers cache successful responses for one hour, coalesce requests and honor provider cooldowns. Farside failures wait one hour; transient archive failures wait at least one minute. Archive requests allow 20 seconds for a slow response. There is no attempt to evade access controls or quotas.
+
+Issuer and archived BTC snapshots are persisted atomically under the web process's `.data/ibit/holdings.json` (git-ignored), capped at 2,000 dates. Set `IBIT_HISTORY_DIR` to an absolute path on a persistent volume for deployment. The archive is single-process; concurrent replicas must use distinct directories or a shared database. Capture happens on radar requests, not in an unattended scheduled worker. Historical rows remain readable when a provider fails; the source status remains visible. Provider USD estimates and reported flows are cached in memory, not written into that holdings archive. The first available holdings date has no change baseline; later changes show the exact previous disclosure date and never interpolate missing days.
+
+Date filters and CSV export include actual holdings, previous disclosure date, BTC delta, reported USD flow, derived USD estimate and holdings source. Missing values are empty CSV cells, not zero. Holdings and fund flows do not prove execution prices or gross purchases. BlackRock wallet transfers currently have no verified, keyless ingestion source in this installation; the interface marks them unavailable and links to Arkham for inspecting its attributed entity. No wallet ownership is fabricated.

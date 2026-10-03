@@ -87,3 +87,11 @@ After the follow-up production build, the development web service was restarted.
 The live smoke check passed at 09:58:52 Jakarta: 500 spot aggregates, 200 hourly
 bars, 100 SEC filings (live), 25 RSS articles, issuer holdings dated October 1,
 and five sampled Bitcoin transfers. Funding/OI remained explicitly unavailable.
+
+## IBIT dated activity — 2026-10-03
+
+- `pnpm test`: 46/46 pass, including reported-flow parsing, holdings gaps, issuer correction consistency, concurrent local archiving and restart reads.
+- `pnpm typecheck`, `pnpm lint`, production web build and `git diff --check`: pass.
+- `pnpm smoke:live`, 2026-10-03 05:32:04 UTC: pass. 30 actual IBIT disclosure rows; latest 2026-10-01 holdings 803,343.0541 BTC versus 801,033.4265 BTC on 2026-09-30. Net BTC change 2,309.6276, provider-derived USD estimate 195,127,674.53. Reported ETF flow remains null because Farside returned HTTP 403. XOOMAR cached successfully and local archive read/write succeeded.
+- Live regression checks also obtained 500 spot trades, 200 native hourly candles, 100 SEC filings, 7 sampled mempool transfers and 25 RSS posts. Derivative providers were accessible in this run; availability can change.
+- Browser terminal loaded, but attempts to select the ETF tab and obtain the updated DOM repeatedly timed out in the browser CDP control. Visual layout, date-control interaction and downloaded CSV could not be verified through the browser in this run. The API and calculation tests passed; there is no fabricated screenshot proof.

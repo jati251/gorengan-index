@@ -1,3 +1,4 @@
+import type { EtfActivity } from "@/lib/server/etfActivity";
 import type { SourceState } from "@/lib/server/publicData";
 export type WhaleCategory = "INSTITUTION" | "EXCHANGE" | "GOVERNMENT" | "FOUNDER" | "CORPORATE" | "UNATTRIBUTED";
 export interface EtfQuote {
@@ -31,7 +32,7 @@ export interface WhaleRadarData {
     ibit: EtfQuote; allEtfs: EtfQuote[]; totalBtcReserves: number | null; totalAumUsd: number | null;
     totalBtcSupplySharePercent: number | null; fiveDayNetFlowUsd: number | null;
     institutionalSignal: "UNAVAILABLE"; recentFlows: DailyEtfFlow[];
-    holdingsAsOf: string | null;
+    holdingsAsOf: string | null; activity: EtfActivity;
   };
   whaleEntities: WhaleEntity[]; recentLargeTxs: WhaleTransaction[];
   commodities: { allCommodities: CommodityQuote[]; goldSilverRatio: number | null };

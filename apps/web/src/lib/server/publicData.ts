@@ -23,7 +23,7 @@ export class PublicDataClient {
 
   async read<T>(url: string, options: {
     source: string; ttlMs: number; maxStaleMs?: number; intervalMs?: number;
-    headers?: Record<string, string>; parse: (text: string) => T;
+    timeoutMs?: number; failureRetryMs?: number; headers?: Record<string, string>; parse: (text: string) => T;
   }): Promise<PublicResult<T>> {
     const now = this.clock();
     const key = url;
@@ -68,7 +68,7 @@ export class PublicDataClient {
           await this.wait(Math.max(0, gate.nextAt - this.clock()));
           if (gate.blockedUntil > this.clock()) throw new Error("Provider cooldown active");
           gate.nextAt = this.clock() + (options.intervalMs ?? 350);
-          response = await this.transport(url, { cache: "no-store", headers: options.headers, signal: AbortSignal.timeout(8000), redirect: "error" });
+          response = await this.transport(url, { cache: "no-store", headers: options.headers, signal: AbortSignal.timeout(options.timeoutMs ?? 8000), redirect: "error" });
           if ([429, 418, 403, 503].includes(response.status)) {
             gate.blockedUntil = this.clock() + retryAfterMs(response.headers.get("retry-after"), this.clock());
           }
@@ -85,7 +85,7 @@ export class PublicDataClient {
         return result("live");
       } catch (error) {
         current.error = error instanceof Error ? error.message : "Provider request failed";
-        current.retryAt = Math.max(gate.blockedUntil, this.clock() + 30_000);
+        current.retryAt = Math.max(gate.blockedUntil, this.clock() + (options.failureRetryMs ?? 30_000));
         if (current.fetchedAt && this.clock() - current.fetchedAt <= (options.maxStaleMs ?? 0)) return result("stale");
         return { ...result("unavailable"), data: null };
       }
