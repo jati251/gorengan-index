@@ -20,6 +20,7 @@ import { DataState } from "@/components/ui/data-state";
 import { OhlcLegend, type OhlcData } from "./OhlcLegend";
 import { calculateEMA } from "../utils/indicators";
 import { RefreshCw } from "lucide-react";
+import { useTranslation } from "@/features/i18n";
 import {
   CHART_COLORS,
   createChartOptions,
@@ -68,6 +69,7 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
   const showEma20 = useMarketStore((s) => s.showEma20);
   const showEma50 = useMarketStore((s) => s.showEma50);
   const showVolume = useMarketStore((s) => s.showVolume);
+  const { dict } = useTranslation();
 
   const isFx = isFxSymbol(symbol);
   const isUs = isUsEquitySymbol(symbol);
@@ -626,7 +628,7 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
       {isLoadingOlder && (
         <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-3 py-1 rounded-full bg-zinc-900/90 border border-amber-500/40 text-[11px] font-mono font-semibold text-amber-400 backdrop-blur-md shadow-lg pointer-events-none animate-pulse">
           <RefreshCw size={12} className="animate-spin" />
-          <span>Memuat data lampau...</span>
+          <span>{dict.chart.loadingOlder}</span>
         </div>
       )}
 

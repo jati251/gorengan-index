@@ -153,7 +153,7 @@ export function CommoditiesRadarView({ data }: CommoditiesRadarViewProps) {
                   onClick={() => handleSelectSymbol("PAXG-USDT")}
                   className="px-2 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-[11px] font-medium flex items-center gap-1 cursor-pointer"
                 >
-                  <span>Buka</span>
+                  <span>{id ? "Buka" : "Open"}</span>
                   <ArrowUpRight size={11} />
                 </button>
               </div>
@@ -168,7 +168,7 @@ export function CommoditiesRadarView({ data }: CommoditiesRadarViewProps) {
                   onClick={() => handleSelectSymbol("US:GLD")}
                   className="px-2 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-[11px] font-medium flex items-center gap-1 cursor-pointer"
                 >
-                  <span>Buka</span>
+                  <span>{id ? "Buka" : "Open"}</span>
                   <ArrowUpRight size={11} />
                 </button>
               </div>
@@ -221,7 +221,7 @@ export function CommoditiesRadarView({ data }: CommoditiesRadarViewProps) {
                   onClick={() => handleSelectSymbol("US:SLV")}
                   className="px-2 py-1 rounded bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 text-[11px] font-medium flex items-center gap-1 cursor-pointer"
                 >
-                  <span>Buka</span>
+                  <span>{id ? "Buka" : "Open"}</span>
                   <ArrowUpRight size={11} />
                 </button>
               </div>
@@ -277,14 +277,14 @@ export function CommoditiesRadarView({ data }: CommoditiesRadarViewProps) {
               <div className="p-2.5 rounded-lg bg-zinc-950/60 border border-zinc-800/60 flex items-center justify-between">
                 <div>
                   <div className="font-bold text-zinc-200">US:USO (WTI Crude Oil)</div>
-                  <div className="text-[10px] text-zinc-500">Benchmark Minyak Mentah AS</div>
+                  <div className="text-[10px] text-zinc-500">{id ? "Benchmark Minyak Mentah AS" : "US Crude Oil Benchmark"}</div>
                 </div>
                 <button
                   type="button"
                   onClick={() => handleSelectSymbol("US:USO")}
                   className="px-2 py-1 rounded bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 text-[11px] font-medium flex items-center gap-1 cursor-pointer"
                 >
-                  <span>Buka</span>
+                  <span>{id ? "Buka" : "Open"}</span>
                   <ArrowUpRight size={11} />
                 </button>
               </div>
@@ -299,7 +299,7 @@ export function CommoditiesRadarView({ data }: CommoditiesRadarViewProps) {
                   onClick={() => handleSelectSymbol("US:XLE")}
                   className="px-2 py-1 rounded bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 text-[11px] font-medium flex items-center gap-1 cursor-pointer"
                 >
-                  <span>Buka</span>
+                  <span>{id ? "Buka" : "Open"}</span>
                   <ArrowUpRight size={11} />
                 </button>
               </div>
@@ -334,7 +334,7 @@ export function CommoditiesRadarView({ data }: CommoditiesRadarViewProps) {
                 <th className="py-2.5 px-3">Ticker / {id ? "Nama" : "Name"}</th>
                 <th className="py-2.5 px-3">{id ? "Jenis Aset" : "Asset Type"}</th>
                 <th className="py-2.5 px-3">{id ? "Harga Pasar" : "Market Price"}</th>
-                <th className="py-2.5 px-3">24h Change</th>
+                <th className="py-2.5 px-3">{id ? "Perubahan 24j" : "24h Change"}</th>
                 <th className="py-2.5 px-3">Volume</th>
                 <th className="py-2.5 px-3">{id ? "Penerbit & Kustodian" : "Issuer & Vault"}</th>
                 <th className="py-2.5 px-3 text-right">{id ? "Aksi" : "Action"}</th>

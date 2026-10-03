@@ -139,7 +139,7 @@ export function WhaleWalletsView({ data }: WhaleWalletsViewProps) {
                         <span>{whale.name}</span>
                         {whale.verified && (
                           <span className="text-amber-400 text-[10px] font-sans px-1 rounded bg-amber-500/10 border border-amber-500/20">
-                            ✓ Verified
+                            {id ? "✓ Terverifikasi" : "✓ Verified"}
                           </span>
                         )}
                       </div>
@@ -251,7 +251,7 @@ export function WhaleWalletsView({ data }: WhaleWalletsViewProps) {
                       <span className={`text-[10px] font-semibold px-1.5 py-0.2 rounded font-mono ${
                         isOutflow ? "text-rose-400 bg-rose-500/10" : isInflow ? "text-amber-400 bg-amber-500/10" : "text-blue-400 bg-blue-500/10"
                       }`}>
-                        {tx.type}
+                        {tx.type === "OUTFLOW" ? (id ? "KELUAR" : "OUTFLOW") : tx.type === "INFLOW" ? (id ? "MASUK" : "INFLOW") : (id ? "TRANSFER" : "TRANSFER")}
                       </span>
                     </div>
 
@@ -260,7 +260,7 @@ export function WhaleWalletsView({ data }: WhaleWalletsViewProps) {
                       <span>·</span>
                       <span>{new Date(tx.timestamp).toLocaleTimeString()}</span>
                       <span>·</span>
-                      <span>Fee: {tx.feeBtc.toFixed(5)} BTC</span>
+                      <span>{id ? "Biaya" : "Fee"}: {tx.feeBtc.toFixed(5)} BTC</span>
                     </div>
                   </div>
                 </div>

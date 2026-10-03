@@ -260,6 +260,7 @@ export const en: TranslationSchema = {
       high24h: "24h High:",
       low24h: "24h Low:",
     },
+    loadingOlder: "Loading historical data...",
   },
   login: {
     backToMarkets: "Back to markets",

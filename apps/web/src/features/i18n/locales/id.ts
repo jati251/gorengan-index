@@ -260,6 +260,7 @@ export const id: TranslationSchema = {
       high24h: "Tertinggi 24j:",
       low24h: "Terendah 24j:",
     },
+    loadingOlder: "Memuat data lampau...",
   },
   login: {
     backToMarkets: "Kembali ke pasar",

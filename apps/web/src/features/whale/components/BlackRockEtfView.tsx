@@ -104,7 +104,7 @@ export function BlackRockEtfView({ data }: BlackRockEtfViewProps) {
 
             <div className="border-l border-zinc-800 pl-4">
               <div className="text-[11px] font-mono uppercase text-zinc-500">
-                24h Change
+                {id ? "Perubahan 24j" : "24h Change"}
               </div>
               <div className={`text-base font-bold font-mono flex items-center gap-1 ${ibit.change24h >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
                 {ibit.change24h >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
@@ -204,7 +204,7 @@ export function BlackRockEtfView({ data }: BlackRockEtfViewProps) {
                   <th className="py-2.5 px-3">BlackRock (IBIT)</th>
                   <th className="py-2.5 px-3">Fidelity (FBTC)</th>
                   <th className="py-2.5 px-3">{id ? "Total Semua Spot ETF" : "Total All Spot ETFs"}</th>
-                  <th className="py-2.5 px-3 text-right">Harga BTC Ref</th>
+                  <th className="py-2.5 px-3 text-right">{id ? "Harga BTC Ref" : "BTC Ref Price"}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800/60 font-mono">
@@ -321,10 +321,10 @@ export function BlackRockEtfView({ data }: BlackRockEtfViewProps) {
                 <th className="py-2.5 px-3">Ticker / {id ? "Nama" : "Name"}</th>
                 <th className="py-2.5 px-3">{id ? "Penerbit" : "Issuer"}</th>
                 <th className="py-2.5 px-3">{id ? "Harga" : "Price"}</th>
-                <th className="py-2.5 px-3">24h Change</th>
+                <th className="py-2.5 px-3">{id ? "Perubahan 24j" : "24h Change"}</th>
                 <th className="py-2.5 px-3">{id ? "Cadangan BTC" : "BTC Held"}</th>
                 <th className="py-2.5 px-3">AUM (USD)</th>
-                <th className="py-2.5 px-3">Fee</th>
+                <th className="py-2.5 px-3">{id ? "Biaya" : "Fee"}</th>
                 <th className="py-2.5 px-3 text-right">{id ? "Aksi" : "Action"}</th>
               </tr>
             </thead>

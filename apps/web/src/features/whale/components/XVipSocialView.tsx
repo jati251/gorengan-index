@@ -119,7 +119,7 @@ export function XVipSocialView({ data }: XVipSocialViewProps) {
 
           <div className="text-[11px] text-zinc-400 mt-2 flex items-center justify-between">
             <span>{id ? "Konsensus Konglomerat & Dana Institusi" : "Institutional & Conglomerate Consensus"}</span>
-            <span className="text-emerald-400 font-semibold font-mono">Net Akumulasi</span>
+            <span className="text-emerald-400 font-semibold font-mono">{id ? "Net Akumulasi" : "Net Accumulation"}</span>
           </div>
         </div>
 
@@ -130,7 +130,7 @@ export function XVipSocialView({ data }: XVipSocialViewProps) {
               <Sparkles size={15} />
               <span>{id ? "Aset Paling Banyak Dibahas" : "Most Mentioned Assets"}</span>
             </span>
-            <span className="text-[10px] text-zinc-500 font-mono">{posts.length} Curated Signals</span>
+            <span className="text-[10px] text-zinc-500 font-mono">{posts.length} {id ? "Sinyal Terkurasi" : "Curated Signals"}</span>
           </div>
 
           <div className="flex flex-wrap gap-1.5 pt-1">
@@ -183,7 +183,7 @@ export function XVipSocialView({ data }: XVipSocialViewProps) {
               <ShieldCheck size={15} />
               <span>{id ? "Cakupan Radar Tokoh Kunci" : "Tracked VIP Roster"}</span>
             </span>
-            <span className="text-[10px] font-mono text-zinc-400">Tier-1 Curated</span>
+            <span className="text-[10px] font-mono text-zinc-400">{id ? "Terkurasi Tingkat 1" : "Tier-1 Curated"}</span>
           </div>
 
           <div className="text-xs text-zinc-300 leading-relaxed space-y-1">
@@ -192,7 +192,7 @@ export function XVipSocialView({ data }: XVipSocialViewProps) {
               <span className="font-semibold text-zinc-200">Elon Musk, Vitalik Buterin</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-zinc-400">Bitcoin Whales:</span>
+              <span className="text-zinc-400">{id ? "Paus Bitcoin:" : "Bitcoin Whales:"}</span>
               <span className="font-semibold text-zinc-200">Saylor, CZ, Whale Alert</span>
             </div>
             <div className="flex items-center justify-between">
@@ -242,7 +242,7 @@ export function XVipSocialView({ data }: XVipSocialViewProps) {
                 : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
             }`}
           >
-            Bitcoin Whales
+            {id ? "Paus Bitcoin" : "Bitcoin Whales"}
           </button>
           <button
             type="button"
@@ -488,7 +488,7 @@ function VipPostCard({ post, idLocale, onSelectAsset }: VipPostCardProps) {
               </div>
 
               <div className="text-[11px] text-zinc-400 leading-tight line-clamp-1">
-                {author.role} • <span className="text-zinc-500 font-mono">{author.followersCount} followers</span>
+                {author.role} • <span className="text-zinc-500 font-mono">{author.followersCount} {idLocale ? "pengikut" : "followers"}</span>
               </div>
             </div>
           </div>
@@ -536,7 +536,7 @@ function VipPostCard({ post, idLocale, onSelectAsset }: VipPostCardProps) {
             <span className="font-bold text-zinc-100">{signal.confidenceScore}%</span>
             {signal.impactLevel === "CRITICAL" && (
               <span className="px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[9px] font-bold">
-                HIGH IMPACT
+                {idLocale ? "DAMPAK TINGGI" : "HIGH IMPACT"}
               </span>
             )}
           </div>
@@ -553,15 +553,15 @@ function VipPostCard({ post, idLocale, onSelectAsset }: VipPostCardProps) {
       {/* Engagement Metrics & Interaction Footer */}
       <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between text-xs text-zinc-500 font-mono">
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5" title="Retweets">
+          <div className="flex items-center gap-1.5" title={idLocale ? "Retweet" : "Retweets"}>
             <Repeat2 size={13} className="text-zinc-500" />
             <span>{metrics.retweets.toLocaleString("en-US")}</span>
           </div>
-          <div className="flex items-center gap-1.5" title="Likes">
+          <div className="flex items-center gap-1.5" title={idLocale ? "Suka" : "Likes"}>
             <Heart size={13} className="text-rose-500/80" />
             <span>{metrics.likes.toLocaleString("en-US")}</span>
           </div>
-          <div className="flex items-center gap-1.5" title="Views">
+          <div className="flex items-center gap-1.5" title={idLocale ? "Dilihat" : "Views"}>
             <Eye size={13} className="text-zinc-500" />
             <span>{metrics.views}</span>
           </div>

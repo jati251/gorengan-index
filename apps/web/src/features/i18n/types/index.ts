@@ -234,6 +234,7 @@ export interface TranslationSchema {
       high24h: string;
       low24h: string;
     };
+    loadingOlder: string;
   };
   login: {
     backToMarkets: string;
