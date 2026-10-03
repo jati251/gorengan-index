@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   createChart,
   CandlestickSeries,
@@ -12,13 +12,14 @@ import {
   type HistogramData,
   type Time,
 } from "lightweight-charts";
-import { TIMEFRAME_MS } from "@gorengan/shared";
-import { useCandlesQuery } from "../api/useCandlesQuery";
+import { TIMEFRAME_MS, type Candle } from "@gorengan/shared";
+import { useCandlesQuery, fetchOlderCandles } from "../api/useCandlesQuery";
 import { useMarketStore } from "@/stores/marketStore";
 import { toLocalChartTime } from "@/utils/formatters";
 import { DataState } from "@/components/ui/data-state";
 import { OhlcLegend, type OhlcData } from "./OhlcLegend";
 import { calculateEMA } from "../utils/indicators";
+import { RefreshCw } from "lucide-react";
 import {
   CHART_COLORS,
   createChartOptions,
@@ -83,6 +84,18 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
     candlesDataRef.current = candlesData;
   }, [candlesData]);
 
+  const allCandlesRef = useRef<Candle[]>([]);
+  const isLoadingOlderRef = useRef<boolean>(false);
+  const hasMoreOlderRef = useRef<boolean>(true);
+  const [isLoadingOlder, setIsLoadingOlder] = useState<boolean>(false);
+
+  const symbolRef = useRef(symbol);
+  const timeframeRef = useRef(selectedTimeframe);
+  useEffect(() => {
+    symbolRef.current = symbol;
+    timeframeRef.current = selectedTimeframe;
+  }, [symbol, selectedTimeframe]);
+
   // OHLC overlay state on hover and streaming updates
   const [hoveredCandle, setHoveredCandle] = useState<OhlcData | null>(null);
   const [liveCandleState, setLiveCandleState] = useState<{
@@ -104,6 +117,100 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
       time: toLocalChartTime(last.openTime) as Time,
     };
   }, [candlesData]);
+
+  // Helper to format and render candles to Lightweight Chart series
+  const renderCandlesToSeries = useCallback((candles: Candle[], isInitial = false) => {
+    if (!candleSeriesRef.current || !volumeSeriesRef.current) {
+      return;
+    }
+
+    if (candles.length === 0) {
+      candleSeriesRef.current.setData([]);
+      volumeSeriesRef.current.setData([]);
+      ema20SeriesRef.current?.setData([]);
+      ema50SeriesRef.current?.setData([]);
+      return;
+    }
+
+    // Ensure sorted by time ascending
+    const sorted = [...candles].sort((a, b) => a.openTime - b.openTime);
+
+    // Deduplicate by second timestamp to satisfy Lightweight Charts strict monotonic ordering
+    const uniqueCandles = new Map<number, CandlestickData<Time>>();
+    const uniqueVolumes = new Map<number, HistogramData<Time>>();
+
+    for (const c of sorted) {
+      const time = toLocalChartTime(c.openTime);
+      uniqueCandles.set(time, {
+        time: time as Time,
+        open: c.open,
+        high: c.high,
+        low: c.low,
+        close: c.close,
+      });
+
+      uniqueVolumes.set(time, {
+        time: time as Time,
+        value: c.volume,
+        color: c.close >= c.open ? CHART_COLORS.volumeUp : CHART_COLORS.volumeDown,
+      });
+    }
+
+    const formattedCandles = Array.from(uniqueCandles.values()).sort(
+      (a, b) => Number(a.time) - Number(b.time)
+    );
+    const formattedVolumes = Array.from(uniqueVolumes.values()).sort(
+      (a, b) => Number(a.time) - Number(b.time)
+    );
+
+    // Derived from strictly sorted and unique candle list to guarantee monotonic EMA times
+    const closeData = formattedCandles.map((c) => ({
+      time: c.time,
+      close: c.close,
+    }));
+
+    try {
+      candleSeriesRef.current.setData(formattedCandles);
+      volumeSeriesRef.current.setData(formattedVolumes);
+
+      // Track active latest bar for live synthesizing
+      const lastFormatted = formattedCandles[formattedCandles.length - 1];
+      const lastRaw = sorted[sorted.length - 1];
+      if (lastFormatted && lastRaw) {
+        const bucketMs = TIMEFRAME_MS[timeframeRef.current] ?? 60_000;
+        const bucketStartMs = Math.floor(lastRaw.openTime / bucketMs) * bucketMs;
+        activeBarRef.current = {
+          bucketStartMs,
+          chartTime: lastFormatted.time,
+          open: lastFormatted.open,
+          high: lastFormatted.high,
+          low: lastFormatted.low,
+          close: lastFormatted.close,
+          volume: Number(formattedVolumes[formattedVolumes.length - 1]?.value ?? 0),
+        };
+      }
+
+      // Calculate and set EMAs
+      if (ema20SeriesRef.current) {
+        ema20SeriesRef.current.setData(calculateEMA(closeData, 20));
+      }
+      if (ema50SeriesRef.current) {
+        ema50SeriesRef.current.setData(calculateEMA(closeData, 50));
+      }
+
+      if (isInitial) {
+        // Prevent single fat candle stretching while keeping candles centered and in view
+        if (formattedCandles.length >= 30) {
+          chartRef.current?.timeScale().fitContent();
+        } else {
+          chartRef.current?.timeScale().applyOptions({ barSpacing: 12 });
+        }
+        chartRef.current?.timeScale().scrollToPosition(0, false);
+      }
+    } catch (err) {
+      console.warn("Error setting candle data:", err);
+    }
+  }, []);
 
   // Initialize Lightweight Chart on mount
   useEffect(() => {
@@ -203,7 +310,62 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
       }
     });
 
-    resizeObserver.observe(containerRef.current);
+    // Handle infinite scrolling / lazy load older candles when panning left
+    chart.timeScale().subscribeVisibleLogicalRangeChange(async (logicalRange) => {
+      if (!logicalRange) return;
+      if (
+        logicalRange.from < 15 &&
+        !isLoadingOlderRef.current &&
+        hasMoreOlderRef.current &&
+        allCandlesRef.current.length > 0
+      ) {
+        isLoadingOlderRef.current = true;
+        setIsLoadingOlder(true);
+
+        try {
+          const currentAll = allCandlesRef.current;
+          const oldestCandle = currentAll[0];
+          if (!oldestCandle) {
+            hasMoreOlderRef.current = false;
+            return;
+          }
+
+          const targetTo = oldestCandle.openTime - 1;
+          const olderResponse = await fetchOlderCandles(
+            symbolRef.current,
+            timeframeRef.current,
+            targetTo,
+            500
+          );
+
+          const olderCandles = olderResponse?.candles ?? [];
+          const strictlyOlder = olderCandles.filter((c) => c.openTime < oldestCandle.openTime);
+
+          if (strictlyOlder.length === 0) {
+            hasMoreOlderRef.current = false;
+          } else {
+            const combined = [...strictlyOlder, ...allCandlesRef.current];
+            const seen = new Set<number>();
+            const unique: Candle[] = [];
+            for (const c of combined) {
+              if (!seen.has(c.openTime)) {
+                seen.add(c.openTime);
+                unique.push(c);
+              }
+            }
+            unique.sort((a, b) => a.openTime - b.openTime);
+            allCandlesRef.current = unique;
+
+            renderCandlesToSeries(unique, false);
+          }
+        } catch (err) {
+          console.warn("Failed to load older historical candles:", err);
+        } finally {
+          isLoadingOlderRef.current = false;
+          setIsLoadingOlder(false);
+        }
+      }
+    });
 
     return () => {
       resizeObserver.disconnect();
@@ -231,91 +393,14 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
     }
 
     const candles = candlesData?.candles ?? [];
-    if (candles.length === 0) {
-      candleSeriesRef.current.setData([]);
-      volumeSeriesRef.current.setData([]);
-      ema20SeriesRef.current?.setData([]);
-      ema50SeriesRef.current?.setData([]);
-      return;
-    }
+    allCandlesRef.current = [...candles];
+    hasMoreOlderRef.current = true;
+    isLoadingOlderRef.current = false;
+    setIsLoadingOlder(false);
 
-    // Ensure sorted by time ascending
-    const sorted = [...candles].sort((a, b) => a.openTime - b.openTime);
+    renderCandlesToSeries(candles, true);
+  }, [candlesData, selectedTimeframe, renderCandlesToSeries]);
 
-    // Deduplicate by second timestamp to satisfy Lightweight Charts strict monotonic ordering
-    const uniqueCandles = new Map<number, CandlestickData<Time>>();
-    const uniqueVolumes = new Map<number, HistogramData<Time>>();
-
-    for (const c of sorted) {
-      const time = toLocalChartTime(c.openTime);
-      uniqueCandles.set(time, {
-        time: time as Time,
-        open: c.open,
-        high: c.high,
-        low: c.low,
-        close: c.close,
-      });
-
-      uniqueVolumes.set(time, {
-        time: time as Time,
-        value: c.volume,
-        color: c.close >= c.open ? CHART_COLORS.volumeUp : CHART_COLORS.volumeDown,
-      });
-    }
-
-    const formattedCandles = Array.from(uniqueCandles.values()).sort(
-      (a, b) => Number(a.time) - Number(b.time)
-    );
-    const formattedVolumes = Array.from(uniqueVolumes.values()).sort(
-      (a, b) => Number(a.time) - Number(b.time)
-    );
-
-    // Derived from strictly sorted and unique candle list to guarantee monotonic EMA times
-    const closeData = formattedCandles.map((c) => ({
-      time: c.time,
-      close: c.close,
-    }));
-
-    try {
-      candleSeriesRef.current.setData(formattedCandles);
-      volumeSeriesRef.current.setData(formattedVolumes);
-
-      // Track active latest bar for live synthesizing
-      const lastFormatted = formattedCandles[formattedCandles.length - 1];
-      const lastRaw = sorted[sorted.length - 1];
-      if (lastFormatted && lastRaw) {
-        const bucketMs = TIMEFRAME_MS[selectedTimeframe] ?? 60_000;
-        const bucketStartMs = Math.floor(lastRaw.openTime / bucketMs) * bucketMs;
-        activeBarRef.current = {
-          bucketStartMs,
-          chartTime: lastFormatted.time,
-          open: lastFormatted.open,
-          high: lastFormatted.high,
-          low: lastFormatted.low,
-          close: lastFormatted.close,
-          volume: Number(formattedVolumes[formattedVolumes.length - 1]?.value ?? 0),
-        };
-      }
-
-      // Calculate and set EMAs
-      if (ema20SeriesRef.current) {
-        ema20SeriesRef.current.setData(calculateEMA(closeData, 20));
-      }
-      if (ema50SeriesRef.current) {
-        ema50SeriesRef.current.setData(calculateEMA(closeData, 50));
-      }
-
-      // Prevent single fat candle stretching while keeping candles centered and in view
-      if (formattedCandles.length >= 30) {
-        chartRef.current?.timeScale().fitContent();
-      } else {
-        chartRef.current?.timeScale().applyOptions({ barSpacing: 12 });
-      }
-      chartRef.current?.timeScale().scrollToPosition(0, false);
-    } catch (err) {
-      console.warn("Error setting candle data:", err);
-    }
-  }, [candlesData, selectedTimeframe]);
 
   // Dynamically toggle secondsVisible and re-align view when switching to sub-minute timeframes
   useEffect(() => {
@@ -535,6 +620,14 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
           showEma50={showEma50}
           showVolume={showVolume}
         />
+      )}
+
+      {/* Background history fetch indicator */}
+      {isLoadingOlder && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-3 py-1 rounded-full bg-zinc-900/90 border border-amber-500/40 text-[11px] font-mono font-semibold text-amber-400 backdrop-blur-md shadow-lg pointer-events-none animate-pulse">
+          <RefreshCw size={12} className="animate-spin" />
+          <span>Memuat data lampau...</span>
+        </div>
       )}
 
       {isLoading ? (

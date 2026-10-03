@@ -14,3 +14,16 @@ export function useCandlesQuery(symbol: string, timeframe: Timeframe = "1m") {
     staleTime: 15 * 1000,
   });
 }
+
+export async function fetchOlderCandles(
+  symbol: string,
+  timeframe: Timeframe,
+  to: number,
+  limit: number = 500
+): Promise<CandlesResponse> {
+  return apiGet<CandlesResponse>(`/candles/${encodeURIComponent(symbol)}`, {
+    timeframe,
+    to,
+    limit,
+  });
+}

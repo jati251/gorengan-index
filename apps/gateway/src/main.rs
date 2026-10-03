@@ -1512,6 +1512,8 @@ struct CandlesQuery {
     interval: Option<String>,
     timeframe: Option<String>,
     limit: Option<u32>,
+    to: Option<i64>,
+    _from: Option<i64>,
 }
 
 #[derive(Serialize, Clone)]
@@ -1557,6 +1559,7 @@ async fn warmup_external_candles(
     inst: &Instrument,
     interval_str: &str,
     limit: u32,
+    to_ms: Option<i64>,
 ) -> Vec<CandleDto> {
     let (yf_interval, yf_range) = match interval_str {
         "1s" | "1m" => ("1m", if limit > 300 { "5d" } else { "1d" }),
@@ -1570,10 +1573,31 @@ async fn warmup_external_candles(
         _ => ("1m", "1d"),
     };
 
-    let url = format!(
-        "https://query1.finance.yahoo.com/v8/finance/chart/{}?interval={}&range={}",
-        inst.provider_symbol, yf_interval, yf_range
-    );
+    let dur_sec: i64 = match interval_str {
+        "1m" => 60,
+        "5m" => 300,
+        "15m" => 900,
+        "30m" => 1800,
+        "1h" => 3600,
+        "4h" => 14400,
+        "1d" => 86400,
+        "1w" => 604800,
+        _ => 60,
+    };
+
+    let url = if let Some(t_ms) = to_ms {
+        let period2 = t_ms / 1000;
+        let period1 = (period2 - (limit as i64 * dur_sec)).max(0);
+        format!(
+            "https://query1.finance.yahoo.com/v8/finance/chart/{}?interval={}&period1={}&period2={}",
+            inst.provider_symbol, yf_interval, period1, period2
+        )
+    } else {
+        format!(
+            "https://query1.finance.yahoo.com/v8/finance/chart/{}?interval={}&range={}",
+            inst.provider_symbol, yf_interval, yf_range
+        )
+    };
 
     let mut candles = Vec::new();
     if let Ok(res) = client.get(&url).send().await {
@@ -1697,10 +1721,22 @@ async fn handle_candles(
         _ => "candles_1m",
     };
 
+    // Timestamp filter for QuestDB:
+    let time_filter = match params.to {
+        Some(t_ms) => {
+            if let Some(dt) = chrono::DateTime::from_timestamp_millis(t_ms) {
+                format!(" AND timestamp < '{}'", dt.format("%Y-%m-%dT%H:%M:%S%.3fZ"))
+            } else {
+                String::new()
+            }
+        }
+        None => String::new(),
+    };
+
     // Query QuestDB HTTP SQL endpoint:
     let sql = format!(
-        "SELECT cast(timestamp as long) * 1000, open, high, low, close, volume, trade_count FROM {} WHERE instrument = '{}' ORDER BY timestamp DESC LIMIT {}",
-        table, instrument, limit
+        "SELECT cast(timestamp as long) * 1000, open, high, low, close, volume, trade_count FROM {} WHERE instrument = '{}'{} ORDER BY timestamp DESC LIMIT {}",
+        table, instrument, time_filter, limit
     );
 
     let mut dtos = Vec::new();
@@ -1736,7 +1772,7 @@ async fn handle_candles(
                                     provider: matching_inst.map(|i| i.provider.as_str()).unwrap_or("binance").to_string(),
                                     price_basis: if is_fx { Some("mid".into()) } else { Some("trade".into()) },
                                     spread_close: None,
-                                });
+                                    });
                             }
                         }
                     }
@@ -1750,7 +1786,7 @@ async fn handle_candles(
     if is_fx || is_equity {
         if dtos.len() < 30 {
             if let Some(inst) = matching_inst {
-                let warmup = warmup_external_candles(&state.http_client, inst, &interval_str, limit).await;
+                let warmup = warmup_external_candles(&state.http_client, inst, &interval_str, limit, params.to).await;
                 if !warmup.is_empty() {
                     dtos = warmup;
                 }
@@ -1775,11 +1811,15 @@ async fn handle_candles(
                 "1w" => "1w",
                 _ => "1m",
             };
-            let warmup_limit = limit.clamp(100, 300);
-            let url = format!(
+            let warmup_limit = limit.clamp(100, 1000);
+            let mut url = format!(
                 "https://data-api.binance.vision/api/v3/klines?symbol={}&interval={}&limit={}",
                 binance_symbol, binance_interval, warmup_limit
             );
+            if let Some(to_ms) = params.to {
+                url.push_str(&format!("&endTime={}", to_ms));
+            }
+
             if let Ok(res) = state.http_client.get(&url).send().await {
                 if res.status().is_success() {
                     if let Ok(kline_array) = res.json::<Vec<serde_json::Value>>().await {

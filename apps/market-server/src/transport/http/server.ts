@@ -126,12 +126,14 @@ export function createHttpServer(
         if (candles.length === 0) {
           try {
             const now = Date.now();
-            const seedFrom = from ?? (now - Math.min(limit, 500) * 60000);
+            const seedTo = to ?? now;
+            const durMs = timeframeToMs(timeframe);
+            const seedFrom = from ?? (seedTo - Math.min(limit, 500) * (durMs || 60000));
             const liveCandles = await provider.getHistoricalCandles({
               symbol,
               timeframe: "1m",
               from: seedFrom,
-              to: to ?? now,
+              to: seedTo,
             });
             if (liveCandles.length > 0) {
               repository.saveCandles(liveCandles);
