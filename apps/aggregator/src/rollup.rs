@@ -5,6 +5,7 @@ pub struct RollupEngine {
     open_1m: HashMap<InstrumentId, Candle>,
     open_1h: HashMap<InstrumentId, Candle>,
     open_1d: HashMap<InstrumentId, Candle>,
+    open_extra: HashMap<(Interval, InstrumentId), Candle>,
 }
 
 #[derive(Debug, Default)]
@@ -13,7 +14,19 @@ pub struct RollupResult {
     pub finalized_1h: Option<Candle>,
     pub finalized_1d: Option<Candle>,
     pub active_1m: Option<Candle>,
+    pub finalized_extra: Vec<Candle>,
+    pub active_extra: Vec<Candle>,
 }
+
+const EXTRA_INTERVALS: [Interval; 7] = [
+    Interval::Sec5,
+    Interval::Sec15,
+    Interval::Sec30,
+    Interval::Min5,
+    Interval::Min15,
+    Interval::Min30,
+    Interval::Hour4,
+];
 
 impl RollupEngine {
     pub fn new() -> Self {
@@ -21,12 +34,49 @@ impl RollupEngine {
             open_1m: HashMap::new(),
             open_1h: HashMap::new(),
             open_1d: HashMap::new(),
+            open_extra: HashMap::new(),
         }
     }
 
-    /// Ingest a finalized 1-second candle and rollup into 1m, 1h, and 1d candles
+    fn ingest_extra_interval(&mut self, interval: Interval, candle_1s: &Candle, result: &mut RollupResult) {
+        let bucket_start = interval.bucket_start_ns(candle_1s.open_time_ns);
+        let key = (interval, candle_1s.instrument.clone());
+
+        if let Some(open) = self.open_extra.get_mut(&key) {
+            if bucket_start == open.open_time_ns {
+                open.merge(candle_1s);
+                result.active_extra.push(open.clone());
+            } else if bucket_start > open.open_time_ns {
+                let mut finished = open.clone();
+                finished.finalized = true;
+                result.finalized_extra.push(finished);
+
+                let mut next = candle_1s.clone();
+                next.interval = interval;
+                next.open_time_ns = bucket_start;
+                next.close_time_ns = interval.bucket_end_ns(candle_1s.open_time_ns);
+                next.finalized = false;
+                *open = next.clone();
+                result.active_extra.push(next);
+            }
+        } else {
+            let mut next = candle_1s.clone();
+            next.interval = interval;
+            next.open_time_ns = bucket_start;
+            next.close_time_ns = interval.bucket_end_ns(candle_1s.open_time_ns);
+            next.finalized = false;
+            self.open_extra.insert(key, next.clone());
+            result.active_extra.push(next);
+        }
+    }
+
+    /// Ingest a finalized 1-second candle and rollup into 5s, 15s, 30s, 1m, 5m, 15m, 30m, 1h, 4h, and 1d candles
     pub fn ingest_1s_candle(&mut self, candle_1s: &Candle) -> RollupResult {
         let mut result = RollupResult::default();
+
+        for &interval in &EXTRA_INTERVALS {
+            self.ingest_extra_interval(interval, candle_1s, &mut result);
+        }
 
         // 1m Rollup
         let bucket_1m_start = Interval::Min1.bucket_start_ns(candle_1s.open_time_ns);

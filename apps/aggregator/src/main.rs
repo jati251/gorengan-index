@@ -222,4 +222,26 @@ async fn handle_rollup_results(
             let _ = nats.publish(subject, bytes.into()).await;
         }
     }
+
+    if let Some(active_1m) = &res.active_1m {
+        let subject = NatsSubjects::candle(Interval::Min1, &active_1m.instrument);
+        if let Ok(bytes) = serde_json::to_vec(&MarketMessage::Candle(active_1m.clone())) {
+            let _ = nats.publish(subject, bytes.into()).await;
+        }
+    }
+
+    for extra in &res.finalized_extra {
+        questdb.enqueue(extra.clone()).await;
+        let subject = NatsSubjects::candle(extra.interval, &extra.instrument);
+        if let Ok(bytes) = serde_json::to_vec(&MarketMessage::Candle(extra.clone())) {
+            let _ = nats.publish(subject, bytes.into()).await;
+        }
+    }
+
+    for active in &res.active_extra {
+        let subject = NatsSubjects::candle(active.interval, &active.instrument);
+        if let Ok(bytes) = serde_json::to_vec(&MarketMessage::Candle(active.clone())) {
+            let _ = nats.publish(subject, bytes.into()).await;
+        }
+    }
 }

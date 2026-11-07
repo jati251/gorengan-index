@@ -166,7 +166,7 @@ export class YahooMarketProvider extends EventEmitter implements MarketProvider 
 
         // Skip incomplete or null bars
         if (o == null || h == null || l == null || c == null || ![o,h,l,c,v].every(Number.isFinite) || l <= 0 || l > Math.min(o,c) || h < Math.max(o,c) || v < 0) continue;
-        if (t < params.from || t > params.to) continue;
+        if ((isHistoricalScroll && t < params.from) || t > params.to) continue;
 
         candles.push({
           symbol: params.symbol,
@@ -394,13 +394,14 @@ export class YahooMarketProvider extends EventEmitter implements MarketProvider 
       case "15s":
       case "30s":
       case "1m":
+        return "5d";
       case "5m":
       case "15m":
       case "30m":
-        return "5d";
       case "1h":
-      case "4h":
         return "1mo";
+      case "4h":
+        return "3mo";
       case "1d":
         return "1y";
       case "1w":

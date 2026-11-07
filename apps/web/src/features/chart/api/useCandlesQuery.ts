@@ -93,9 +93,9 @@ function synthesizeCandlesFromCache(
   for (let i = 0; i < candidates.length; i++) {
     const sourceTf = candidates[i];
     const cached = queryClient.getQueryData<CandlesResponse>(getCandlesQueryKey(symbol, sourceTf));
-    if (cached && cached.candles && cached.candles.length >= 5) {
+    if (cached && cached.candles && cached.candles.length >= 10) {
       const rolledUp = rollupCandlesClient(cached.candles, timeframe, targetMs);
-      if (rolledUp.length > 0) {
+      if (rolledUp.length >= 5) {
         return {
           symbol,
           timeframe,
@@ -114,8 +114,11 @@ export function prefetchCandles(
   timeframe: Timeframe
 ): void {
   if (!symbol) return;
-  const existingState = queryClient.getQueryState(getCandlesQueryKey(symbol, timeframe));
+  const key = getCandlesQueryKey(symbol, timeframe);
+  const existingState = queryClient.getQueryState(key);
+  const existingData = queryClient.getQueryData<CandlesResponse>(key);
   if (
+    existingData?.candles?.length &&
     existingState?.dataUpdatedAt &&
     Date.now() - existingState.dataUpdatedAt < 30_000
   ) {
@@ -123,7 +126,7 @@ export function prefetchCandles(
   }
 
   void queryClient.prefetchQuery({
-    queryKey: getCandlesQueryKey(symbol, timeframe),
+    queryKey: key,
     queryFn: () =>
       apiGet<CandlesResponse>(`/candles/${encodeURIComponent(symbol)}`, {
         timeframe,
@@ -144,7 +147,7 @@ function scheduleAdjacentTimeframeWarmup(
   warmedSymbolTimeframes.set(symbol, now);
 
   const isCrypto = symbol.endsWith("USDT") && !symbol.includes(":");
-  const listToWarm: Timeframe[] = isCrypto && SUBMINUTE_PREFETCH_TIMEFRAMES.includes(activeTimeframe)
+  const listToWarm: Timeframe[] = isCrypto
     ? [...SUBMINUTE_PREFETCH_TIMEFRAMES, ...CORE_PREFETCH_TIMEFRAMES]
     : [...CORE_PREFETCH_TIMEFRAMES];
 

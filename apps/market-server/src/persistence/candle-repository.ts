@@ -97,7 +97,18 @@ export class CandleRepository {
       if (candle.openTime > last.openTime) {
         list.push(candle);
       } else if (candle.openTime === last.openTime) {
-        list[len - 1] = candle;
+        if (last.volume > candle.volume) {
+          list[len - 1] = {
+            ...candle,
+            open: last.open,
+            high: Math.max(last.high, candle.high),
+            low: Math.min(last.low, candle.low),
+            volume: Math.max(last.volume, candle.volume),
+            trades: Math.max(last.trades ?? 0, candle.trades ?? 0),
+          };
+        } else {
+          list[len - 1] = candle;
+        }
       } else {
         // Binary search for insertion / replacement index
         let lo = 0;
@@ -174,6 +185,12 @@ export class CandleRepository {
     return candles.length > 0 ? candles[candles.length - 1] : null;
   }
 
+  public getExactLatestCandle(symbol: string, timeframe: Timeframe = "1m"): Candle | null {
+    const exact = this.candleCache.get(`${symbol}:${timeframe}`);
+    if (!exact || exact.length === 0) return null;
+    return exact[exact.length - 1];
+  }
+
   public getCandles(
     symbol: string,
     timeframe: Timeframe = "1m",
@@ -183,28 +200,44 @@ export class CandleRepository {
   ): Candle[] {
     const exact = this.candleCache.get(`${symbol}:${timeframe}`);
     const tfMs = timeframeToMs(timeframe);
-    const list =
-      exact ??
-      (tfMs >= 60000
+    const filterRange = (bars: Candle[]) =>
+      from !== undefined || to !== undefined
+        ? bars.filter(
+            (c) => (from === undefined || c.openTime >= from) && (to === undefined || c.openTime <= to)
+          )
+        : bars;
+
+    if (exact && (exact.length >= 20 || timeframe === "1m" || timeframe === "1s")) {
+      return filterRange(exact).slice(-limit);
+    }
+
+    const baseSource =
+      tfMs >= 60_000
         ? this.candleCache.get(`${symbol}:1m`) ?? []
-        : tfMs > 1000
+        : tfMs > 1_000
           ? this.candleCache.get(`${symbol}:1s`) ?? []
-          : []);
-    if (list.length === 0) return [];
+          : [];
 
-    let filtered = list;
-
-    if (from !== undefined || to !== undefined) {
-      filtered = list.filter(
-        (c) => (from === undefined || c.openTime >= from) && (to === undefined || c.openTime <= to)
-      );
+    if (baseSource.length === 0) {
+      return exact ? filterRange(exact).slice(-limit) : [];
     }
 
-    if (exact || timeframe === "1m" || timeframe === "1s") {
-      return filtered.slice(-limit);
+    const rolledUp = this.aggregateCandles(filterRange(baseSource), timeframe, tfMs);
+    if (!exact || exact.length === 0) {
+      return rolledUp.slice(-limit);
     }
 
-    return this.aggregateCandles(filtered, timeframe, tfMs).slice(-limit);
+    // Merge rolled-up base bars with any exact bars
+    const mergedMap = new Map<number, Candle>();
+    for (const c of rolledUp) {
+      mergedMap.set(c.openTime, c);
+    }
+    for (const c of filterRange(exact)) {
+      mergedMap.set(c.openTime, c);
+    }
+    return Array.from(mergedMap.values())
+      .sort((a, b) => a.openTime - b.openTime)
+      .slice(-limit);
   }
 
   private aggregateCandles(

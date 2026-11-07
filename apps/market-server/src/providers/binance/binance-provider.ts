@@ -172,6 +172,27 @@ export class BinanceProvider extends EventEmitter implements MarketProvider {
     }
   }
 
+  private async fetchRawKlinesPage(
+    binanceSymbol: string,
+    interval: string,
+    endTime: number,
+    limit: number,
+    priority: "high" | "normal" | "low"
+  ): Promise<(string | number)[][]> {
+    const url = `${config.BINANCE_REST_URL}/api/v3/klines?symbol=${binanceSymbol}&interval=${interval}&endTime=${endTime}&limit=${limit}`;
+    const response = await publicFetch(url, {
+      priority,
+      headers: { "User-Agent": "GorenganTerminal/1.0" },
+    });
+
+    if (response.status !== 200) {
+      const bodyText = await response.text();
+      throw new Error(`Binance REST klines HTTP ${response.status}: ${bodyText}`);
+    }
+
+    return (await response.json()) as (string | number)[][];
+  }
+
   public async getHistoricalCandles(params: {
     symbol: string;
     timeframe: Timeframe;
@@ -185,33 +206,46 @@ export class BinanceProvider extends EventEmitter implements MarketProvider {
 
     const binanceSymbol = toBinanceSymbol(params.symbol);
     const interval = this.mapTimeframeToBinance(params.timeframe);
-
-    // Endpoint: /api/v3/klines?symbol=...&interval=...&startTime=...&endTime=...&limit=1000
-    const url = `${config.BINANCE_REST_URL}/api/v3/klines?symbol=${binanceSymbol}&interval=${interval}&startTime=${params.from}&endTime=${params.to}&limit=1000`;
+    const priority = params.priority ?? "high";
+    const isSubMinuteRollup = ["5s", "15s", "30s"].includes(params.timeframe);
 
     try {
-      const response = await publicFetch(url, {
-        priority: params.priority ?? "high",
-        headers: { "User-Agent": "GorenganTerminal/1.0" },
-      });
-
-      if (response.status !== 200) {
-        const bodyText = await response.text();
-        throw new Error(
-          `Binance REST klines HTTP ${response.status}: ${bodyText}`
-        );
+      let raw: (string | number)[][];
+      if (isSubMinuteRollup) {
+        // Fetch up to 3 contiguous 1,000-second windows ending at params.to in parallel
+        // so 5s gets ~600 bars, 15s gets ~200 bars, and 30s gets ~100 bars ending right at now.
+        const pages = await Promise.allSettled([
+          this.fetchRawKlinesPage(binanceSymbol, "1s", params.to - 2_000_000, 1000, "low"),
+          this.fetchRawKlinesPage(binanceSymbol, "1s", params.to - 1_000_000, 1000, "normal"),
+          this.fetchRawKlinesPage(binanceSymbol, "1s", params.to, 1000, priority),
+        ]);
+        raw = [];
+        for (const p of pages) {
+          if (p.status === "fulfilled" && Array.isArray(p.value)) {
+            raw.push(...p.value);
+          }
+        }
+      } else {
+        raw = await this.fetchRawKlinesPage(binanceSymbol, interval, params.to, 1000, priority);
       }
 
-      const raw = (await response.json()) as (string | number)[][];
+      if (raw.length === 0) {
+        return [];
+      }
+
       const now = Date.now();
-      const candles: Candle[] = new Array(raw.length);
+      const seenOpenTimes = new Set<number>();
+      const candles: Candle[] = [];
       for (let i = 0; i < raw.length; i++) {
         const k = raw[i];
+        const openTime = Number(k[0]);
+        if (seenOpenTimes.has(openTime)) continue;
+        seenOpenTimes.add(openTime);
         const closeTime = Number(k[6]);
-        candles[i] = {
+        candles.push({
           symbol: params.symbol,
-          timeframe: params.timeframe,
-          openTime: Number(k[0]),
+          timeframe: isSubMinuteRollup ? "1s" : params.timeframe,
+          openTime,
           closeTime,
           open: parseFloat(String(k[1])),
           high: parseFloat(String(k[2])),
@@ -221,12 +255,13 @@ export class BinanceProvider extends EventEmitter implements MarketProvider {
           trades: Number(k[8]),
           finalized: closeTime < now,
           provider: "binance",
-        };
+        });
       }
 
-      if (["5s", "15s", "30s"].includes(params.timeframe)) {
+      candles.sort((a, b) => a.openTime - b.openTime);
+
+      if (isSubMinuteRollup) {
         const duration = Number.parseInt(params.timeframe, 10) * 1000;
-        const expectedBars = duration / 1000;
         const groups = new Map<number, Candle[]>();
         for (let i = 0; i < candles.length; i++) {
           const candle = candles[i];
@@ -245,17 +280,16 @@ export class BinanceProvider extends EventEmitter implements MarketProvider {
           let low = first.low;
           let volume = 0;
           let trades = 0;
-          let allFinalized = bars.length === expectedBars;
           for (let j = 0; j < bars.length; j++) {
             const b = bars[j];
             if (b.high > high) high = b.high;
             if (b.low < low) low = b.low;
             volume += b.volume;
             trades += b.trades ?? 0;
-            if (!b.finalized) allFinalized = false;
           }
           aggregated.push({
             ...first,
+            timeframe: params.timeframe,
             openTime: time,
             closeTime: time + duration - 1,
             close: bars[bars.length - 1].close,
@@ -263,7 +297,7 @@ export class BinanceProvider extends EventEmitter implements MarketProvider {
             low,
             volume,
             trades,
-            finalized: allFinalized,
+            finalized: time + duration <= now,
           });
         }
         return aggregated;

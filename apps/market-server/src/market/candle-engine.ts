@@ -72,12 +72,12 @@ export class CandleEngine extends EventEmitter {
       current = undefined;
     }
 
-    if (!current) {
-      const seeded =
-        timeframe !== "1s" && this.repository.getExactCacheCount(trade.symbol, timeframe) > 0
-          ? this.repository.getLatestCandle(trade.symbol, timeframe)
-          : null;
+    const seeded =
+      timeframe !== "1s"
+        ? this.repository.getExactLatestCandle(trade.symbol, timeframe)
+        : null;
 
+    if (!current) {
       if (seeded && seeded.openTime === bucketOpen) {
         current = {
           ...seeded,
@@ -107,11 +107,20 @@ export class CandleEngine extends EventEmitter {
       }
       this.activeCandles.set(key, current);
     } else {
-      if (trade.price > current.high) current.high = trade.price;
-      if (trade.price < current.low) current.low = trade.price;
-      current.close = trade.price;
-      current.volume += trade.quantity;
-      current.trades = (current.trades ?? 0) + 1;
+      if (seeded && seeded.openTime === bucketOpen && seeded.volume > current.volume) {
+        current.open = seeded.open;
+        current.high = Math.max(current.high, seeded.high, trade.price);
+        current.low = Math.min(current.low, seeded.low, trade.price);
+        current.close = trade.price;
+        current.volume = seeded.volume + trade.quantity;
+        current.trades = Math.max(current.trades ?? 0, seeded.trades ?? 0) + 1;
+      } else {
+        if (trade.price > current.high) current.high = trade.price;
+        if (trade.price < current.low) current.low = trade.price;
+        current.close = trade.price;
+        current.volume += trade.quantity;
+        current.trades = (current.trades ?? 0) + 1;
+      }
     }
 
     this.emit("candle:update", { ...current });
@@ -150,6 +159,8 @@ export class CandleEngine extends EventEmitter {
       if (
         candle.timeframe === "1m" ||
         candle.timeframe === "1s" ||
+        candle.timeframe === "5s" ||
+        candle.timeframe === "15s" ||
         this.repository.getExactCacheCount(candle.symbol, candle.timeframe) > 0
       ) {
         this.repository.saveCandle(candle);

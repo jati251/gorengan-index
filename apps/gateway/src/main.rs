@@ -1547,6 +1547,133 @@ struct CandlesResponse {
     candles: Vec<CandleDto>,
 }
 
+fn interval_duration_ms(interval_str: &str) -> i64 {
+    match interval_str {
+        "1s" => 1_000,
+        "5s" => 5_000,
+        "15s" => 15_000,
+        "30s" => 30_000,
+        "1m" => 60_000,
+        "5m" => 300_000,
+        "15m" => 900_000,
+        "30m" => 1_800_000,
+        "1h" => 3_600_000,
+        "4h" => 14_400_000,
+        "1d" => 86_400_000,
+        "1w" => 604_800_000,
+        _ => 60_000,
+    }
+}
+
+fn aggregate_candle_dtos(bars: &[CandleDto], bucket_ms: i64, target_tf: &str) -> Vec<CandleDto> {
+    if bars.is_empty() || bucket_ms <= 0 {
+        return Vec::new();
+    }
+
+    let now_ms = Utc::now().timestamp_millis();
+    let mut aggregated: Vec<CandleDto> = Vec::new();
+
+    for c in bars {
+        let bucket_open = (c.open_time / bucket_ms) * bucket_ms;
+        if let Some(last) = aggregated.last_mut() {
+            if last.open_time == bucket_open {
+                if c.high > last.high {
+                    last.high = c.high;
+                }
+                if c.low < last.low {
+                    last.low = c.low;
+                }
+                last.close = c.close;
+                last.volume += c.volume;
+                last.trades += c.trades;
+                last.finalized = bucket_open + bucket_ms <= now_ms;
+                continue;
+            }
+        }
+
+        aggregated.push(CandleDto {
+            symbol: c.symbol.clone(),
+            timeframe: target_tf.to_string(),
+            open_time: bucket_open,
+            close_time: bucket_open + bucket_ms - 1,
+            open: c.open,
+            high: c.high,
+            low: c.low,
+            close: c.close,
+            volume: c.volume,
+            trades: c.trades,
+            finalized: bucket_open + bucket_ms <= now_ms,
+            provider: c.provider.clone(),
+            price_basis: c.price_basis.clone(),
+            spread_close: c.spread_close,
+        });
+    }
+
+    aggregated
+}
+
+fn merge_live_candle_into_dtos(
+    dtos: &mut Vec<CandleDto>,
+    candles_lock: &HashMap<String, Candle>,
+    instrument: &str,
+    interval_str: &str,
+    is_fx: bool,
+) {
+    let bucket_ms = interval_duration_ms(interval_str);
+    let direct_key = format!("{}:{}", interval_str, instrument);
+    let fallback_1s_key = format!("1s:{}", instrument);
+    let fallback_1m_key = format!("1m:{}", instrument);
+
+    let live_candle = candles_lock
+        .get(&direct_key)
+        .or_else(|| candles_lock.get(&fallback_1s_key))
+        .or_else(|| candles_lock.get(&fallback_1m_key));
+
+    let Some(c) = live_candle else {
+        return;
+    };
+
+    let raw_open_ms = c.open_time_ns / 1_000_000;
+    let bucket_open_ms = (raw_open_ms / bucket_ms) * bucket_ms;
+    let open = c.open.to_f64().unwrap_or(0.0);
+    let high = c.high.to_f64().unwrap_or(0.0);
+    let low = c.low.to_f64().unwrap_or(0.0);
+    let close = c.close.to_f64().unwrap_or(0.0);
+    let volume = c.volume.to_f64().unwrap_or(0.0);
+
+    if let Some(last) = dtos.last_mut() {
+        if last.open_time == bucket_open_ms {
+            last.high = last.high.max(high);
+            last.low = last.low.min(low);
+            last.close = close;
+            if c.interval.as_str() == interval_str {
+                last.volume = last.volume.max(volume);
+            }
+            last.finalized = false;
+            return;
+        } else if bucket_open_ms < last.open_time {
+            return;
+        }
+    }
+
+    dtos.push(CandleDto {
+        symbol: instrument.to_string(),
+        timeframe: interval_str.to_string(),
+        open_time: bucket_open_ms,
+        close_time: bucket_open_ms + bucket_ms - 1,
+        open,
+        high,
+        low,
+        close,
+        volume,
+        trades: c.trade_count,
+        finalized: false,
+        provider: c.provider.to_string(),
+        price_basis: if is_fx { Some("mid".into()) } else { Some("trade".into()) },
+        spread_close: None,
+    });
+}
+
 async fn handle_candles_path(
     Path(instrument): Path<String>,
     State(state): State<AppState>,
@@ -1564,28 +1691,18 @@ async fn warmup_external_candles(
     to_ms: Option<i64>,
 ) -> Vec<CandleDto> {
     let (yf_interval, yf_range) = match interval_str {
-        "1s" | "1m" => ("1m", if limit > 300 { "5d" } else { "1d" }),
-        "5m" => ("5m", "5d"),
-        "15m" => ("15m", "5d"),
+        "1s" | "5s" | "15s" | "30s" | "1m" => ("1m", if limit > 300 { "5d" } else { "1d" }),
+        "5m" => ("5m", "1mo"),
+        "15m" => ("15m", "1mo"),
         "30m" => ("30m", "1mo"),
         "1h" => ("60m", "1mo"),
         "4h" => ("60m", "3mo"),
         "1d" => ("1d", "1y"),
         "1w" => ("1wk", "5y"),
-        _ => ("1m", "1d"),
+        _ => ("1m", "5d"),
     };
 
-    let dur_sec: i64 = match interval_str {
-        "1m" => 60,
-        "5m" => 300,
-        "15m" => 900,
-        "30m" => 1800,
-        "1h" => 3600,
-        "4h" => 14400,
-        "1d" => 86400,
-        "1w" => 604800,
-        _ => 60,
-    };
+    let dur_sec: i64 = interval_duration_ms(interval_str) / 1000;
 
     let url = if let Some(t_ms) = to_ms {
         let period2 = t_ms / 1000;
@@ -1602,6 +1719,12 @@ async fn warmup_external_candles(
     };
 
     let mut candles = Vec::new();
+    let step_ms = if interval_str == "4h" {
+        3_600_000
+    } else {
+        interval_duration_ms(interval_str)
+    };
+
     if let Ok(res) = client.get(&url).send().await {
         if res.status().is_success() {
             if let Ok(json) = res.json::<serde_json::Value>().await {
@@ -1636,18 +1759,7 @@ async fn warmup_external_candles(
                                     .and_then(|v| v.as_f64())
                                     .unwrap_or(1.0);
                                 let open_time = ts * 1000;
-                                let dur_ms = match interval_str {
-                                    "1m" => 60_000,
-                                    "5m" => 300_000,
-                                    "15m" => 900_000,
-                                    "30m" => 1_800_000,
-                                    "1h" => 3_600_000,
-                                    "4h" => 14_400_000,
-                                    "1d" => 86_400_000,
-                                    "1w" => 604_800_000,
-                                    _ => 60_000,
-                                };
-                                let close_time = open_time + dur_ms - 1;
+                                let close_time = open_time + step_ms - 1;
 
                                 candles.push(CandleDto {
                                     symbol: inst.id.to_string(),
@@ -1673,12 +1785,75 @@ async fn warmup_external_candles(
         }
     }
 
+    if interval_str == "4h" && !candles.is_empty() {
+        candles = aggregate_candle_dtos(&candles, 14_400_000, "4h");
+    }
+
     if candles.len() > limit as usize {
         let skip = candles.len() - limit as usize;
         candles = candles.split_off(skip);
     }
 
     candles
+}
+
+async fn fetch_binance_klines_page(
+    client: &reqwest::Client,
+    binance_symbol: &str,
+    instrument: &str,
+    binance_interval: &str,
+    dto_timeframe: &str,
+    limit: u32,
+    end_time_ms: Option<i64>,
+) -> Vec<CandleDto> {
+    let mut url = format!(
+        "https://data-api.binance.vision/api/v3/klines?symbol={}&interval={}&limit={}",
+        binance_symbol, binance_interval, limit
+    );
+    if let Some(to_ms) = end_time_ms {
+        url.push_str(&format!("&endTime={}", to_ms));
+    }
+
+    let mut page = Vec::new();
+    let default_dur = interval_duration_ms(dto_timeframe);
+    if let Ok(res) = client.get(&url).send().await {
+        if res.status().is_success() {
+            if let Ok(kline_array) = res.json::<Vec<serde_json::Value>>().await {
+                for kline in kline_array {
+                    if let Some(arr) = kline.as_array() {
+                        if arr.len() >= 9 {
+                            let open_time = arr[0].as_i64().unwrap_or(0);
+                            let open: f64 = arr[1].as_str().and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                            let high: f64 = arr[2].as_str().and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                            let low: f64 = arr[3].as_str().and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                            let close: f64 = arr[4].as_str().and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                            let volume: f64 = arr[5].as_str().and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                            let close_time = arr[6].as_i64().unwrap_or(open_time + default_dur - 1);
+                            let trades = arr[8].as_u64().unwrap_or(1);
+
+                            page.push(CandleDto {
+                                symbol: instrument.to_string(),
+                                timeframe: dto_timeframe.to_string(),
+                                open_time,
+                                close_time,
+                                open,
+                                high,
+                                low,
+                                close,
+                                volume,
+                                trades,
+                                finalized: true,
+                                provider: "binance".to_string(),
+                                price_basis: Some("trade".into()),
+                                spread_close: None,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+    page
 }
 
 async fn handle_candles(
@@ -1702,10 +1877,13 @@ async fn handle_candles(
             || i.id.as_str().starts_with("ID:")
     }).unwrap_or(false);
 
-    // Forex and Equities base timeframe is 1m (no 1s needed per user preference & spec)
-    if (is_fx || is_equity) && interval_str == "1s" {
+    // Forex and Equities base timeframe is 1m (no sub-minute candles)
+    if (is_fx || is_equity) && matches!(interval_str.as_str(), "1s" | "5s" | "15s" | "30s") {
         interval_str = "1m".to_string();
     }
+
+    let dur_ms = interval_duration_ms(&interval_str);
+    let is_sub_minute_rollup = matches!(interval_str.as_str(), "5s" | "15s" | "30s");
 
     let history_cache_key = format!("{}:{}", instrument, interval_str);
     let min_expected_bars = (limit as usize).min(100);
@@ -1718,37 +1896,14 @@ async fn handle_candles(
                 } else {
                     cached_vec.clone()
                 };
-                let live_key = format!("{}:{}", interval_str, instrument);
                 let candles_lock = state.latest_candles.read().await;
-                if let Some(c) = candles_lock.get(&live_key) {
-                    let live_open_ms = c.open_time_ns / 1_000_000;
-                    if let Some(last) = result.last_mut() {
-                        if last.open_time == live_open_ms {
-                            last.high = last.high.max(c.high.to_f64().unwrap_or(last.high));
-                            last.low = last.low.min(c.low.to_f64().unwrap_or(last.low));
-                            last.close = c.close.to_f64().unwrap_or(last.close);
-                            last.volume = last.volume.max(c.volume.to_f64().unwrap_or(last.volume));
-                            last.finalized = false;
-                        } else if live_open_ms > last.open_time {
-                            result.push(CandleDto {
-                                symbol: instrument.clone(),
-                                timeframe: interval_str.clone(),
-                                open_time: live_open_ms,
-                                close_time: c.close_time_ns / 1_000_000,
-                                open: c.open.to_f64().unwrap_or(0.0),
-                                high: c.high.to_f64().unwrap_or(0.0),
-                                low: c.low.to_f64().unwrap_or(0.0),
-                                close: c.close.to_f64().unwrap_or(0.0),
-                                volume: c.volume.to_f64().unwrap_or(0.0),
-                                trades: c.trade_count,
-                                finalized: c.finalized,
-                                provider: c.provider.to_string(),
-                                price_basis: if is_fx { Some("mid".into()) } else { Some("trade".into()) },
-                                spread_close: None,
-                            });
-                        }
-                    }
-                }
+                merge_live_candle_into_dtos(
+                    &mut result,
+                    &candles_lock,
+                    &instrument,
+                    &interval_str,
+                    is_fx,
+                );
                 return (
                     StatusCode::OK,
                     Json(CandlesResponse {
@@ -1796,6 +1951,10 @@ async fn handle_candles(
     );
 
     let mut dtos = Vec::new();
+    let provider_str = matching_inst
+        .map(|i| i.provider.as_str())
+        .unwrap_or("binance")
+        .to_string();
 
     let qdb_url = format!("{}/exec", state.config.questdb_http_url);
     if let Ok(res) = state.http_client.get(&qdb_url).query(&[("query", &sql)]).send().await {
@@ -1806,6 +1965,7 @@ async fn handle_candles(
                         if let Some(cols) = row.as_array() {
                             if cols.len() >= 6 {
                                 let time_ns = cols[0].as_i64().unwrap_or(0);
+                                let open_time = (time_ns / 1_000_000 / dur_ms) * dur_ms;
                                 let open = cols[1].as_f64().unwrap_or(0.0);
                                 let high = cols[2].as_f64().unwrap_or(0.0);
                                 let low = cols[3].as_f64().unwrap_or(0.0);
@@ -1816,8 +1976,8 @@ async fn handle_candles(
                                 dtos.push(CandleDto {
                                     symbol: instrument.clone(),
                                     timeframe: interval_str.clone(),
-                                    open_time: time_ns / 1_000_000,
-                                    close_time: (time_ns + 1_000_000_000 - 1) / 1_000_000,
+                                    open_time,
+                                    close_time: open_time + dur_ms - 1,
                                     open,
                                     high,
                                     low,
@@ -1825,14 +1985,68 @@ async fn handle_candles(
                                     volume,
                                     trades,
                                     finalized: true,
-                                    provider: matching_inst.map(|i| i.provider.as_str()).unwrap_or("binance").to_string(),
+                                    provider: provider_str.clone(),
                                     price_basis: if is_fx { Some("mid".into()) } else { Some("trade".into()) },
                                     spread_close: None,
-                                    });
+                                });
                             }
                         }
                     }
                     dtos.reverse();
+                }
+            }
+        }
+    }
+
+    // Sub-minute rollup from QuestDB `candles_1s` when `candles_5s`/`candles_15s`/`candles_30s` lacks enough history
+    if is_sub_minute_rollup && dtos.len() < min_expected_bars {
+        let multiplier = (dur_ms / 1_000).max(1) as u32;
+        let qdb_1s_limit = (limit * multiplier).clamp(500, 3000);
+        let sql_1s = format!(
+            "SELECT cast(timestamp as long) * 1000, open, high, low, close, volume, trade_count FROM candles_1s WHERE instrument = '{}'{} ORDER BY timestamp DESC LIMIT {}",
+            instrument, time_filter, qdb_1s_limit
+        );
+        if let Ok(res) = state.http_client.get(&qdb_url).query(&[("query", &sql_1s)]).send().await {
+            if res.status().is_success() {
+                if let Ok(json_body) = res.json::<serde_json::Value>().await {
+                    if let Some(dataset) = json_body.get("dataset").and_then(|v| v.as_array()) {
+                        let mut raw_qdb_1s = Vec::with_capacity(dataset.len());
+                        for row in dataset {
+                            if let Some(cols) = row.as_array() {
+                                if cols.len() >= 6 {
+                                    let time_ns = cols[0].as_i64().unwrap_or(0);
+                                    let open_time = time_ns / 1_000_000;
+                                    raw_qdb_1s.push(CandleDto {
+                                        symbol: instrument.clone(),
+                                        timeframe: "1s".to_string(),
+                                        open_time,
+                                        close_time: open_time + 999,
+                                        open: cols[1].as_f64().unwrap_or(0.0),
+                                        high: cols[2].as_f64().unwrap_or(0.0),
+                                        low: cols[3].as_f64().unwrap_or(0.0),
+                                        close: cols[4].as_f64().unwrap_or(0.0),
+                                        volume: cols[5].as_f64().unwrap_or(0.0),
+                                        trades: cols.get(6).and_then(|v| v.as_u64()).unwrap_or(1),
+                                        finalized: true,
+                                        provider: provider_str.clone(),
+                                        price_basis: if is_fx { Some("mid".into()) } else { Some("trade".into()) },
+                                        spread_close: None,
+                                    });
+                                }
+                            }
+                        }
+                        if !raw_qdb_1s.is_empty() {
+                            raw_qdb_1s.reverse();
+                            let rolled_qdb = aggregate_candle_dtos(&raw_qdb_1s, dur_ms, &interval_str);
+                            let existing_times: HashSet<i64> = dtos.iter().map(|d| d.open_time).collect();
+                            for b in rolled_qdb {
+                                if !existing_times.contains(&b.open_time) {
+                                    dtos.push(b);
+                                }
+                            }
+                            dtos.sort_by_key(|d| d.open_time);
+                        }
+                    }
                 }
             }
         }
@@ -1861,84 +2075,88 @@ async fn handle_candles(
                 }
             }
         }
-    } else {
-        // Crypto warmup from Binance Vision klines when QuestDB has fewer than min_expected_bars
-        if dtos.len() < min_expected_bars && !matches!(interval_str.as_str(), "5s" | "15s" | "30s") {
-            let binance_symbol = instrument.replace('-', "");
-            let binance_interval = match interval_str.as_str() {
-                "1s" => "1s",
-                "1m" => "1m",
-                "5m" => "5m",
-                "15m" => "15m",
-                "30m" => "30m",
-                "1h" => "1h",
-                "4h" => "4h",
-                "1d" => "1d",
-                "1w" => "1w",
-                _ => "1m",
-            };
-            let warmup_limit = limit.clamp(100, 1000);
-            let mut url = format!(
-                "https://data-api.binance.vision/api/v3/klines?symbol={}&interval={}&limit={}",
-                binance_symbol, binance_interval, warmup_limit
+    } else if dtos.len() < min_expected_bars {
+        // Crypto warmup from Binance Vision klines across all timeframes including 5s/15s/30s (via 1s multi-page aggregation)
+        let binance_symbol = instrument.replace('-', "");
+        let binance_interval = match interval_str.as_str() {
+            "1s" | "5s" | "15s" | "30s" => "1s",
+            "1m" => "1m",
+            "5m" => "5m",
+            "15m" => "15m",
+            "30m" => "30m",
+            "1h" => "1h",
+            "4h" => "4h",
+            "1d" => "1d",
+            "1w" => "1w",
+            _ => "1m",
+        };
+
+        let backfill = if is_sub_minute_rollup {
+            let end_ms = params.to.unwrap_or_else(|| chrono::Utc::now().timestamp_millis());
+            let (p1, p2, p3) = tokio::join!(
+                fetch_binance_klines_page(
+                    &state.http_client,
+                    &binance_symbol,
+                    &instrument,
+                    "1s",
+                    "1s",
+                    1000,
+                    Some(end_ms - 2_000_000)
+                ),
+                fetch_binance_klines_page(
+                    &state.http_client,
+                    &binance_symbol,
+                    &instrument,
+                    "1s",
+                    "1s",
+                    1000,
+                    Some(end_ms - 1_000_000)
+                ),
+                fetch_binance_klines_page(
+                    &state.http_client,
+                    &binance_symbol,
+                    &instrument,
+                    "1s",
+                    "1s",
+                    1000,
+                    Some(end_ms)
+                ),
             );
-            if let Some(to_ms) = params.to {
-                url.push_str(&format!("&endTime={}", to_ms));
-            }
+            let mut merged_1s = Vec::with_capacity(p1.len() + p2.len() + p3.len());
+            merged_1s.extend(p1);
+            merged_1s.extend(p2);
+            merged_1s.extend(p3);
+            merged_1s.sort_by_key(|c| c.open_time);
+            merged_1s.dedup_by_key(|c| c.open_time);
+            aggregate_candle_dtos(&merged_1s, dur_ms, &interval_str)
+        } else {
+            let warmup_limit = limit.clamp(100, 1000);
+            fetch_binance_klines_page(
+                &state.http_client,
+                &binance_symbol,
+                &instrument,
+                binance_interval,
+                &interval_str,
+                warmup_limit,
+                params.to,
+            )
+            .await
+        };
 
-            if let Ok(res) = state.http_client.get(&url).send().await {
-                if res.status().is_success() {
-                    if let Ok(kline_array) = res.json::<Vec<serde_json::Value>>().await {
-                        let mut backfill = Vec::new();
-                        for kline in kline_array {
-                            if let Some(arr) = kline.as_array() {
-                                if arr.len() >= 9 {
-                                    let open_time = arr[0].as_i64().unwrap_or(0);
-                                    let open: f64 = arr[1].as_str().and_then(|s| s.parse().ok()).unwrap_or(0.0);
-                                    let high: f64 = arr[2].as_str().and_then(|s| s.parse().ok()).unwrap_or(0.0);
-                                    let low: f64 = arr[3].as_str().and_then(|s| s.parse().ok()).unwrap_or(0.0);
-                                    let close: f64 = arr[4].as_str().and_then(|s| s.parse().ok()).unwrap_or(0.0);
-                                    let volume: f64 = arr[5].as_str().and_then(|s| s.parse().ok()).unwrap_or(0.0);
-                                    let close_time = arr[6].as_i64().unwrap_or(open_time + 59_999);
-                                    let trades = arr[8].as_u64().unwrap_or(1);
-
-                                    backfill.push(CandleDto {
-                                        symbol: instrument.clone(),
-                                        timeframe: interval_str.clone(),
-                                        open_time,
-                                        close_time,
-                                        open,
-                                        high,
-                                        low,
-                                        close,
-                                        volume,
-                                        trades,
-                                        finalized: true,
-                                        provider: "binance".to_string(),
-                                        price_basis: Some("trade".into()),
-                                        spread_close: None,
-                                    });
-                                }
-                            }
-                        }
-                        if !backfill.is_empty() {
-                            if dtos.is_empty() {
-                                dtos = backfill;
-                            } else {
-                                let existing_times: HashSet<i64> = dtos.iter().map(|d| d.open_time).collect();
-                                for b in backfill {
-                                    if !existing_times.contains(&b.open_time) {
-                                        dtos.push(b);
-                                    }
-                                }
-                                dtos.sort_by_key(|d| d.open_time);
-                                if dtos.len() > limit as usize {
-                                    dtos = dtos[dtos.len() - limit as usize..].to_vec();
-                                }
-                            }
-                        }
+        if !backfill.is_empty() {
+            if dtos.is_empty() {
+                dtos = backfill;
+            } else {
+                let existing_times: HashSet<i64> = dtos.iter().map(|d| d.open_time).collect();
+                for b in backfill {
+                    if !existing_times.contains(&b.open_time) {
+                        dtos.push(b);
                     }
                 }
+                dtos.sort_by_key(|d| d.open_time);
+            }
+            if dtos.len() > limit as usize {
+                dtos = dtos[dtos.len() - limit as usize..].to_vec();
             }
         }
     }
@@ -1954,28 +2172,16 @@ async fn handle_candles(
         );
     }
 
-    // Fallback: If still empty, inject latest in-memory candle if available
-    if dtos.is_empty() {
-        let key = format!("{}:{}", interval_str, instrument);
+    // Merge latest in-memory live candle for non-paginated queries
+    if params.to.is_none() {
         let candles_lock = state.latest_candles.read().await;
-        if let Some(c) = candles_lock.get(&key) {
-            dtos.push(CandleDto {
-                symbol: instrument.clone(),
-                timeframe: interval_str.clone(),
-                open_time: c.open_time_ns / 1_000_000,
-                close_time: c.close_time_ns / 1_000_000,
-                open: c.open.to_f64().unwrap_or(0.0),
-                high: c.high.to_f64().unwrap_or(0.0),
-                low: c.low.to_f64().unwrap_or(0.0),
-                close: c.close.to_f64().unwrap_or(0.0),
-                volume: c.volume.to_f64().unwrap_or(0.0),
-                trades: c.trade_count,
-                finalized: c.finalized,
-                provider: c.provider.to_string(),
-                price_basis: if is_fx { Some("mid".into()) } else { Some("trade".into()) },
-                spread_close: None,
-            });
-        }
+        merge_live_candle_into_dtos(
+            &mut dtos,
+            &candles_lock,
+            &instrument,
+            &interval_str,
+            is_fx,
+        );
     }
 
     (

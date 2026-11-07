@@ -17,7 +17,8 @@ import type { MarketProvider } from "../../providers/market-provider.js";
 import { config } from "../../config/index.js";
 import { logger } from "../../utils/logger.js";
 
-const WARMUP_TIMEFRAMES: readonly Timeframe[] = ["1m", "5m", "15m", "1h", "4h", "1d"];
+const CORE_WARMUP_TIMEFRAMES: readonly Timeframe[] = ["1m", "5m", "15m", "1h", "4h", "1d"];
+const CRYPTO_WARMUP_TIMEFRAMES: readonly Timeframe[] = ["1s", "5s", "15s", "1m", "5m", "15m", "1h", "4h", "1d"];
 
 function mergeWithLiveCandle(
   candles: Candle[],
@@ -127,12 +128,15 @@ export function createHttpServer(
     if (now - lastWarmup < 120_000) return;
     warmedSymbols.set(symbol, now);
 
+    const isCrypto = symbol.endsWith("-USDT") && !symbol.includes(":");
+    const targetTimeframes = isCrypto ? CRYPTO_WARMUP_TIMEFRAMES : CORE_WARMUP_TIMEFRAMES;
+
     setTimeout(() => {
-      for (const tf of WARMUP_TIMEFRAMES) {
+      for (const tf of targetTimeframes) {
         if (tf === activeTimeframe) continue;
         if (
           Number.isFinite(repository.getHistorySyncAgeMs(symbol, tf)) &&
-          repository.getExactCacheCount(symbol, tf) >= 50
+          repository.getExactCacheCount(symbol, tf) >= 30
         ) {
           continue;
         }
@@ -247,7 +251,7 @@ export function createHttpServer(
         const isLatestWindow = from === undefined && to === undefined;
         const exactCount = repository.getExactCacheCount(symbol, timeframe);
         const historySyncAgeMs = repository.getHistorySyncAgeMs(symbol, timeframe);
-        const minSeededCount = Math.min(limit, 50);
+        const minSeededCount = Math.min(limit, 30);
 
         if (isLatestWindow && Number.isFinite(historySyncAgeMs) && exactCount >= minSeededCount) {
           // Stale-While-Revalidate: serve cached historical + live bars immediately in <1ms,

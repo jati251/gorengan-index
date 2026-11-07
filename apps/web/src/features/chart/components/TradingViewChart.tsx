@@ -239,8 +239,7 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
       const lastFormatted = formattedCandles[formattedCandles.length - 1];
       const lastRaw = sorted[sorted.length - 1];
       if (lastFormatted && lastRaw) {
-        const bucketMs = TIMEFRAME_MS[timeframeRef.current] ?? 60_000;
-        const bucketStartMs = Math.floor(lastRaw.openTime / bucketMs) * bucketMs;
+        const bucketStartMs = lastRaw.openTime;
         activeBarRef.current = {
           bucketStartMs,
           chartTime: lastFormatted.time,
@@ -488,7 +487,9 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
 
     const incoming = candlesData?.candles ?? [];
     if (incoming.length === 0) {
-      if (isNewView && allCandlesRef.current.length === 0) {
+      if (isNewView) {
+        allCandlesRef.current = [];
+        activeBarRef.current = null;
         renderCandlesToSeries([], false);
       }
       return;
@@ -600,13 +601,30 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
         const tickPrice = live?.close ?? ticker?.price;
         if (tickPrice == null || !Number.isFinite(tickPrice)) return;
 
-        const openTime = live?.openTime ?? Math.floor((ticker?.timestamp ?? Date.now()) / 1000) * 1000;
+        const openTime =
+          live?.openTime ?? Math.floor((ticker?.timestamp ?? Date.now()) / 1000) * 1000;
+        if (allCandlesRef.current.length > 0) {
+          const lastHist = allCandlesRef.current[allCandlesRef.current.length - 1];
+          if (openTime < lastHist.openTime) return;
+        }
+
         const time = toLocalChartTime(openTime) as Time;
-        const open = live?.open ?? tickPrice;
-        const high = Math.max(live?.high ?? tickPrice, tickPrice);
-        const low = Math.min(live?.low ?? tickPrice, tickPrice);
+        const prevBar = activeBarRef.current;
+        const isSameSecond = prevBar && prevBar.bucketStartMs === openTime;
+
+        const open = isSameSecond ? prevBar.open : (live?.open ?? tickPrice);
+        const high = Math.max(
+          isSameSecond ? prevBar.high : tickPrice,
+          live?.high ?? tickPrice,
+          tickPrice
+        );
+        const low = Math.min(
+          isSameSecond ? prevBar.low : tickPrice,
+          live?.low ?? tickPrice,
+          tickPrice
+        );
         const close = tickPrice;
-        const volume = live?.volume ?? 0;
+        const volume = Math.max(isSameSecond ? prevBar.volume : 0, live?.volume ?? 0);
 
         activeBarRef.current = {
           bucketStartMs: openTime,
@@ -626,28 +644,52 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
         return;
       }
 
-      // For any non-1s timeframe (5s, 15s, 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w):
-      const tickPrice = directCandle?.close ?? candle1s?.close ?? ticker?.price;
+      // For any non-1s timeframe (5s, 15s, 30s, 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w):
+      const tickTimeMs =
+        Math.max(
+          candle1s?.openTime ?? 0,
+          ticker?.timestamp ?? 0,
+          directCandle?.openTime ?? 0
+        ) || Date.now();
+
+      let bucketStartMs = Math.floor(tickTimeMs / bucketMs) * bucketMs;
+      if (allCandlesRef.current.length > 0) {
+        const lastHist = allCandlesRef.current[allCandlesRef.current.length - 1];
+        if (tickTimeMs >= lastHist.openTime && tickTimeMs < lastHist.openTime + bucketMs) {
+          bucketStartMs = lastHist.openTime;
+        } else if (bucketStartMs < lastHist.openTime) {
+          return;
+        }
+      }
+
+      const isDirectMatching = Boolean(directCandle && directCandle.openTime === bucketStartMs);
+      const is1sMatching = Boolean(
+        candle1s &&
+          candle1s.openTime >= bucketStartMs &&
+          candle1s.openTime < bucketStartMs + bucketMs
+      );
+
+      const tickPrice =
+        (is1sMatching ? candle1s?.close : undefined) ??
+        ticker?.price ??
+        (isDirectMatching ? directCandle?.close : undefined);
       if (tickPrice == null || !Number.isFinite(tickPrice)) return;
 
       const tickHigh = Math.max(
-        directCandle?.high ?? tickPrice,
-        candle1s?.high ?? tickPrice,
-        ticker?.price ?? tickPrice
+        tickPrice,
+        isDirectMatching && directCandle ? directCandle.high : tickPrice,
+        is1sMatching && candle1s ? candle1s.high : tickPrice
       );
       const tickLow = Math.min(
-        directCandle?.low ?? tickPrice,
-        candle1s?.low ?? tickPrice,
-        ticker?.price ?? tickPrice
+        tickPrice,
+        isDirectMatching && directCandle ? directCandle.low : tickPrice,
+        is1sMatching && candle1s ? candle1s.low : tickPrice
       );
-      const tickTimeMs =
-        candle1s?.openTime ?? ticker?.timestamp ?? directCandle?.openTime ?? Date.now();
 
-      const bucketStartMs = Math.floor(tickTimeMs / bucketMs) * bucketMs;
       const chartTime = toLocalChartTime(bucketStartMs) as Time;
 
       let deltaVol = 0;
-      if (candle1s && candle1s.openTime !== last1sOpenTimeRef.current) {
+      if (is1sMatching && candle1s && candle1s.openTime !== last1sOpenTimeRef.current) {
         last1sOpenTimeRef.current = candle1s.openTime;
         deltaVol = candle1s.volume ?? 0;
       }
@@ -656,7 +698,10 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
 
       if (!bar && allCandlesRef.current.length > 0) {
         const lastHist = allCandlesRef.current[allCandlesRef.current.length - 1];
-        const lastHistBucketMs = Math.floor(lastHist.openTime / bucketMs) * bucketMs;
+        const lastHistBucketMs =
+          lastHist.openTime === bucketStartMs
+            ? lastHist.openTime
+            : Math.floor(lastHist.openTime / bucketMs) * bucketMs;
         if (lastHistBucketMs === bucketStartMs) {
           bar = {
             bucketStartMs,
@@ -665,34 +710,54 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
             high: Math.max(lastHist.high, tickHigh, tickPrice),
             low: Math.min(lastHist.low, tickLow, tickPrice),
             close: tickPrice,
-            volume: lastHist.volume + deltaVol,
+            volume: isDirectMatching && directCandle
+              ? Math.max(lastHist.volume, directCandle.volume)
+              : lastHist.volume + deltaVol,
           };
         }
       }
 
-      const isDirectMatching = directCandle && directCandle.openTime === bucketStartMs;
-
       if (!bar || bucketStartMs > bar.bucketStartMs) {
+        const openPrice =
+          isDirectMatching && directCandle
+            ? directCandle.open
+            : is1sMatching && candle1s
+              ? candle1s.open
+              : tickPrice;
         bar = {
           bucketStartMs,
           chartTime,
-          open: isDirectMatching ? directCandle.open : (candle1s?.open ?? tickPrice),
-          high: Math.max(isDirectMatching ? directCandle.high : tickPrice, tickHigh, tickPrice),
-          low: Math.min(isDirectMatching ? directCandle.low : tickPrice, tickLow, tickPrice),
+          open: openPrice,
+          high: Math.max(openPrice, tickHigh, tickPrice),
+          low: Math.min(openPrice, tickLow, tickPrice),
           close: tickPrice,
-          volume: isDirectMatching ? Math.max(directCandle.volume, deltaVol) : deltaVol,
+          volume:
+            isDirectMatching && directCandle
+              ? Math.max(directCandle.volume, deltaVol)
+              : deltaVol,
         };
       } else if (bucketStartMs === bar.bucketStartMs) {
-        const newHigh = Math.max(bar.high, tickHigh, tickPrice, isDirectMatching ? directCandle.high : 0);
-        const newLow = Math.min(bar.low, tickLow, tickPrice, isDirectMatching ? directCandle.low : Infinity);
-        const newVol = isDirectMatching
-          ? Math.max(bar.volume + deltaVol, directCandle.volume)
-          : bar.volume + deltaVol;
+        const newHigh = Math.max(
+          bar.high,
+          tickHigh,
+          tickPrice,
+          isDirectMatching && directCandle ? directCandle.high : tickPrice
+        );
+        const newLow = Math.min(
+          bar.low,
+          tickLow,
+          tickPrice,
+          isDirectMatching && directCandle ? directCandle.low : tickPrice
+        );
+        const newVol =
+          isDirectMatching && directCandle
+            ? Math.max(bar.volume + deltaVol, directCandle.volume)
+            : bar.volume + deltaVol;
 
         bar = {
           ...bar,
           chartTime,
-          open: isDirectMatching ? directCandle.open : bar.open,
+          open: bar.open,
           high: newHigh,
           low: newLow,
           close: tickPrice,
