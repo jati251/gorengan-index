@@ -6,11 +6,12 @@ export { OhlcLegend } from "./components/OhlcLegend";
 export { ChartSkeleton } from "./components/ChartSkeleton";
 
 // API Hooks
-export { useCandlesQuery } from "./api/useCandlesQuery";
+export { useCandlesQuery, prefetchCandles, getCandlesQueryKey } from "./api/useCandlesQuery";
 
 // Utilities
-export { calculateEMA } from "./utils/indicators";
+export { calculateEMA, calculateEMAWithState, stepIncrementalEMA } from "./utils/indicators";
 export { CHART_COLORS, createChartOptions, isSubMinuteTimeframe } from "./utils/chartConfig";
 
 // Types
-export type { OhlcData } from "./components/OhlcLegend";
+export type { OhlcData, OhlcLegendHandle } from "./components/OhlcLegend";
+export type { EmaIncrementalState } from "./utils/indicators";

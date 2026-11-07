@@ -177,6 +177,7 @@ export class BinanceProvider extends EventEmitter implements MarketProvider {
     timeframe: Timeframe;
     from: number;
     to: number;
+    priority?: "high" | "normal" | "low";
   }): Promise<Candle[]> {
     if (!params.symbol.endsWith("-USDT") || params.symbol.includes(":")) {
       return [];
@@ -189,7 +190,10 @@ export class BinanceProvider extends EventEmitter implements MarketProvider {
     const url = `${config.BINANCE_REST_URL}/api/v3/klines?symbol=${binanceSymbol}&interval=${interval}&startTime=${params.from}&endTime=${params.to}&limit=1000`;
 
     try {
-      const response = await publicFetch(url, { headers: { "User-Agent": "GorenganTerminal/1.0" } });
+      const response = await publicFetch(url, {
+        priority: params.priority ?? "high",
+        headers: { "User-Agent": "GorenganTerminal/1.0" },
+      });
 
       if (response.status !== 200) {
         const bodyText = await response.text();
@@ -199,32 +203,70 @@ export class BinanceProvider extends EventEmitter implements MarketProvider {
       }
 
       const raw = (await response.json()) as (string | number)[][];
-      const candles: Candle[] = raw.map((k) => ({
-        symbol: params.symbol,
-        timeframe: params.timeframe,
-        openTime: Number(k[0]),
-        closeTime: Number(k[6]),
-        open: parseFloat(String(k[1])),
-        high: parseFloat(String(k[2])),
-        low: parseFloat(String(k[3])),
-        close: parseFloat(String(k[4])),
-        volume: parseFloat(String(k[5])),
-        trades: Number(k[8]),
-        finalized: Number(k[6]) < Date.now(),
-        provider: "binance",
-      }));
+      const now = Date.now();
+      const candles: Candle[] = new Array(raw.length);
+      for (let i = 0; i < raw.length; i++) {
+        const k = raw[i];
+        const closeTime = Number(k[6]);
+        candles[i] = {
+          symbol: params.symbol,
+          timeframe: params.timeframe,
+          openTime: Number(k[0]),
+          closeTime,
+          open: parseFloat(String(k[1])),
+          high: parseFloat(String(k[2])),
+          low: parseFloat(String(k[3])),
+          close: parseFloat(String(k[4])),
+          volume: parseFloat(String(k[5])),
+          trades: Number(k[8]),
+          finalized: closeTime < now,
+          provider: "binance",
+        };
+      }
 
       if (["5s", "15s", "30s"].includes(params.timeframe)) {
-        const duration = Number.parseInt(params.timeframe) * 1000;
+        const duration = Number.parseInt(params.timeframe, 10) * 1000;
+        const expectedBars = duration / 1000;
         const groups = new Map<number, Candle[]>();
-        for (const candle of candles) {
+        for (let i = 0; i < candles.length; i++) {
+          const candle = candles[i];
           const time = Math.floor(candle.openTime / duration) * duration;
-          groups.set(time, [...(groups.get(time) ?? []), candle]);
+          let group = groups.get(time);
+          if (!group) {
+            group = [];
+            groups.set(time, group);
+          }
+          group.push(candle);
         }
-        return [...groups].map(([time, bars]) => ({ ...bars[0], openTime: time, closeTime: time + duration - 1,
-          close: bars[bars.length - 1].close, high: Math.max(...bars.map((b) => b.high)), low: Math.min(...bars.map((b) => b.low)),
-          volume: bars.reduce((sum, b) => sum + b.volume, 0), trades: bars.reduce((sum, b) => sum + (b.trades ?? 0), 0),
-          finalized: bars.length === duration / 1000 && bars.every((b) => b.finalized) }));
+        const aggregated: Candle[] = [];
+        for (const [time, bars] of groups.entries()) {
+          const first = bars[0];
+          let high = first.high;
+          let low = first.low;
+          let volume = 0;
+          let trades = 0;
+          let allFinalized = bars.length === expectedBars;
+          for (let j = 0; j < bars.length; j++) {
+            const b = bars[j];
+            if (b.high > high) high = b.high;
+            if (b.low < low) low = b.low;
+            volume += b.volume;
+            trades += b.trades ?? 0;
+            if (!b.finalized) allFinalized = false;
+          }
+          aggregated.push({
+            ...first,
+            openTime: time,
+            closeTime: time + duration - 1,
+            close: bars[bars.length - 1].close,
+            high,
+            low,
+            volume,
+            trades,
+            finalized: allFinalized,
+          });
+        }
+        return aggregated;
       }
       return candles;
     } catch (err) {

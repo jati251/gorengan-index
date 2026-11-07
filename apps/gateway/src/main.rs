@@ -50,6 +50,7 @@ struct AppState {
     http_client: reqwest::Client,
     cached_news: Arc<RwLock<(Option<tokio::time::Instant>, Vec<NewsArticle>)>>,
     cached_sentiment: Arc<RwLock<(Option<tokio::time::Instant>, SentimentData)>>,
+    cached_candle_history: Arc<RwLock<HashMap<String, (tokio::time::Instant, Vec<CandleDto>)>>>,
     yahoo_crumb: Arc<RwLock<Option<YahooCrumbState>>>,
 }
 
@@ -113,6 +114,7 @@ async fn main() -> Result<()> {
             .build()?,
         cached_news: Arc::new(RwLock::new((None, Vec::new()))),
         cached_sentiment: Arc::new(RwLock::new((None, SentimentData::default()))),
+        cached_candle_history: Arc::new(RwLock::new(HashMap::new())),
         yahoo_crumb: Arc::new(RwLock::new(None)),
     };
 
@@ -1705,6 +1707,56 @@ async fn handle_candles(
         interval_str = "1m".to_string();
     }
 
+    let history_cache_key = format!("{}:{}", instrument, interval_str);
+    if params.to.is_none() {
+        let cache_read = state.cached_candle_history.read().await;
+        if let Some((fetched_at, cached_vec)) = cache_read.get(&history_cache_key) {
+            if fetched_at.elapsed() < Duration::from_secs(20) && cached_vec.len() >= 10 {
+                let mut result = if cached_vec.len() > limit as usize {
+                    cached_vec[cached_vec.len() - limit as usize..].to_vec()
+                } else {
+                    cached_vec.clone()
+                };
+                let live_key = format!("{}:{}", interval_str, instrument);
+                let candles_lock = state.latest_candles.read().await;
+                if let Some(c) = candles_lock.get(&live_key) {
+                    let live_open_ms = c.open_time_ns / 1_000_000;
+                    if let Some(last) = result.last_mut() {
+                        if last.open_time == live_open_ms {
+                            last.high = last.high.max(c.high.to_f64().unwrap_or(last.high));
+                            last.low = last.low.min(c.low.to_f64().unwrap_or(last.low));
+                            last.close = c.close.to_f64().unwrap_or(last.close);
+                            last.volume = last.volume.max(c.volume.to_f64().unwrap_or(last.volume));
+                            last.finalized = false;
+                        } else if live_open_ms > last.open_time {
+                            result.push(CandleDto {
+                                symbol: instrument.clone(),
+                                timeframe: interval_str.clone(),
+                                open_time: live_open_ms,
+                                close_time: c.close_time_ns / 1_000_000,
+                                open: c.open.to_f64().unwrap_or(0.0),
+                                high: c.high.to_f64().unwrap_or(0.0),
+                                low: c.low.to_f64().unwrap_or(0.0),
+                                close: c.close.to_f64().unwrap_or(0.0),
+                                volume: c.volume.to_f64().unwrap_or(0.0),
+                                trades: c.trade_count,
+                                finalized: c.finalized,
+                                provider: c.provider.to_string(),
+                                price_basis: if is_fx { Some("mid".into()) } else { Some("trade".into()) },
+                                spread_close: None,
+                            });
+                        }
+                    }
+                }
+                return Json(CandlesResponse {
+                    symbol: instrument,
+                    timeframe: interval_str,
+                    candles: result,
+                });
+            }
+        }
+    }
+
     let table = match interval_str.as_str() {
         "1s" => "candles_1s",
         "5s" => "candles_5s",
@@ -1872,6 +1924,17 @@ async fn handle_candles(
                 }
             }
         }
+    }
+
+    if params.to.is_none() && dtos.len() >= 10 {
+        let mut cache_write = state.cached_candle_history.write().await;
+        if cache_write.len() >= 512 {
+            cache_write.clear();
+        }
+        cache_write.insert(
+            history_cache_key,
+            (tokio::time::Instant::now(), dtos.clone()),
+        );
     }
 
     // Fallback: If still empty, inject latest in-memory candle if available

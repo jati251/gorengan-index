@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useImperativeHandle, useState, memo } from "react";
 import { formatPrice, formatPercent, formatVolume } from "@/utils/formatters";
 import { formatFxPrice, isFxSymbol } from "@/features/forex";
 import type { Time } from "lightweight-charts";
@@ -14,23 +14,62 @@ export interface OhlcData {
   time: Time;
 }
 
+export interface OhlcLegendHandle {
+  setHoveredCandle: (candle: OhlcData | null) => void;
+  setLiveCandle: (candle: OhlcData | null) => void;
+}
+
 interface OhlcLegendProps {
-  data: OhlcData;
+  initialData: OhlcData | null;
   symbol: string;
   timeframe: string;
   showEma20: boolean;
   showEma50: boolean;
   showVolume: boolean;
+  legendRef?: React.Ref<OhlcLegendHandle>;
 }
 
-export function OhlcLegend({
-  data,
+function sameOhlc(a: OhlcData | null, b: OhlcData | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.close === b.close &&
+    a.high === b.high &&
+    a.low === b.low &&
+    a.open === b.open &&
+    a.volume === b.volume &&
+    a.time === b.time
+  );
+}
+
+export const OhlcLegend = memo(function OhlcLegend({
+  initialData,
   symbol,
   timeframe,
   showEma20,
   showEma50,
   showVolume,
+  legendRef,
 }: OhlcLegendProps) {
+  const [hoveredData, setHoveredData] = useState<OhlcData | null>(null);
+  const [liveData, setLiveData] = useState<OhlcData | null>(null);
+
+  useImperativeHandle(
+    legendRef,
+    () => ({
+      setHoveredCandle: (next) => {
+        setHoveredData((prev) => (sameOhlc(prev, next) ? prev : next));
+      },
+      setLiveCandle: (next) => {
+        setLiveData((prev) => (sameOhlc(prev, next) ? prev : next));
+      },
+    }),
+    []
+  );
+
+  const data = hoveredData ?? liveData ?? initialData;
+  if (!data) return null;
+
   const isUp = data.close >= data.open;
   const changePercent =
     data.open > 0 ? ((data.close - data.open) / data.open) * 100 : 0;
@@ -92,4 +131,4 @@ export function OhlcLegend({
       </div>
     </div>
   );
-}
+});

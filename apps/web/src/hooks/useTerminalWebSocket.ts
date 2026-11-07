@@ -35,10 +35,14 @@ export function useTerminalWebSocket(
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Throttled buffers for preview / guest mode
+  // Priority buffers for the active chart symbol (always flushed at 60fps via rAF)
+  const priorityTickersRef = useRef<Map<string, MarketTicker>>(new Map());
+  const priorityQuotesRef = useRef<Map<string, FxQuoteTick>>(new Map());
+  const pendingCandlesRef = useRef<Map<string, Candle>>(new Map());
+
+  // Throttled buffers for background symbols in market tables
   const pendingTickersRef = useRef<Map<string, MarketTicker>>(new Map());
   const pendingQuotesRef = useRef<Map<string, FxQuoteTick>>(new Map());
-  const pendingCandlesRef = useRef<Map<string, Candle>>(new Map());
 
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
   const selectedTimeframe = useMarketStore((s) => s.selectedTimeframe);
@@ -69,25 +73,59 @@ export function useTerminalWebSocket(
 
   const rafIdRef = useRef<number | null>(null);
 
-  const flushPending = useCallback(() => {
-    const store = useMarketStore.getState();
-    if (pendingTickersRef.current.size) {
-      store.setTickers([...pendingTickersRef.current.values()]);
-      pendingTickersRef.current.clear();
-    }
-    for (const quote of pendingQuotesRef.current.values()) store.setFxQuote(quote);
-    pendingQuotesRef.current.clear();
-    for (const candle of pendingCandlesRef.current.values()) store.setCandle(candle);
+  const flushPriority = useCallback(() => {
+    const hasTickers = priorityTickersRef.current.size > 0;
+    const hasQuotes = priorityQuotesRef.current.size > 0;
+    const hasCandles = pendingCandlesRef.current.size > 0;
+    if (!hasTickers && !hasQuotes && !hasCandles) return;
+
+    const tickers = hasTickers ? [...priorityTickersRef.current.values()] : undefined;
+    const quotes = hasQuotes ? [...priorityQuotesRef.current.values()] : undefined;
+    const candles = hasCandles ? [...pendingCandlesRef.current.values()] : undefined;
+
+    priorityTickersRef.current.clear();
+    priorityQuotesRef.current.clear();
     pendingCandlesRef.current.clear();
+
+    useMarketStore.getState().applyRealtimeBatch({ tickers, quotes, candles });
+  }, []);
+
+  const flushPending = useCallback(() => {
+    const totalTickers = priorityTickersRef.current.size + pendingTickersRef.current.size;
+    const totalQuotes = priorityQuotesRef.current.size + pendingQuotesRef.current.size;
+    const totalCandles = pendingCandlesRef.current.size;
+    if (totalTickers === 0 && totalQuotes === 0 && totalCandles === 0) return;
+
+    const tickers =
+      totalTickers > 0
+        ? [...pendingTickersRef.current.values(), ...priorityTickersRef.current.values()]
+        : undefined;
+    const quotes =
+      totalQuotes > 0
+        ? [...pendingQuotesRef.current.values(), ...priorityQuotesRef.current.values()]
+        : undefined;
+    const candles = totalCandles > 0 ? [...pendingCandlesRef.current.values()] : undefined;
+
+    priorityTickersRef.current.clear();
+    priorityQuotesRef.current.clear();
+    pendingTickersRef.current.clear();
+    pendingQuotesRef.current.clear();
+    pendingCandlesRef.current.clear();
+
+    useMarketStore.getState().applyRealtimeBatch({ tickers, quotes, candles });
   }, []);
 
   const scheduleLiveFlush = useCallback(() => {
     if (rafIdRef.current != null) return;
     rafIdRef.current = requestAnimationFrame(() => {
       rafIdRef.current = null;
-      flushPending();
+      if (isThrottledRef.current) {
+        flushPriority();
+      } else {
+        flushPending();
+      }
     });
-  }, [flushPending]);
+  }, [flushPending, flushPriority]);
 
   useEffect(() => {
     if (!isThrottled) return;
@@ -146,17 +184,21 @@ export function useTerminalWebSocket(
             switch (raw.type) {
               case "ticker": {
                 const ticker = parseTicker((raw.ticker ?? {}) as Record<string, unknown>);
-                pendingTickersRef.current.set(ticker.symbol, ticker);
-                if (!isThrottledRef.current) {
+                if (!isThrottledRef.current || ticker.symbol === store.selectedSymbol) {
+                  priorityTickersRef.current.set(ticker.symbol, ticker);
                   scheduleLiveFlush();
+                } else {
+                  pendingTickersRef.current.set(ticker.symbol, ticker);
                 }
                 break;
               }
               case "fx_quote": {
                 const quote = parseFxQuote((raw.quote ?? {}) as Record<string, unknown>);
-                pendingQuotesRef.current.set(quote.instrument, quote);
-                if (!isThrottledRef.current) {
+                if (!isThrottledRef.current || quote.instrument === store.selectedSymbol) {
+                  priorityQuotesRef.current.set(quote.instrument, quote);
                   scheduleLiveFlush();
+                } else {
+                  pendingQuotesRef.current.set(quote.instrument, quote);
                 }
                 break;
               }
@@ -164,9 +206,7 @@ export function useTerminalWebSocket(
                 const candle = parseCandle((raw.candle ?? {}) as Record<string, unknown>);
                 const key = `${candle.symbol}:${candle.timeframe}`;
                 pendingCandlesRef.current.set(key, candle);
-                if (!isThrottledRef.current) {
-                  scheduleLiveFlush();
-                }
+                scheduleLiveFlush();
                 break;
               }
               case "session": {

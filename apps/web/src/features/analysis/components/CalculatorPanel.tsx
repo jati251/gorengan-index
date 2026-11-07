@@ -1,30 +1,35 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { ArrowRightLeft, Calculator, RefreshCw } from "lucide-react";
 import { useTranslation } from "@/features/i18n";
 import { calculateTrade } from "../utils/calculator";
+import { useExchangeRate } from "../api/useExchangeRateQuery";
 
-interface ExchangeRate { rate: number; date: string; fetchedAt: string; source: string }
+export { useExchangeRate } from "../api/useExchangeRateQuery";
 
-export function useExchangeRate() {
-  return useQuery<ExchangeRate>({
-    queryKey: ["usd-idr"],
-    queryFn: async () => {
-      const response = await fetch("/api/exchange-rate");
-      if (!response.ok) throw new Error("Exchange rate unavailable");
-      return response.json();
-    },
-    staleTime: 300_000,
-    refetchInterval: 300_000,
-    retry: 1,
-  });
+const currencyFormatters = new Map<string, Intl.NumberFormat>();
+
+function formatCurrencyValue(value: number, unit: string, isId: boolean): string {
+  const locale = isId ? "id-ID" : "en-US";
+  const key = `${locale}:${unit}`;
+  let fmt = currencyFormatters.get(key);
+  if (!fmt) {
+    fmt = new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency: unit,
+      maximumFractionDigits: unit === "IDR" ? 0 : 4,
+    });
+    currencyFormatters.set(key, fmt);
+  }
+  return fmt.format(value);
 }
+
+const idRateFormatter = new Intl.NumberFormat("id-ID");
 
 export function ExchangeRateReference({ onOpen }: { onOpen: () => void }) {
   const { data, isError } = useExchangeRate();
-  return <button type="button" className="desk-button exchange-reference" onClick={onOpen}><ArrowRightLeft size={14} /><span>USD/IDR</span><b>{data ? `${isError ? "~ " : ""}${data.rate.toLocaleString("id-ID")}` : "—"}</b></button>;
+  return <button type="button" className="desk-button exchange-reference" onClick={onOpen}><ArrowRightLeft size={14} /><span>USD/IDR</span><b>{data ? `${isError ? "~ " : ""}${idRateFormatter.format(data.rate)}` : "—"}</b></button>;
 }
 
 export function CalculatorPanel() {
@@ -38,7 +43,7 @@ export function CalculatorPanel() {
   const [entry, setEntry] = useState("");
   const [exit, setExit] = useState("");
   const [fee, setFee] = useState("0");
-  const format = (value: number, unit: string) => new Intl.NumberFormat(id ? "id-ID" : "en-US", { style: "currency", currency: unit, maximumFractionDigits: unit === "IDR" ? 0 : 4 }).format(value);
+  const format = (value: number, unit: string) => formatCurrencyValue(value, unit, id);
   const parsedAmount = Number(amount);
   const converted = fx.data && amount.trim() && Number.isFinite(parsedAmount) && parsedAmount >= 0 ? direction === "USD" ? parsedAmount * fx.data.rate : parsedAmount / fx.data.rate : null;
   const trade = capital.trim() && entry.trim() && exit.trim() && fee.trim() ? calculateTrade(Number(capital), Number(entry), Number(exit), Number(fee)) : null;

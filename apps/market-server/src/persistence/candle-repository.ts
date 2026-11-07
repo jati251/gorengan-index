@@ -7,6 +7,7 @@ import { logger } from "../utils/logger.js";
 export class CandleRepository {
   private db: QuestDbClient;
   private candleCache = new Map<string, Candle[]>();
+  private cacheUpdatedAt = new Map<string, number>();
   private symbols: MarketSymbol[] = DEFAULT_SYMBOLS;
 
   constructor(db?: QuestDbClient) {
@@ -14,6 +15,15 @@ export class CandleRepository {
   }
 
   public get databaseConnected(): boolean { return this.db.connected; }
+
+  public getCacheAgeMs(symbol: string, timeframe: Timeframe): number {
+    const updatedAt = this.cacheUpdatedAt.get(`${symbol}:${timeframe}`);
+    return updatedAt === undefined ? Number.POSITIVE_INFINITY : Date.now() - updatedAt;
+  }
+
+  public getExactCacheCount(symbol: string, timeframe: Timeframe): number {
+    return this.candleCache.get(`${symbol}:${timeframe}`)?.length ?? 0;
+  }
 
   public getSymbols(): MarketSymbol[] {
     return this.symbols;
@@ -63,37 +73,84 @@ export class CandleRepository {
     return this.symbols;
   }
 
-  public saveCandle(candle: Candle): void {
+  private upsertCandleInMemory(candle: Candle): void {
     const key = `${candle.symbol}:${candle.timeframe}`;
     let list = this.candleCache.get(key);
     if (!list) {
-      list = [];
+      list = [candle];
       this.candleCache.set(key, list);
+      this.cacheUpdatedAt.set(key, Date.now());
+      return;
     }
-    const idx = list.findIndex((c) => c.openTime === candle.openTime);
-    if (idx >= 0) {
-      list[idx] = candle;
-    } else {
+
+    const len = list.length;
+    if (len === 0) {
       list.push(candle);
-      list.sort((a, b) => a.openTime - b.openTime);
-      if (list.length > 2000) {
-        list.splice(0, list.length - 2000);
+    } else {
+      const last = list[len - 1];
+      if (candle.openTime > last.openTime) {
+        list.push(candle);
+      } else if (candle.openTime === last.openTime) {
+        list[len - 1] = candle;
+      } else {
+        // Binary search for insertion / replacement index
+        let lo = 0;
+        let hi = len - 1;
+        while (lo <= hi) {
+          const mid = (lo + hi) >>> 1;
+          const midOpen = list[mid].openTime;
+          if (midOpen === candle.openTime) {
+            list[mid] = candle;
+            this.cacheUpdatedAt.set(key, Date.now());
+            return;
+          }
+          if (midOpen < candle.openTime) {
+            lo = mid + 1;
+          } else {
+            hi = mid - 1;
+          }
+        }
+        list.splice(lo, 0, candle);
       }
     }
+
+    if (list.length > 2000) {
+      list.splice(0, list.length - 2000);
+    }
+    this.cacheUpdatedAt.set(key, Date.now());
+  }
+
+  private formatIlpLine(candle: Candle): string {
+    const tsNs = candle.openTime * 1_000_000;
+    return `candles_1m,instrument=${candle.symbol},provider=${candle.provider || "default"} open=${candle.open},high=${candle.high},low=${candle.low},close=${candle.close},volume=${candle.volume},trade_count=${candle.trades ?? 0}i ${tsNs}`;
+  }
+
+  public saveCandle(candle: Candle): void {
+    this.upsertCandleInMemory(candle);
 
     if (candle.timeframe !== "1m") return;
 
     // Persist to QuestDB asynchronously via ILP
-    const tsNs = candle.openTime * 1_000_000;
-    const line = `candles_1m,instrument=${candle.symbol},provider=${candle.provider || "default"} open=${candle.open},high=${candle.high},low=${candle.low},close=${candle.close},volume=${candle.volume},trade_count=${candle.trades ?? 0}i ${tsNs}`;
+    const line = this.formatIlpLine(candle);
     this.db.writeIlp([line]).catch((err) => {
       logger.debug({ err: (err as Error).message, symbol: candle.symbol }, "QuestDB ILP write notice");
     });
   }
 
   public saveCandles(candles: Candle[]): void {
-    for (const c of candles) {
-      this.saveCandle(c);
+    if (candles.length === 0) return;
+    const ilpLines: string[] = [];
+    for (let i = 0; i < candles.length; i++) {
+      const c = candles[i];
+      this.upsertCandleInMemory(c);
+      if (c.timeframe === "1m") {
+        ilpLines.push(this.formatIlpLine(c));
+      }
+    }
+    if (ilpLines.length > 0) {
+      this.db.writeIlp(ilpLines).catch((err) => {
+        logger.debug({ err: (err as Error).message, count: ilpLines.length }, "QuestDB batch ILP write notice");
+      });
     }
   }
 
@@ -110,22 +167,29 @@ export class CandleRepository {
     limit: number = 500
   ): Candle[] {
     const exact = this.candleCache.get(`${symbol}:${timeframe}`);
-    const list = exact ?? (timeframeToMs(timeframe) >= 60000 ? this.candleCache.get(`${symbol}:1m`) ?? [] : []);
+    const tfMs = timeframeToMs(timeframe);
+    const list =
+      exact ??
+      (tfMs >= 60000
+        ? this.candleCache.get(`${symbol}:1m`) ?? []
+        : tfMs > 1000
+          ? this.candleCache.get(`${symbol}:1s`) ?? []
+          : []);
+    if (list.length === 0) return [];
+
     let filtered = list;
 
-    if (from !== undefined) {
-      filtered = filtered.filter((c) => c.openTime >= from);
-    }
-    if (to !== undefined) {
-      filtered = filtered.filter((c) => c.openTime <= to);
+    if (from !== undefined || to !== undefined) {
+      filtered = list.filter(
+        (c) => (from === undefined || c.openTime >= from) && (to === undefined || c.openTime <= to)
+      );
     }
 
-    if (exact || timeframe === "1m") {
+    if (exact || timeframe === "1m" || timeframe === "1s") {
       return filtered.slice(-limit);
     }
 
-    const bucketMs = timeframeToMs(timeframe);
-    return this.aggregateCandles(filtered, timeframe, bucketMs).slice(-limit);
+    return this.aggregateCandles(filtered, timeframe, tfMs).slice(-limit);
   }
 
   private aggregateCandles(

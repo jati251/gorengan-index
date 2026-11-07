@@ -39,6 +39,7 @@ export interface MarketProvider extends EventEmitter {
     timeframe: Timeframe;
     from: number;
     to: number;
+    priority?: "high" | "normal" | "low";
   }): Promise<Candle[]>;
 
   getStatus(): ProviderStatus;

@@ -89,6 +89,7 @@ export class CompositeMarketProvider extends EventEmitter implements MarketProvi
     timeframe: Timeframe;
     from: number;
     to: number;
+    priority?: "high" | "normal" | "low";
   }): Promise<Candle[]> {
     let candles: Candle[] = [];
 

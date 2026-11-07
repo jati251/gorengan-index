@@ -1,12 +1,14 @@
 "use client";
 
 import React, { useState, useMemo, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Search, Star, TrendingUp, TrendingDown, X, SearchX } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { clsx } from "clsx";
 import type { MarketSymbol } from "@gorengan/shared";
 import { useMarketStore, type MarketCategory } from "@/stores/marketStore";
 import { useWatchlistStore } from "@/stores/watchlistStore";
+import { prefetchCandles } from "@/features/chart";
 import { formatPrice, formatPercent } from "@/utils/formatters";
 import { formatFxPrice, isFxSymbol } from "@/features/forex";
 import {
@@ -87,9 +89,11 @@ export function WatchlistSidebar({ symbols, onSelectSymbol, isLoading = false }:
     { id: "idx_stocks", label: dict.watchlist.categories.idx },
   ], [dict]);
 
+  const queryClient = useQueryClient();
   const tickers = useMarketStore((s) => s.tickers);
   const priceDirections = useMarketStore((s) => s.priceDirections);
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
+  const selectedTimeframe = useMarketStore((s) => s.selectedTimeframe);
 
   // Close suggestion dropdown on click outside
   useClickOutside(searchContainerRef, () => setIsDropdownOpen(false), isDropdownOpen);
@@ -494,6 +498,16 @@ export function WatchlistSidebar({ symbols, onSelectSymbol, isLoading = false }:
                   role="button"
                   tabIndex={0}
                   aria-label={`Show ${sym.name} chart`}
+                  onMouseEnter={() => {
+                    if (!isSelected) {
+                      const targetTf =
+                        (isFx || isUs || isId) &&
+                        (selectedTimeframe === "1s" || selectedTimeframe === "5s" || selectedTimeframe === "15s")
+                          ? "1m"
+                          : selectedTimeframe;
+                      prefetchCandles(queryClient, sym.id, targetTf);
+                    }
+                  }}
                   onClick={() => {
                     setSelectedSymbol(sym.id);
                     onSelectSymbol?.(sym.id);

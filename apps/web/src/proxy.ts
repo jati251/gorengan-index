@@ -7,7 +7,10 @@ export default auth((req) => {
     process.env.AUTH_BYPASS === "true" ||
     process.env.NEXT_PUBLIC_AUTH_BYPASS === "true";
 
-  const isLoggedIn = !!req.auth || isDevAuthBypass;
+  const hasValidSession =
+    !!req.auth &&
+    (req.auth as { error?: string }).error !== "RefreshAccessTokenError";
+  const isLoggedIn = hasValidSession || isDevAuthBypass;
   const { pathname } = req.nextUrl;
 
   const isAuthPage = pathname.startsWith("/login");
@@ -18,20 +21,7 @@ export default auth((req) => {
     return NextResponse.next();
   }
 
-  // If already logged in and visiting login page, redirect to full terminal
-  if (isAuthPage) {
-    if (isLoggedIn) {
-      return NextResponse.redirect(new URL("/terminal", req.url));
-    }
-    return NextResponse.next();
-  }
-
-  // Public Landing Page (/) is accessible to everyone
-  if (pathname === "/") {
-    return NextResponse.next();
-  }
-
-  // Allow search engines and social crawler bots to index routes without redirect
+  // Allow search engines and social crawler bots to index public routes without redirect
   const userAgent = req.headers.get("user-agent")?.toLowerCase() || "";
   const isCrawlerBot = [
     "googlebot",
@@ -48,6 +38,14 @@ export default auth((req) => {
     "discordbot",
     "applebot",
   ].some((bot) => userAgent.includes(bot));
+
+  // If already logged in and visiting root (/) or login (/login), redirect directly to /terminal
+  if (isAuthPage || pathname === "/") {
+    if (isLoggedIn && !isCrawlerBot) {
+      return NextResponse.redirect(new URL("/terminal", req.url));
+    }
+    return NextResponse.next();
+  }
 
   if (isCrawlerBot) {
     return NextResponse.next();

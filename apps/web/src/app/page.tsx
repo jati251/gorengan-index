@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { signIn, useSession } from "next-auth/react";
 import { ArrowRight, ArrowUpRight, BarChart3 } from "lucide-react";
 import { clsx } from "clsx";
@@ -26,8 +27,15 @@ function formatChangeText(change: number | null | undefined, waitingText: string
 }
 
 export default function LandingPage() {
+  const router = useRouter();
   const { status } = useSession();
   const isAuthenticated = status === "authenticated";
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.replace("/terminal");
+    }
+  }, [isAuthenticated, router]);
   const { dict, interpolate, locale } = useTranslation();
   const { symbols, symbolIds, isLoading, isError, refetch } = useResolvedSymbols();
   useMarketsQuery();

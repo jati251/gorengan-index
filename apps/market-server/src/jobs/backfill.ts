@@ -38,6 +38,7 @@ export async function runBackfill(
         timeframe: "1m",
         from,
         to: now,
+        priority: "low",
       });
 
       if (candles.length > 0) {

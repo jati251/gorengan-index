@@ -13,7 +13,8 @@ export function useAnalysis() {
   const query = useQuery({
     queryKey: ["candles", symbol, timeframe],
     queryFn: () => apiGet<CandlesResponse>(`/candles/${encodeURIComponent(symbol)}`, { timeframe, limit: 1000 }),
-    staleTime: 15_000,
+    staleTime: 30_000,
+    gcTime: 10 * 60 * 1000,
     refetchInterval: 30_000,
   });
   const candles = useMemo(() => {

@@ -1,9 +1,9 @@
 "use client";
 
-import React, { Suspense, useState } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { signIn } from "next-auth/react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { signIn, useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, ArrowRight, AlertCircle } from "lucide-react";
 import { useTranslation, LanguageSwitcher } from "@/features/i18n";
@@ -32,9 +32,17 @@ function GoogleIcon() {
 }
 
 function LoginForm() {
+  const router = useRouter();
+  const { status } = useSession();
   const { dict } = useTranslation();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/terminal";
+
+  useEffect(() => {
+    if (status === "authenticated") {
+      router.replace(callbackUrl);
+    }
+  }, [status, callbackUrl, router]);
   const urlError = searchParams.get("error");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(

@@ -3,19 +3,15 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { RefreshCw } from "lucide-react";
 import { useFilingWatchStore } from "../stores/filingWatchStore";
-import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "@/features/i18n";
 import { SourceStatus } from "@/features/whale/components/SourceStatus";
 import { OwnershipContext } from "./OwnershipContext";
 import { filingContext, importFilingXml } from "../utils/context";
-import { type InsiderFiling, type FilingsResult, type parseOwnershipXml } from "../utils/filings";
-import type { PublicResult } from "@/lib/server/publicData";
-
-async function read<T>(url: string, signal: AbortSignal): Promise<T> {
-  const response = await fetch(url, { signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]) });
-  if (!response.ok) throw new Error(`Request failed (${response.status})`);
-  return response.json();
-}
+import { type InsiderFiling, type parseOwnershipXml } from "../utils/filings";
+import {
+  useInsiderFilingDetailQuery,
+  useInsiderFilingsQuery,
+} from "../api/useInsiderFilingsQuery";
 
 function FilingDetailsSkeleton({ id }: { id: boolean }) {
   return (
@@ -60,8 +56,7 @@ function FilingDetails({ filing }: { filing: InsiderFiling }) {
   const id = useTranslation().locale === "id";
   const [imported, setImported] = useState<{ name: string; detail: ReturnType<typeof parseOwnershipXml> } | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
-  const query = new URLSearchParams({ cik: filing.cik, accession: filing.accession, document: filing.document });
-  const { data, isPending, error } = useQuery({ queryKey: ["insider-filing", filing.accession], queryFn: ({ signal }) => read<PublicResult<ReturnType<typeof parseOwnershipXml>>>(`/api/insider-filings/detail?${query}`, signal), staleTime: 86400000, retry: false });
+  const { data, isPending, error } = useInsiderFilingDetailQuery(filing);
   if (isPending) return <FilingDetailsSkeleton id={id} />;
   const detail = imported?.detail ?? data?.data;
   async function importXml(file: File | undefined) {
@@ -106,7 +101,7 @@ export function InsiderFilingsView() {
   const baseline = baselines[watchKey];
   const [expanded, setExpanded] = useState<string | null>(null);
   const query = new URLSearchParams({ q: search, days: String(days), offset: String(offset) });
-  const { data, isPending, isFetching, error, refetch } = useQuery({ queryKey: ["insider-filings", search, days, offset], queryFn: ({ signal }) => read<FilingsResult>(`/api/insider-filings?${query}`, signal), staleTime: 300000, refetchInterval: 300000, retry: 1 });
+  const { data, isPending, isFetching, error, refetch } = useInsiderFilingsQuery(search, days, offset);
   return <div className="space-y-4">
     <h3 className="font-bold text-lg">{id ? "Pengungkapan Transaksi Insider · SEC Form 4" : "Disclosed Insider Transactions · SEC Form 4"}</h3>
     <p className="text-sm text-zinc-300">{id ? "Filing resmi AS diperbarui setiap 5 menit selama panel dibuka. Cari nama emiten, insider, atau ticker sebagai kata kunci teks. Tanggal filing berbeda dari tanggal transaksi. Pengungkapan ini bukan bukti insider trading ilegal maupun prediksi keuntungan." : "US public filings refresh every 5 minutes while this panel is open. Search issuer, insider or ticker as full-text keywords. Filing dates differ from transaction dates. Disclosures are not proof of illegal trading or predicted profit."}</p>

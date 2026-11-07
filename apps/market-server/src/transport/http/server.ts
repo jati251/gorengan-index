@@ -1,6 +1,7 @@
 import http from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type {
+  Candle,
   HealthResponse,
   SymbolsResponse,
   MarketsResponse,
@@ -16,6 +17,49 @@ import type { MarketProvider } from "../../providers/market-provider.js";
 import { config } from "../../config/index.js";
 import { logger } from "../../utils/logger.js";
 
+const WARMUP_TIMEFRAMES: readonly Timeframe[] = ["1m", "5m", "15m", "1h", "4h", "1d"];
+
+function mergeWithLiveCandle(
+  candles: Candle[],
+  liveCandle: Candle | null,
+  from: number | undefined,
+  to: number | undefined,
+  limit: number
+): Candle[] {
+  if (!liveCandle) return candles;
+  if (from !== undefined && liveCandle.openTime < from) return candles;
+  if (to !== undefined && liveCandle.openTime > to) return candles;
+
+  if (candles.length === 0) {
+    return [liveCandle];
+  }
+
+  const lastIdx = candles.length - 1;
+  const last = candles[lastIdx];
+
+  if (liveCandle.openTime === last.openTime) {
+    const merged: Candle = {
+      ...last,
+      high: Math.max(last.high, liveCandle.high),
+      low: Math.min(last.low, liveCandle.low),
+      close: liveCandle.close,
+      volume: Math.max(last.volume, liveCandle.volume),
+      trades: Math.max(last.trades ?? 0, liveCandle.trades ?? 0),
+      finalized: false,
+    };
+    const copy = candles.slice();
+    copy[lastIdx] = merged;
+    return copy;
+  }
+
+  if (liveCandle.openTime > last.openTime) {
+    const next = [...candles, liveCandle];
+    return next.length > limit ? next.slice(-limit) : next;
+  }
+
+  return candles;
+}
+
 export function createHttpServer(
   repository: CandleRepository,
   marketState: MarketState,
@@ -24,6 +68,73 @@ export function createHttpServer(
 ): http.Server {
   const startTime = Date.now();
   const historyRequests = new Map<string, { expires: number; promise: Promise<void> }>();
+  const warmedSymbols = new Map<string, number>();
+
+  const triggerHistoricalFetch = (
+    symbol: string,
+    timeframe: Timeframe,
+    from: number | undefined,
+    to: number | undefined,
+    limit: number,
+    priority: "high" | "normal" | "low"
+  ): Promise<void> => {
+    const isLatestWindow = from === undefined && to === undefined;
+    const requestKey = isLatestWindow
+      ? `${symbol}:${timeframe}:latest`
+      : `${symbol}:${timeframe}:${from ?? "latest"}:${to ?? "now"}:${limit}`;
+
+    const now = Date.now();
+    const existing = historyRequests.get(requestKey);
+    if (existing && existing.expires > now) {
+      return existing.promise;
+    }
+
+    if (historyRequests.size >= 256) {
+      const oldestKey = historyRequests.keys().next().value;
+      if (oldestKey) historyRequests.delete(oldestKey);
+    }
+
+    const promise = (async () => {
+      const seedTo = to ?? Date.now();
+      const barsToFetch = Math.max(limit, 500);
+      const seedFrom = from ?? seedTo - Math.min(barsToFetch, 1000) * timeframeToMs(timeframe);
+      const live = await provider.getHistoricalCandles({
+        symbol,
+        timeframe,
+        from: seedFrom,
+        to: seedTo,
+        priority,
+      });
+      if (live.length > 0) {
+        const matching = live.filter((c) => c.symbol === symbol && c.timeframe === timeframe);
+        repository.saveCandles(matching.length > 0 ? matching : live);
+      }
+    })().catch((err) => {
+      logger.warn({ err, symbol, timeframe }, "Historical refresh failed");
+    });
+
+    historyRequests.set(requestKey, {
+      expires: now + (isLatestWindow ? 15_000 : 60_000),
+      promise,
+    });
+
+    return promise;
+  };
+
+  const scheduleSymbolWarmup = (symbol: string, activeTimeframe: Timeframe): void => {
+    const now = Date.now();
+    const lastWarmup = warmedSymbols.get(symbol) ?? 0;
+    if (now - lastWarmup < 120_000) return;
+    warmedSymbols.set(symbol, now);
+
+    setTimeout(() => {
+      for (const tf of WARMUP_TIMEFRAMES) {
+        if (tf === activeTimeframe) continue;
+        if (repository.getExactCacheCount(symbol, tf) >= 20) continue;
+        void triggerHistoricalFetch(symbol, tf, undefined, undefined, 500, "low");
+      }
+    }, 50);
+  };
 
   const server = http.createServer(async (req: IncomingMessage, res: ServerResponse) => {
     // CORS headers
@@ -128,21 +239,27 @@ export function createHttpServer(
           sendJson(res, 400, { error: "Invalid symbol, timeframe or date range" });
           return;
         }
-        const requestKey = `${symbol}:${timeframe}:${from ?? "latest"}:${to ?? "now"}:${limit}`;
-        const cached = historyRequests.get(requestKey);
-        if (cached && cached.expires > Date.now()) await cached.promise;
-        else {
-          if (historyRequests.size >= 128) historyRequests.delete(historyRequests.keys().next().value!);
-          const promise = (async () => {
-            const seedTo = to ?? Date.now();
-            const seedFrom = from ?? seedTo - Math.min(limit, 1000) * timeframeToMs(timeframe);
-            const live = await provider.getHistoricalCandles({ symbol, timeframe, from: seedFrom, to: seedTo });
-            repository.saveCandles(live.filter((c) => c.symbol === symbol && c.timeframe === timeframe));
-          })().catch((err) => { logger.warn({ err, symbol }, "Historical refresh failed"); });
-          historyRequests.set(requestKey, { expires: Date.now() + 15000, promise });
-          await promise;
+        const isLatestWindow = from === undefined && to === undefined;
+        const exactCount = repository.getExactCacheCount(symbol, timeframe);
+        const cacheAgeMs = repository.getCacheAgeMs(symbol, timeframe);
+
+        if (isLatestWindow && exactCount >= 10) {
+          // Stale-While-Revalidate: serve cached bars immediately in <1ms,
+          // and refresh upstream asynchronously if older than 15 seconds.
+          if (cacheAgeMs > 15_000) {
+            void triggerHistoricalFetch(symbol, timeframe, undefined, undefined, limit, "normal");
+          }
+          scheduleSymbolWarmup(symbol, timeframe);
+        } else {
+          await triggerHistoricalFetch(symbol, timeframe, from, to, limit, "high");
+          if (isLatestWindow) {
+            scheduleSymbolWarmup(symbol, timeframe);
+          }
         }
-        const candles = repository.getCandles(symbol, timeframe, from, to, limit);
+
+        const storedCandles = repository.getCandles(symbol, timeframe, from, to, limit);
+        const liveCandle = candleEngine.getCurrentCandle(symbol, timeframe);
+        const candles = mergeWithLiveCandle(storedCandles, liveCandle, from, to, limit);
 
         const body: CandlesResponse = {
           symbol,

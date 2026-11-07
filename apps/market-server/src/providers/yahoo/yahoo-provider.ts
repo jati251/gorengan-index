@@ -111,6 +111,7 @@ export class YahooMarketProvider extends EventEmitter implements MarketProvider 
     timeframe: Timeframe;
     from: number;
     to: number;
+    priority?: "high" | "normal" | "low";
   }): Promise<Candle[]> {
     if (timeframeToMs(params.timeframe) < 60000 || Date.now() < this.cooldownUntil) return [];
     const meta = this.symbolMap.get(params.symbol);
@@ -118,12 +119,18 @@ export class YahooMarketProvider extends EventEmitter implements MarketProvider 
     const interval = this.mapTimeframeToYahoo(params.timeframe);
     const range = this.mapTimeframeToRange(params.timeframe);
 
+    const isHistoricalScroll = params.from > 0 && params.to < Date.now() - 120_000;
+    const querySuffix = isHistoricalScroll
+      ? `period1=${Math.floor(params.from / 1000)}&period2=${Math.ceil(params.to / 1000)}&interval=${interval}`
+      : `range=${range}&interval=${interval}`;
+
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
       yahooSymbol
-    )}?range=${range}&interval=${interval}`;
+    )}?${querySuffix}`;
 
     try {
       const res = await publicFetch(url, {
+        priority: params.priority ?? "high",
         signal: AbortSignal.timeout(8000),
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -246,6 +253,7 @@ export class YahooMarketProvider extends EventEmitter implements MarketProvider 
       )}?range=1d&interval=5m`;
 
       const res = await publicFetch(url, {
+        priority: "low",
         signal: AbortSignal.timeout(8000),
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -306,13 +314,44 @@ export class YahooMarketProvider extends EventEmitter implements MarketProvider 
 
   private aggregateFourHours(candles: Candle[]): Candle[] {
     const buckets = new Map<number, Candle[]>();
-    for (const candle of candles) {
+    for (let i = 0; i < candles.length; i++) {
+      const candle = candles[i];
       const time = Math.floor(candle.openTime / 14400000) * 14400000;
-      buckets.set(time, [...(buckets.get(time) ?? []), candle]);
+      let group = buckets.get(time);
+      if (!group) {
+        group = [];
+        buckets.set(time, group);
+      }
+      group.push(candle);
     }
-    return [...buckets].map(([time, bars]) => ({ ...bars[0], timeframe: "4h", openTime: time, closeTime: time + 14400000 - 1,
-      high: Math.max(...bars.map((b) => b.high)), low: Math.min(...bars.map((b) => b.low)), close: bars[bars.length - 1].close,
-      volume: bars.reduce((sum, b) => sum + b.volume, 0), finalized: bars.every((b) => b.finalized) && time + 14400000 <= Date.now() }));
+    const now = Date.now();
+    const aggregated: Candle[] = [];
+    for (const [time, bars] of buckets.entries()) {
+      const first = bars[0];
+      let high = first.high;
+      let low = first.low;
+      let volume = 0;
+      let allFinalized = time + 14400000 <= now;
+      for (let j = 0; j < bars.length; j++) {
+        const b = bars[j];
+        if (b.high > high) high = b.high;
+        if (b.low < low) low = b.low;
+        volume += b.volume;
+        if (!b.finalized) allFinalized = false;
+      }
+      aggregated.push({
+        ...first,
+        timeframe: "4h",
+        openTime: time,
+        closeTime: time + 14400000 - 1,
+        high,
+        low,
+        close: bars[bars.length - 1].close,
+        volume,
+        finalized: allFinalized,
+      });
+    }
+    return aggregated;
   }
 
   private inferYahooSymbol(canonical: string): string {

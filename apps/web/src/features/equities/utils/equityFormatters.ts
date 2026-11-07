@@ -1,31 +1,39 @@
 import { isIdxEquitySymbol } from "./equityPairs";
 
+const idrFormatter = new Intl.NumberFormat("id-ID", {
+  maximumFractionDigits: 0,
+});
+
+const usdEquityFormatter = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+const rawVolFormatter = new Intl.NumberFormat("en-US");
+
 export function formatEquityPrice(
   price: number | undefined,
   symbol?: string,
   currency?: string
 ): string {
-  if (price === undefined || isNaN(price)) return "—";
+  if (price === undefined || Number.isNaN(price)) return "—";
 
   const isId = currency === "IDR" || (symbol ? isIdxEquitySymbol(symbol) : false);
 
   if (isId) {
-    return `Rp ${Math.round(price).toLocaleString("id-ID")}`;
+    return `Rp ${idrFormatter.format(Math.round(price))}`;
   }
 
   // Default US Equity format
-  return `$${price.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  return `$${usdEquityFormatter.format(price)}`;
 }
 
 export function formatEquityVolume(volume: number | undefined): string {
-  if (volume === undefined || isNaN(volume)) return "—";
+  if (volume === undefined || Number.isNaN(volume)) return "—";
   if (volume >= 1_000_000_000) return `${(volume / 1_000_000_000).toFixed(2)}B`;
   if (volume >= 1_000_000) return `${(volume / 1_000_000).toFixed(2)}M`;
   if (volume >= 1_000) return `${(volume / 1_000).toFixed(1)}K`;
-  return volume.toLocaleString("en-US");
+  return rawVolFormatter.format(volume);
 }
 
 export function getSessionBadgeInfo(

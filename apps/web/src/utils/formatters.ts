@@ -1,3 +1,39 @@
+const numberFormatters = new Map<string, Intl.NumberFormat>();
+
+function getNumberFormatter(
+  locale: string,
+  minDecimals: number,
+  maxDecimals: number
+): Intl.NumberFormat {
+  const safeMin = Math.max(0, Math.min(20, minDecimals));
+  const safeMax = Math.max(safeMin, Math.min(20, maxDecimals));
+  const key = `${locale}:${safeMin}:${safeMax}`;
+  let fmt = numberFormatters.get(key);
+  if (!fmt) {
+    fmt = new Intl.NumberFormat(locale, {
+      minimumFractionDigits: safeMin,
+      maximumFractionDigits: safeMax,
+    });
+    numberFormatters.set(key, fmt);
+  }
+  return fmt;
+}
+
+const timeFormatter = new Intl.DateTimeFormat([], {
+  hour12: false,
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+});
+
+const LOCAL_TZ_OFFSET_SECONDS = (() => {
+  try {
+    return -new Date().getTimezoneOffset() * 60;
+  } catch {
+    return 0;
+  }
+})();
+
 export function formatPrice(
   price: number | undefined | null,
   minDecimals = 2,
@@ -13,10 +49,7 @@ export function formatPrice(
   }
 
   const intlLocale = locale === "id" ? "id-ID" : "en-US";
-  return new Intl.NumberFormat(intlLocale, {
-    minimumFractionDigits: minDecimals,
-    maximumFractionDigits: maxDecimals,
-  }).format(price);
+  return getNumberFormatter(intlLocale, minDecimals, maxDecimals).format(price);
 }
 
 export function formatPercent(percent: number | undefined | null): string {
@@ -40,14 +73,8 @@ export function formatVolume(volume: number | undefined | null): string {
 }
 
 export function formatTime(ts: number): string {
-  if (!ts || isNaN(ts)) return "--:--:--";
-  const d = new Date(ts);
-  return d.toLocaleTimeString([], {
-    hour12: false,
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+  if (!ts || Number.isNaN(ts)) return "--:--:--";
+  return timeFormatter.format(ts);
 }
 
 /**
@@ -57,9 +84,7 @@ export function formatTime(ts: number): string {
  * offset makes the chart's bottom axis and crosshair tooltips display the user's exact local time.
  */
 export function toLocalChartTime(utcTimestampMs: number): number {
-  const d = new Date(utcTimestampMs);
-  const offsetSeconds = -d.getTimezoneOffset() * 60;
-  return Math.floor(utcTimestampMs / 1000) + offsetSeconds;
+  return Math.floor(utcTimestampMs / 1000) + LOCAL_TZ_OFFSET_SECONDS;
 }
 
 /**

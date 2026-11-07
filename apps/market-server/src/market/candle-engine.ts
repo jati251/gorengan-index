@@ -8,9 +8,23 @@ export interface CandleEngineEvents {
   "candle:finalized": (candle: Candle) => void;
 }
 
+const LIVE_BUCKETS: ReadonlyArray<{ readonly timeframe: Timeframe; readonly durationMs: number }> = [
+  { timeframe: "1s", durationMs: 1_000 },
+  { timeframe: "5s", durationMs: 5_000 },
+  { timeframe: "15s", durationMs: 15_000 },
+  { timeframe: "30s", durationMs: 30_000 },
+  { timeframe: "1m", durationMs: 60_000 },
+  { timeframe: "5m", durationMs: 300_000 },
+  { timeframe: "15m", durationMs: 900_000 },
+  { timeframe: "30m", durationMs: 1_800_000 },
+  { timeframe: "1h", durationMs: 3_600_000 },
+  { timeframe: "4h", durationMs: 14_400_000 },
+  { timeframe: "1d", durationMs: 86_400_000 },
+];
+
 export class CandleEngine extends EventEmitter {
   private repository: CandleRepository;
-  // Map key: "symbol:1m"
+  // Map key: "symbol:timeframe"
   private activeCandles = new Map<string, Candle>();
   private lastTradeTimes = new Map<string, number>();
   private checkInterval: NodeJS.Timeout | null = null;
@@ -22,47 +36,84 @@ export class CandleEngine extends EventEmitter {
   }
 
   public processTrade(trade: NormalizedTrade): void {
-    if (![trade.price, trade.quantity, trade.timestamp].every(Number.isFinite) || trade.price <= 0 || trade.quantity <= 0 || trade.timestamp < 0 || trade.timestamp > Date.now() + 5000) return;
+    if (
+      ![trade.price, trade.quantity, trade.timestamp].every(Number.isFinite) ||
+      trade.price <= 0 ||
+      trade.quantity <= 0 ||
+      trade.timestamp < 0 ||
+      trade.timestamp > Date.now() + 5000
+    ) {
+      return;
+    }
     const previousTime = this.lastTradeTimes.get(trade.symbol);
     if (previousTime !== undefined && trade.timestamp < previousTime) return;
     this.lastTradeTimes.set(trade.symbol, trade.timestamp);
-    const key = this.getMapKey(trade.symbol, "1m");
-    const bucketOpen = Math.floor(trade.timestamp / 60000) * 60000;
-    const bucketClose = bucketOpen + 60000 - 1;
+
+    for (let i = 0; i < LIVE_BUCKETS.length; i++) {
+      const { timeframe, durationMs } = LIVE_BUCKETS[i];
+      this.updateTimeframeBucket(trade, timeframe, durationMs);
+    }
+  }
+
+  private updateTimeframeBucket(
+    trade: NormalizedTrade,
+    timeframe: Timeframe,
+    durationMs: number
+  ): void {
+    const key = this.getMapKey(trade.symbol, timeframe);
+    const bucketOpen = Math.floor(trade.timestamp / durationMs) * durationMs;
+    const bucketClose = bucketOpen + durationMs - 1;
 
     let current = this.activeCandles.get(key);
 
-    // If an existing candle exists and belongs to a previous minute bucket, finalize it
+    // If an existing candle exists and belongs to a previous bucket, finalize it
     if (current && current.openTime < bucketOpen) {
       this.finalizeCandle(current);
       current = undefined;
     }
 
     if (!current) {
-      current = {
-        symbol: trade.symbol,
-        timeframe: "1m",
-        openTime: bucketOpen,
-        closeTime: bucketClose,
-        open: trade.price,
-        high: trade.price,
-        low: trade.price,
-        close: trade.price,
-        volume: trade.quantity,
-        trades: 1,
-        finalized: false,
-        provider: trade.provider,
-      };
+      const seeded =
+        timeframe !== "1s" && this.repository.getExactCacheCount(trade.symbol, timeframe) > 0
+          ? this.repository.getLatestCandle(trade.symbol, timeframe)
+          : null;
+
+      if (seeded && seeded.openTime === bucketOpen) {
+        current = {
+          ...seeded,
+          high: Math.max(seeded.high, trade.price),
+          low: Math.min(seeded.low, trade.price),
+          close: trade.price,
+          volume: seeded.volume + trade.quantity,
+          trades: (seeded.trades ?? 0) + 1,
+          finalized: false,
+          provider: trade.provider,
+        };
+      } else {
+        current = {
+          symbol: trade.symbol,
+          timeframe,
+          openTime: bucketOpen,
+          closeTime: bucketClose,
+          open: trade.price,
+          high: trade.price,
+          low: trade.price,
+          close: trade.price,
+          volume: trade.quantity,
+          trades: 1,
+          finalized: false,
+          provider: trade.provider,
+        };
+      }
       this.activeCandles.set(key, current);
     } else {
-      current.high = Math.max(current.high, trade.price);
-      current.low = Math.min(current.low, trade.price);
+      if (trade.price > current.high) current.high = trade.price;
+      if (trade.price < current.low) current.low = trade.price;
       current.close = trade.price;
       current.volume += trade.quantity;
       current.trades = (current.trades ?? 0) + 1;
     }
 
-    // Emit live candle update
     this.emit("candle:update", { ...current });
   }
 
@@ -96,7 +147,13 @@ export class CandleEngine extends EventEmitter {
     candle.finalized = true;
 
     try {
-      this.repository.saveCandle(candle);
+      if (
+        candle.timeframe === "1m" ||
+        candle.timeframe === "1s" ||
+        this.repository.getExactCacheCount(candle.symbol, candle.timeframe) > 0
+      ) {
+        this.repository.saveCandle(candle);
+      }
       this.emit("candle:finalized", { ...candle });
     } catch (err) {
       logger.error(
@@ -107,13 +164,12 @@ export class CandleEngine extends EventEmitter {
   }
 
   private startBoundaryChecker(): void {
-    // Check every second for minute rollover
+    // Check every second for bucket rollover across active timeframes
     this.checkInterval = setInterval(() => {
       const now = Date.now();
-      const currentBucketOpen = Math.floor(now / 60000) * 60000;
 
       for (const [key, candle] of this.activeCandles.entries()) {
-        if (candle.openTime < currentBucketOpen) {
+        if (now > candle.closeTime) {
           this.finalizeCandle(candle);
           this.activeCandles.delete(key);
         }

@@ -46,3 +46,39 @@ test("Yahoo preserves bar durations, source time, missing volume and emits no fa
     assert.equal((await provider.getHistoricalCandles({ symbol: "US:TEST", timeframe: "1s", from: 0, to: Date.now() })).length, 0);
   } finally { globalThis.fetch = original; await provider.disconnect(); }
 });
+test("multi-timeframe CandleEngine and binary-search CandleRepository maintain exact ordering and sub-minute rollups", () => {
+  const repository = new CandleRepository(new MemoryDb());
+  const engine = new CandleEngine(repository);
+  try {
+    // Out-of-order bulk saves are ordered via binary search without corrupting bars
+    repository.saveCandles([
+      candle("1s", 3000),
+      candle("1s", 1000),
+      { ...candle("1s", 2000), high: 125 },
+      { ...candle("1s", 1000), close: 108 },
+    ]);
+    const oneSecBars = repository.getCandles("BTC-USDT", "1s");
+    assert.equal(oneSecBars.length, 3);
+    assert.deepEqual(oneSecBars.map((b) => b.openTime), [1000, 2000, 3000]);
+    assert.equal(oneSecBars[0].close, 108);
+
+    // 5s rollup synthesizes from 1s bars when 5s is not explicitly cached
+    const fiveSecBars = repository.getCandles("BTC-USDT", "5s");
+    assert.equal(fiveSecBars.length, 1);
+    assert.equal(fiveSecBars[0].openTime, 0);
+    assert.equal(fiveSecBars[0].high, 125);
+    assert.equal(fiveSecBars[0].volume, 30);
+
+    // CandleEngine simultaneously updates 1s, 5s, 1m, 5m, 1h active buckets in real time
+    const now = Date.now();
+    engine.processTrade({ symbol: "ETH-USDT", provider: "binance", price: 2500, quantity: 1.5, timestamp: now });
+    engine.processTrade({ symbol: "ETH-USDT", provider: "binance", price: 2510, quantity: 0.5, timestamp: now + 50 });
+    assert.equal(engine.getCurrentCandle("ETH-USDT", "1s")?.close, 2510);
+    assert.equal(engine.getCurrentCandle("ETH-USDT", "5s")?.high, 2510);
+    assert.equal(engine.getCurrentCandle("ETH-USDT", "1m")?.volume, 2.0);
+    assert.equal(engine.getCurrentCandle("ETH-USDT", "5m")?.open, 2500);
+    assert.equal(engine.getCurrentCandle("ETH-USDT", "1h")?.close, 2510);
+  } finally {
+    engine.stop();
+  }
+});

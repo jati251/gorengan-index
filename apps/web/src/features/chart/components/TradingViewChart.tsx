@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   createChart,
   CandlestickSeries,
@@ -12,13 +13,21 @@ import {
   type HistogramData,
   type Time,
 } from "lightweight-charts";
-import { TIMEFRAME_MS, type Candle } from "@gorengan/shared";
-import { useCandlesQuery, fetchOlderCandles } from "../api/useCandlesQuery";
+import { TIMEFRAME_MS, type Candle, type Timeframe } from "@gorengan/shared";
+import {
+  useCandlesQuery,
+  fetchOlderCandles,
+  getCandlesQueryKey,
+} from "../api/useCandlesQuery";
 import { useMarketStore } from "@/stores/marketStore";
 import { toLocalChartTime } from "@/utils/formatters";
 import { DataState } from "@/components/ui/data-state";
-import { OhlcLegend, type OhlcData } from "./OhlcLegend";
-import { calculateEMA } from "../utils/indicators";
+import { OhlcLegend, type OhlcData, type OhlcLegendHandle } from "./OhlcLegend";
+import {
+  calculateEMAWithState,
+  stepIncrementalEMA,
+  type EmaIncrementalState,
+} from "../utils/indicators";
 import { RefreshCw } from "lucide-react";
 import { useTranslation } from "@/features/i18n";
 import {
@@ -41,6 +50,54 @@ function getChartPrecision(
   return 2;
 }
 
+function ensureSortedCandles(candles: Candle[]): Candle[] {
+  for (let i = 1; i < candles.length; i++) {
+    if (candles[i].openTime < candles[i - 1].openTime) {
+      return [...candles].sort((a, b) => a.openTime - b.openTime);
+    }
+  }
+  return candles;
+}
+
+function upsertLiveBarInMemory(
+  candles: Candle[],
+  symbol: string,
+  timeframe: Timeframe,
+  bucketStartMs: number,
+  bucketMs: number,
+  bar: { open: number; high: number; low: number; close: number; volume: number }
+): void {
+  const len = candles.length;
+  const liveCandle: Candle = {
+    symbol,
+    timeframe,
+    openTime: bucketStartMs,
+    closeTime: bucketStartMs + bucketMs - 1,
+    open: bar.open,
+    high: bar.high,
+    low: bar.low,
+    close: bar.close,
+    volume: bar.volume,
+    finalized: false,
+  };
+
+  if (len === 0) {
+    candles.push(liveCandle);
+    return;
+  }
+
+  const last = candles[len - 1];
+  if (last.openTime === bucketStartMs) {
+    candles[len - 1] = liveCandle;
+  } else if (bucketStartMs > last.openTime) {
+    last.finalized = true;
+    candles.push(liveCandle);
+    if (candles.length > 2000) {
+      candles.shift();
+    }
+  }
+}
+
 interface TradingViewChartProps {
   symbol: string;
   className?: string;
@@ -48,12 +105,17 @@ interface TradingViewChartProps {
 }
 
 export function TradingViewChart({ symbol, className, terminalTheme = false }: TradingViewChartProps) {
+  const queryClient = useQueryClient();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const ema20SeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const ema50SeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const ema20StateRef = useRef<EmaIncrementalState | null>(null);
+  const ema50StateRef = useRef<EmaIncrementalState | null>(null);
+  const legendRef = useRef<OhlcLegendHandle | null>(null);
+
   const activeBarRef = useRef<{
     bucketStartMs: number;
     chartTime: Time;
@@ -64,6 +126,8 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
     volume: number;
   } | null>(null);
   const last1sOpenTimeRef = useRef<number>(0);
+  const lastViewKeyRef = useRef<string>("");
+  const lastRenderedCountRef = useRef<number>(0);
 
   const selectedTimeframe = useMarketStore((s) => s.selectedTimeframe);
   const showEma20 = useMarketStore((s) => s.showEma20);
@@ -80,32 +144,25 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
   const precision = getChartPrecision(isId, isUs, isFx, fxMeta?.displayDecimals);
   const minMove = precision === 0 ? 1 : 1 / Math.pow(10, precision);
 
-  const { data: candlesData, isLoading, isError, refetch } = useCandlesQuery(symbol, selectedTimeframe);
+  const {
+    data: candlesData,
+    isLoading,
+    isFetching,
+    isPlaceholderData,
+    isError,
+    refetch,
+  } = useCandlesQuery(symbol, selectedTimeframe);
   const candlesDataRef = useRef(candlesData);
-  useEffect(() => {
-    candlesDataRef.current = candlesData;
-  }, [candlesData]);
-
   const allCandlesRef = useRef<Candle[]>([]);
   const isLoadingOlderRef = useRef<boolean>(false);
   const hasMoreOlderRef = useRef<boolean>(true);
   const [isLoadingOlder, setIsLoadingOlder] = useState<boolean>(false);
+  const [liveFallbackViewKey, setLiveFallbackViewKey] = useState<string>("");
 
   const symbolRef = useRef(symbol);
   const timeframeRef = useRef(selectedTimeframe);
-  useEffect(() => {
-    symbolRef.current = symbol;
-    timeframeRef.current = selectedTimeframe;
-  }, [symbol, selectedTimeframe]);
 
-  // OHLC overlay state on hover and streaming updates
-  const [hoveredCandle, setHoveredCandle] = useState<OhlcData | null>(null);
-  const [liveCandleState, setLiveCandleState] = useState<{
-    key: string;
-    candle: OhlcData;
-  } | null>(null);
-
-  // Derived latest candle from historical candles query
+  // Derived latest candle from historical candles query for initial OhlcLegend render
   const queryLatestCandle = useMemo<OhlcData | null>(() => {
     const candles = candlesData?.candles;
     if (!candles || candles.length === 0) return null;
@@ -120,8 +177,8 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
     };
   }, [candlesData]);
 
-  // Helper to format and render candles to Lightweight Chart series
-  const renderCandlesToSeries = useCallback((candles: Candle[], isInitial = false) => {
+  // Single-pass O(N) helper to format and render candles to Lightweight Chart series
+  const renderCandlesToSeries = useCallback((candles: Candle[], fitViewport = false) => {
     if (!candleSeriesRef.current || !volumeSeriesRef.current) {
       return;
     }
@@ -131,45 +188,48 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
       volumeSeriesRef.current.setData([]);
       ema20SeriesRef.current?.setData([]);
       ema50SeriesRef.current?.setData([]);
+      ema20StateRef.current = null;
+      ema50StateRef.current = null;
+      lastRenderedCountRef.current = 0;
       return;
     }
 
-    // Ensure sorted by time ascending
-    const sorted = [...candles].sort((a, b) => a.openTime - b.openTime);
+    const sorted = ensureSortedCandles(candles);
 
-    // Deduplicate by second timestamp to satisfy Lightweight Charts strict monotonic ordering
-    const uniqueCandles = new Map<number, CandlestickData<Time>>();
-    const uniqueVolumes = new Map<number, HistogramData<Time>>();
+    const formattedCandles: CandlestickData<Time>[] = [];
+    const formattedVolumes: HistogramData<Time>[] = [];
+    const closeData: { time: Time; close: number }[] = [];
 
-    for (const c of sorted) {
-      const time = toLocalChartTime(c.openTime);
-      uniqueCandles.set(time, {
-        time: time as Time,
+    let prevTime = -1;
+    for (let i = 0; i < sorted.length; i++) {
+      const c = sorted[i];
+      const timeNum = toLocalChartTime(c.openTime);
+      const time = timeNum as Time;
+      const candlePoint: CandlestickData<Time> = {
+        time,
         open: c.open,
         high: c.high,
         low: c.low,
         close: c.close,
-      });
-
-      uniqueVolumes.set(time, {
-        time: time as Time,
+      };
+      const volPoint: HistogramData<Time> = {
+        time,
         value: c.volume,
         color: c.close >= c.open ? CHART_COLORS.volumeUp : CHART_COLORS.volumeDown,
-      });
+      };
+
+      if (timeNum === prevTime && formattedCandles.length > 0) {
+        const lastIdx = formattedCandles.length - 1;
+        formattedCandles[lastIdx] = candlePoint;
+        formattedVolumes[lastIdx] = volPoint;
+        closeData[lastIdx] = { time, close: c.close };
+      } else if (timeNum > prevTime) {
+        formattedCandles.push(candlePoint);
+        formattedVolumes.push(volPoint);
+        closeData.push({ time, close: c.close });
+        prevTime = timeNum;
+      }
     }
-
-    const formattedCandles = Array.from(uniqueCandles.values()).sort(
-      (a, b) => Number(a.time) - Number(b.time)
-    );
-    const formattedVolumes = Array.from(uniqueVolumes.values()).sort(
-      (a, b) => Number(a.time) - Number(b.time)
-    );
-
-    // Derived from strictly sorted and unique candle list to guarantee monotonic EMA times
-    const closeData = formattedCandles.map((c) => ({
-      time: c.time,
-      close: c.close,
-    }));
 
     try {
       candleSeriesRef.current.setData(formattedCandles);
@@ -192,16 +252,20 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
         };
       }
 
-      // Calculate and set EMAs
+      // Calculate EMAs and capture O(1) incremental states for real-time streaming
+      const ema20 = calculateEMAWithState(closeData, 20);
+      ema20StateRef.current = ema20.state;
       if (ema20SeriesRef.current) {
-        ema20SeriesRef.current.setData(calculateEMA(closeData, 20));
-      }
-      if (ema50SeriesRef.current) {
-        ema50SeriesRef.current.setData(calculateEMA(closeData, 50));
+        ema20SeriesRef.current.setData(ema20.points);
       }
 
-      if (isInitial) {
-        // Prevent single fat candle stretching while keeping candles centered and in view
+      const ema50 = calculateEMAWithState(closeData, 50);
+      ema50StateRef.current = ema50.state;
+      if (ema50SeriesRef.current) {
+        ema50SeriesRef.current.setData(ema50.points);
+      }
+
+      if (fitViewport) {
         if (formattedCandles.length >= 30) {
           chartRef.current?.timeScale().fitContent();
         } else {
@@ -209,6 +273,7 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
         }
         chartRef.current?.timeScale().scrollToPosition(0, false);
       }
+      lastRenderedCountRef.current = formattedCandles.length;
     } catch (err) {
       console.warn("Error setting candle data:", err);
     }
@@ -270,7 +335,7 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
     ema20SeriesRef.current = ema20Series;
     ema50SeriesRef.current = ema50Series;
 
-    // Handle crosshair move for dynamic OHLC Legend
+    // Handle crosshair move for dynamic OHLC Legend without re-rendering TradingViewChart
     chart.subscribeCrosshairMove((param) => {
       if (
         !param.time ||
@@ -278,7 +343,7 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
         param.point.x < 0 ||
         param.point.y < 0
       ) {
-        setHoveredCandle(null);
+        legendRef.current?.setHoveredCandle(null);
         return;
       }
 
@@ -290,7 +355,7 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
         | undefined;
 
       if (candleData) {
-        setHoveredCandle({
+        legendRef.current?.setHoveredCandle({
           open: candleData.open,
           high: candleData.high,
           low: candleData.low,
@@ -299,7 +364,7 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
           time: param.time,
         });
       } else {
-        setHoveredCandle(null);
+        legendRef.current?.setHoveredCandle(null);
       }
     });
 
@@ -311,6 +376,7 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
         chart.applyOptions({ width: rw, height: rh });
       }
     });
+    resizeObserver.observe(containerRef.current);
 
     // Handle infinite scrolling / lazy load older candles when panning left
     chart.timeScale().subscribeVisibleLogicalRangeChange(async (logicalRange) => {
@@ -388,34 +454,52 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
     volumeSeriesRef.current?.applyOptions({ visible: !isFx && showVolume });
   }, [showEma20, showEma50, showVolume, isFx]);
 
-  // Update chart historical data whenever TanStack query resolves
+  // Update chart historical data whenever TanStack query resolves or timeframe changes
   useEffect(() => {
+    candlesDataRef.current = candlesData;
+    symbolRef.current = symbol;
+    timeframeRef.current = selectedTimeframe;
+
     if (!candleSeriesRef.current || !volumeSeriesRef.current) {
       return;
     }
 
-    const candles = candlesData?.candles ?? [];
-    allCandlesRef.current = [...candles];
-    hasMoreOlderRef.current = true;
-    isLoadingOlderRef.current = false;
-    setIsLoadingOlder(false);
+    const viewKey = `${symbol}:${selectedTimeframe}`;
+    const isNewView = lastViewKeyRef.current !== viewKey;
 
-    renderCandlesToSeries(candles, true);
-  }, [candlesData, selectedTimeframe, renderCandlesToSeries]);
+    if (isNewView) {
+      chartRef.current?.timeScale().applyOptions({
+        secondsVisible: isSubMinuteTimeframe(selectedTimeframe),
+      });
+      hasMoreOlderRef.current = true;
+      isLoadingOlderRef.current = false;
+    }
 
+    const incoming = candlesData?.candles ?? [];
+    if (incoming.length === 0 && !isNewView) {
+      return;
+    }
 
-  // Dynamically toggle secondsVisible and re-align view when switching to sub-minute timeframes
-  useEffect(() => {
-    if (!chartRef.current) return;
-    chartRef.current.timeScale().applyOptions({
-      secondsVisible: isSubMinuteTimeframe(selectedTimeframe),
-    });
-    // Immediately fit and scroll to real time so 1s chart does not appear empty/off-screen
-    requestAnimationFrame(() => {
-      chartRef.current?.timeScale().fitContent();
-      chartRef.current?.timeScale().scrollToPosition(0, false);
-    });
-  }, [selectedTimeframe]);
+    const merged = incoming.slice();
+    // Preserve any newer live bar already streamed for this exact viewKey
+    if (!isNewView && activeBarRef.current) {
+      const bucketMs = TIMEFRAME_MS[selectedTimeframe] ?? 60_000;
+      upsertLiveBarInMemory(
+        merged,
+        symbol,
+        selectedTimeframe,
+        activeBarRef.current.bucketStartMs,
+        bucketMs,
+        activeBarRef.current
+      );
+    }
+
+    allCandlesRef.current = merged;
+    const upgradedFromSparse = lastRenderedCountRef.current < 30 && merged.length >= 30;
+    lastViewKeyRef.current = viewKey;
+
+    renderCandlesToSeries(merged, isNewView || upgradedFromSparse);
+  }, [candlesData, symbol, selectedTimeframe, renderCandlesToSeries]);
 
   // Subscribe to realtime live candle stream & tick updates from Zustand store
   useEffect(() => {
@@ -423,7 +507,66 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
     activeBarRef.current = null;
     last1sOpenTimeRef.current = 0;
 
+    const currentViewKey = `${symbol}:${selectedTimeframe}`;
     const bucketMs = TIMEFRAME_MS[selectedTimeframe] ?? 60_000;
+
+    const pushLiveUpdates = (
+      chartTime: Time,
+      open: number,
+      high: number,
+      low: number,
+      close: number,
+      volume: number,
+      bucketStartMs: number
+    ) => {
+      if (!candleSeriesRef.current || !volumeSeriesRef.current) return;
+
+      candleSeriesRef.current.update({
+        time: chartTime,
+        open,
+        high,
+        low,
+        close,
+      });
+
+      volumeSeriesRef.current.update({
+        time: chartTime,
+        value: volume,
+        color: close >= open ? CHART_COLORS.volumeUp : CHART_COLORS.volumeDown,
+      });
+
+      if (ema20StateRef.current && ema20SeriesRef.current) {
+        const pt20 = stepIncrementalEMA(ema20StateRef.current, chartTime, close);
+        if (pt20) ema20SeriesRef.current.update(pt20);
+      }
+
+      if (ema50StateRef.current && ema50SeriesRef.current) {
+        const pt50 = stepIncrementalEMA(ema50StateRef.current, chartTime, close);
+        if (pt50) ema50SeriesRef.current.update(pt50);
+      }
+
+      upsertLiveBarInMemory(
+        allCandlesRef.current,
+        symbol,
+        selectedTimeframe,
+        bucketStartMs,
+        bucketMs,
+        { open, high, low, close, volume }
+      );
+
+      legendRef.current?.setLiveCandle({
+        open,
+        high,
+        low,
+        close,
+        volume,
+        time: chartTime,
+      });
+
+      if (!candlesDataRef.current?.candles?.length) {
+        setLiveFallbackViewKey((prev) => (prev === currentViewKey ? prev : currentViewKey));
+      }
+    };
 
     const unsubscribe = useMarketStore.subscribe((state) => {
       if (!candleSeriesRef.current || !volumeSeriesRef.current) return;
@@ -432,11 +575,9 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
       const candle1s = state.candles[`${symbol}:1s`];
       const ticker = state.tickers[symbol];
 
-      // If we have no price source at all, return
       if (!directCandle && !candle1s && !ticker) return;
 
-      // Deduplicate rapid no-op triggers
-      const versionKey = `${directCandle?.openTime}_${directCandle?.close}_${candle1s?.openTime}_${candle1s?.close}_${ticker?.price}_${ticker?.timestamp}`;
+      const versionKey = `${directCandle?.openTime}_${directCandle?.close}_${directCandle?.volume}_${candle1s?.openTime}_${candle1s?.close}_${candle1s?.volume}_${ticker?.price}_${ticker?.timestamp}`;
       if (versionKey === lastProcessedVersion) return;
       lastProcessedVersion = versionKey;
 
@@ -453,49 +594,44 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
         const close = tickPrice;
         const volume = live?.volume ?? 0;
 
+        activeBarRef.current = {
+          bucketStartMs: openTime,
+          chartTime: time,
+          open,
+          high,
+          low,
+          close,
+          volume,
+        };
+
         try {
-          candleSeriesRef.current.update({
-            time,
-            open,
-            high,
-            low,
-            close,
-          });
-          volumeSeriesRef.current.update({
-            time,
-            value: volume,
-            color: close >= open ? CHART_COLORS.volumeUp : CHART_COLORS.volumeDown,
-          });
-          setLiveCandleState({
-            key: `${symbol}:1s`,
-            candle: {
-              open,
-              high,
-              low,
-              close,
-              volume,
-              time,
-            },
-          });
+          pushLiveUpdates(time, open, high, low, close, volume, openTime);
         } catch {
           // Ignore duplicate / out-of-order ticks
         }
         return;
       }
 
-      // For any non-1s timeframe (1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w):
-      // Synthesize/update active open bar from incoming 1s candle or live ticker in real time
-      const tickPrice = candle1s?.close ?? ticker?.price ?? directCandle?.close;
+      // For any non-1s timeframe (5s, 15s, 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w):
+      const tickPrice = directCandle?.close ?? candle1s?.close ?? ticker?.price;
       if (tickPrice == null || !Number.isFinite(tickPrice)) return;
 
-      const tickHigh = Math.max(candle1s?.high ?? tickPrice, ticker?.price ?? tickPrice);
-      const tickLow = Math.min(candle1s?.low ?? tickPrice, ticker?.price ?? tickPrice);
-      const tickTimeMs = candle1s?.openTime ?? ticker?.timestamp ?? directCandle?.openTime ?? Date.now();
+      const tickHigh = Math.max(
+        directCandle?.high ?? tickPrice,
+        candle1s?.high ?? tickPrice,
+        ticker?.price ?? tickPrice
+      );
+      const tickLow = Math.min(
+        directCandle?.low ?? tickPrice,
+        candle1s?.low ?? tickPrice,
+        ticker?.price ?? tickPrice
+      );
+      const tickTimeMs =
+        candle1s?.openTime ?? ticker?.timestamp ?? directCandle?.openTime ?? Date.now();
 
       const bucketStartMs = Math.floor(tickTimeMs / bucketMs) * bucketMs;
       const chartTime = toLocalChartTime(bucketStartMs) as Time;
 
-      // Track volume additions per 1s candle to avoid duplicating volume on rapid ticker updates
       let deltaVol = 0;
       if (candle1s && candle1s.openTime !== last1sOpenTimeRef.current) {
         last1sOpenTimeRef.current = candle1s.openTime;
@@ -504,10 +640,8 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
 
       let bar = activeBarRef.current;
 
-      // If activeBar is not yet initialized in memory, check if historical data already has this open bucket
-      if (!bar && candlesDataRef.current?.candles?.length) {
-        const histCandles = candlesDataRef.current.candles;
-        const lastHist = histCandles[histCandles.length - 1];
+      if (!bar && allCandlesRef.current.length > 0) {
+        const lastHist = allCandlesRef.current[allCandlesRef.current.length - 1];
         const lastHistBucketMs = Math.floor(lastHist.openTime / bucketMs) * bucketMs;
         if (lastHistBucketMs === bucketStartMs) {
           bar = {
@@ -525,7 +659,6 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
       const isDirectMatching = directCandle && directCandle.openTime === bucketStartMs;
 
       if (!bar || bucketStartMs > bar.bucketStartMs) {
-        // Start new candle bucket
         bar = {
           bucketStartMs,
           chartTime,
@@ -536,7 +669,6 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
           volume: isDirectMatching ? Math.max(directCandle.volume, deltaVol) : deltaVol,
         };
       } else if (bucketStartMs === bar.bucketStartMs) {
-        // Update existing open bucket in real time
         const newHigh = Math.max(bar.high, tickHigh, tickPrice, isDirectMatching ? directCandle.high : 0);
         const newLow = Math.min(bar.low, tickLow, tickPrice, isDirectMatching ? directCandle.low : Infinity);
         const newVol = isDirectMatching
@@ -553,57 +685,44 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
           volume: newVol,
         };
       } else {
-        // Out of order tick; ignore
         return;
       }
 
       activeBarRef.current = bar;
 
       try {
-        candleSeriesRef.current.update({
-          time: bar.chartTime,
-          open: bar.open,
-          high: bar.high,
-          low: bar.low,
-          close: bar.close,
-        });
-
-        volumeSeriesRef.current.update({
-          time: bar.chartTime,
-          value: bar.volume,
-          color: bar.close >= bar.open ? CHART_COLORS.volumeUp : CHART_COLORS.volumeDown,
-        });
-
-        setLiveCandleState({
-          key: `${symbol}:${selectedTimeframe}`,
-          candle: {
-            open: bar.open,
-            high: bar.high,
-            low: bar.low,
-            close: bar.close,
-            volume: bar.volume,
-            time: bar.chartTime,
-          },
-        });
+        pushLiveUpdates(
+          bar.chartTime,
+          bar.open,
+          bar.high,
+          bar.low,
+          bar.close,
+          bar.volume,
+          bar.bucketStartMs
+        );
       } catch {
         // Ignore duplicate or out-of-order lightweight charts ticks
       }
     });
 
     return () => {
+      // Persist latest streamed candles back into TanStack Query cache on timeframe/symbol switch
+      if (allCandlesRef.current.length > 0 && !isPlaceholderData) {
+        queryClient.setQueryData(getCandlesQueryKey(symbol, selectedTimeframe), {
+          symbol,
+          timeframe: selectedTimeframe,
+          candles: allCandlesRef.current.slice(-1000),
+        });
+      }
       activeBarRef.current = null;
       last1sOpenTimeRef.current = 0;
       unsubscribe();
     };
-  }, [symbol, selectedTimeframe]);
+  }, [symbol, selectedTimeframe, queryClient, isPlaceholderData]);
 
-  // Active OHLC data to display in the legend: hovered point -> current live candle -> latest historical bar
-  const currentLiveCandle =
-    liveCandleState?.key === `${symbol}:${selectedTimeframe}`
-      ? liveCandleState.candle
-      : null;
-  const hasCandles = Boolean(candlesData?.candles?.length || currentLiveCandle);
-  const displayOhlc = !isLoading && hasCandles ? hoveredCandle || currentLiveCandle || queryLatestCandle : null;
+  const hasLiveFallbackBar = liveFallbackViewKey === `${symbol}:${selectedTimeframe}`;
+  const hasCandles = Boolean(candlesData?.candles?.length || hasLiveFallbackBar);
+  const showBlockingLoader = isLoading && !hasCandles;
 
   return (
     <div className={`relative w-full h-full min-h-0 select-none ${className || ""}`}>
@@ -612,10 +731,12 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
         {symbol.replace("-", "/")}
       </div>
 
-      {/* Institutional Top-Left OHLC Overlay */}
-      {displayOhlc && (
+      {/* Institutional Top-Left OHLC Overlay (isolated from parent re-renders) */}
+      {hasCandles && (
         <OhlcLegend
-          data={displayOhlc}
+          key={`${symbol}:${selectedTimeframe}`}
+          legendRef={legendRef}
+          initialData={queryLatestCandle}
           symbol={symbol}
           timeframe={selectedTimeframe}
           showEma20={showEma20}
@@ -624,15 +745,15 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
         />
       )}
 
-      {/* Background history fetch indicator */}
-      {isLoadingOlder && (
+      {/* Non-blocking background sync / older history indicator */}
+      {(isLoadingOlder || (isFetching && isPlaceholderData)) && (
         <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-3 py-1 rounded-full bg-zinc-900/90 border border-amber-500/40 text-[11px] font-mono font-semibold text-amber-400 backdrop-blur-md shadow-lg pointer-events-none animate-pulse">
           <RefreshCw size={12} className="animate-spin" />
           <span>{dict.chart.loadingOlder}</span>
         </div>
       )}
 
-      {isLoading ? (
+      {showBlockingLoader ? (
         <div className="absolute inset-0 z-10 bg-[#2a2839]">
           <DataState loading />
         </div>

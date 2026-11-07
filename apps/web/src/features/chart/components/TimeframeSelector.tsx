@@ -3,8 +3,10 @@
 import React, { useMemo } from "react";
 import { motion } from "framer-motion";
 import { clsx } from "clsx";
+import { useQueryClient } from "@tanstack/react-query";
 import type { Timeframe } from "@gorengan/shared";
 import { useMarketStore } from "@/stores/marketStore";
+import { prefetchCandles } from "../api/useCandlesQuery";
 
 const TIMEFRAMES: { label: string; value: Timeframe }[] = [
   { label: "1s", value: "1s" },
@@ -19,6 +21,7 @@ const TIMEFRAMES: { label: string; value: Timeframe }[] = [
 ];
 
 export function TimeframeSelector() {
+  const queryClient = useQueryClient();
   const selectedTimeframe = useMarketStore((s) => s.selectedTimeframe);
   const setSelectedTimeframe = useMarketStore((s) => s.setSelectedTimeframe);
   const selectedAssetClass = useMarketStore((s) => s.selectedAssetClass);
@@ -47,6 +50,16 @@ export function TimeframeSelector() {
         return (
           <button
             key={tf.value}
+            onMouseEnter={() => {
+              if (!isSelected) {
+                prefetchCandles(queryClient, selectedSymbol, tf.value);
+              }
+            }}
+            onFocus={() => {
+              if (!isSelected) {
+                prefetchCandles(queryClient, selectedSymbol, tf.value);
+              }
+            }}
             onClick={() => setSelectedTimeframe(tf.value)}
             className={clsx(
               "relative shrink-0 min-h-8 px-2 py-0.5 sm:px-2.5 sm:py-1 text-xs font-mono rounded transition-colors cursor-pointer select-none",
