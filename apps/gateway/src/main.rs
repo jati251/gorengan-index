@@ -1708,10 +1708,11 @@ async fn handle_candles(
     }
 
     let history_cache_key = format!("{}:{}", instrument, interval_str);
+    let min_expected_bars = (limit as usize).min(100);
     if params.to.is_none() {
         let cache_read = state.cached_candle_history.read().await;
         if let Some((fetched_at, cached_vec)) = cache_read.get(&history_cache_key) {
-            if fetched_at.elapsed() < Duration::from_secs(20) && cached_vec.len() >= 10 {
+            if fetched_at.elapsed() < Duration::from_secs(30) && cached_vec.len() >= min_expected_bars.min(30) {
                 let mut result = if cached_vec.len() > limit as usize {
                     cached_vec[cached_vec.len() - limit as usize..].to_vec()
                 } else {
@@ -1748,11 +1749,14 @@ async fn handle_candles(
                         }
                     }
                 }
-                return Json(CandlesResponse {
-                    symbol: instrument,
-                    timeframe: interval_str,
-                    candles: result,
-                });
+                return (
+                    StatusCode::OK,
+                    Json(CandlesResponse {
+                        symbol: instrument,
+                        timeframe: interval_str,
+                        candles: result,
+                    }),
+                );
             }
         }
     }
@@ -1834,25 +1838,35 @@ async fn handle_candles(
         }
     }
 
-    // Warmup backfill:
+    // Warmup backfill when QuestDB has fewer bars than needed for a full chart window:
     if is_fx || is_equity {
-        if dtos.len() < 30 {
+        if dtos.len() < min_expected_bars {
             if let Some(inst) = matching_inst {
                 let warmup = warmup_external_candles(&state.http_client, inst, &interval_str, limit, params.to).await;
                 if !warmup.is_empty() {
-                    dtos = warmup;
+                    if dtos.is_empty() {
+                        dtos = warmup;
+                    } else {
+                        let existing_times: HashSet<i64> = dtos.iter().map(|d| d.open_time).collect();
+                        for b in warmup {
+                            if !existing_times.contains(&b.open_time) {
+                                dtos.push(b);
+                            }
+                        }
+                        dtos.sort_by_key(|d| d.open_time);
+                        if dtos.len() > limit as usize {
+                            dtos = dtos[dtos.len() - limit as usize..].to_vec();
+                        }
+                    }
                 }
             }
         }
     } else {
-        // Crypto warmup from Binance Vision klines
-        if dtos.len() < 30 {
+        // Crypto warmup from Binance Vision klines when QuestDB has fewer than min_expected_bars
+        if dtos.len() < min_expected_bars && !matches!(interval_str.as_str(), "5s" | "15s" | "30s") {
             let binance_symbol = instrument.replace('-', "");
             let binance_interval = match interval_str.as_str() {
                 "1s" => "1s",
-                "5s" => "1s",
-                "15s" => "1s",
-                "30s" => "1s",
                 "1m" => "1m",
                 "5m" => "5m",
                 "15m" => "15m",
@@ -1918,6 +1932,9 @@ async fn handle_candles(
                                     }
                                 }
                                 dtos.sort_by_key(|d| d.open_time);
+                                if dtos.len() > limit as usize {
+                                    dtos = dtos[dtos.len() - limit as usize..].to_vec();
+                                }
                             }
                         }
                     }
