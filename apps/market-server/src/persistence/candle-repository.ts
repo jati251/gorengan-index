@@ -8,6 +8,7 @@ export class CandleRepository {
   private db: QuestDbClient;
   private candleCache = new Map<string, Candle[]>();
   private cacheUpdatedAt = new Map<string, number>();
+  private historySyncedAt = new Map<string, number>();
   private symbols: MarketSymbol[] = DEFAULT_SYMBOLS;
 
   constructor(db?: QuestDbClient) {
@@ -19,6 +20,11 @@ export class CandleRepository {
   public getCacheAgeMs(symbol: string, timeframe: Timeframe): number {
     const updatedAt = this.cacheUpdatedAt.get(`${symbol}:${timeframe}`);
     return updatedAt === undefined ? Number.POSITIVE_INFINITY : Date.now() - updatedAt;
+  }
+
+  public getHistorySyncAgeMs(symbol: string, timeframe: Timeframe): number {
+    const syncedAt = this.historySyncedAt.get(`${symbol}:${timeframe}`);
+    return syncedAt === undefined ? Number.POSITIVE_INFINITY : Date.now() - syncedAt;
   }
 
   public getExactCacheCount(symbol: string, timeframe: Timeframe): number {
@@ -139,12 +145,21 @@ export class CandleRepository {
 
   public saveCandles(candles: Candle[]): void {
     if (candles.length === 0) return;
+    const now = Date.now();
+    const syncedCounts = new Map<string, number>();
     const ilpLines: string[] = [];
     for (let i = 0; i < candles.length; i++) {
       const c = candles[i];
       this.upsertCandleInMemory(c);
+      const key = `${c.symbol}:${c.timeframe}`;
+      syncedCounts.set(key, (syncedCounts.get(key) ?? 0) + 1);
       if (c.timeframe === "1m") {
         ilpLines.push(this.formatIlpLine(c));
+      }
+    }
+    for (const [key, count] of syncedCounts.entries()) {
+      if (count >= 10) {
+        this.historySyncedAt.set(key, now);
       }
     }
     if (ilpLines.length > 0) {
@@ -257,6 +272,9 @@ export class CandleRepository {
       const beforeLen = list.length;
       const filtered = list.filter((c) => c.openTime >= cutoffMs);
       this.candleCache.set(key, filtered);
+      if (filtered.length < 50) {
+        this.historySyncedAt.delete(key);
+      }
       removed += beforeLen - filtered.length;
     }
     return removed;

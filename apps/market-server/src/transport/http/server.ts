@@ -96,7 +96,7 @@ export function createHttpServer(
 
     const promise = (async () => {
       const seedTo = to ?? Date.now();
-      const barsToFetch = Math.max(limit, 500);
+      const barsToFetch = Math.max(limit, 1000);
       const seedFrom = from ?? seedTo - Math.min(barsToFetch, 1000) * timeframeToMs(timeframe);
       const live = await provider.getHistoricalCandles({
         symbol,
@@ -130,8 +130,13 @@ export function createHttpServer(
     setTimeout(() => {
       for (const tf of WARMUP_TIMEFRAMES) {
         if (tf === activeTimeframe) continue;
-        if (repository.getExactCacheCount(symbol, tf) >= 20) continue;
-        void triggerHistoricalFetch(symbol, tf, undefined, undefined, 500, "low");
+        if (
+          Number.isFinite(repository.getHistorySyncAgeMs(symbol, tf)) &&
+          repository.getExactCacheCount(symbol, tf) >= 50
+        ) {
+          continue;
+        }
+        void triggerHistoricalFetch(symbol, tf, undefined, undefined, 1000, "low");
       }
     }, 50);
   };
@@ -241,12 +246,13 @@ export function createHttpServer(
         }
         const isLatestWindow = from === undefined && to === undefined;
         const exactCount = repository.getExactCacheCount(symbol, timeframe);
-        const cacheAgeMs = repository.getCacheAgeMs(symbol, timeframe);
+        const historySyncAgeMs = repository.getHistorySyncAgeMs(symbol, timeframe);
+        const minSeededCount = Math.min(limit, 50);
 
-        if (isLatestWindow && exactCount >= 10) {
-          // Stale-While-Revalidate: serve cached bars immediately in <1ms,
-          // and refresh upstream asynchronously if older than 15 seconds.
-          if (cacheAgeMs > 15_000) {
+        if (isLatestWindow && Number.isFinite(historySyncAgeMs) && exactCount >= minSeededCount) {
+          // Stale-While-Revalidate: serve cached historical + live bars immediately in <1ms,
+          // and refresh upstream asynchronously if historical sync is older than 30 seconds.
+          if (historySyncAgeMs > 30_000) {
             void triggerHistoricalFetch(symbol, timeframe, undefined, undefined, limit, "normal");
           }
           scheduleSymbolWarmup(symbol, timeframe);

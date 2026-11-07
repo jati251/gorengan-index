@@ -22,14 +22,13 @@ export const CHART_COLORS = {
 /* ─── Chart Options Factory ───────────────────────────────────────── */
 
 export function createChartOptions(
-  width: number,
-  height: number,
+  _width: number,
+  _height: number,
   secondsVisible: boolean,
   terminalTheme = false
 ): DeepPartial<ChartOptions> {
   return {
-    width,
-    height,
+    autoSize: true,
     layout: {
       background: { type: ColorType.Solid, color: CHART_COLORS.background },
       textColor: terminalTheme ? "#c3e6eb" : CHART_COLORS.text,

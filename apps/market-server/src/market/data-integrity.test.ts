@@ -78,6 +78,18 @@ test("multi-timeframe CandleEngine and binary-search CandleRepository maintain e
     assert.equal(engine.getCurrentCandle("ETH-USDT", "1m")?.volume, 2.0);
     assert.equal(engine.getCurrentCandle("ETH-USDT", "5m")?.open, 2500);
     assert.equal(engine.getCurrentCandle("ETH-USDT", "1h")?.close, 2510);
+
+    // Live single-bar saves do not masquerade as full historical sync
+    for (let i = 0; i < 15; i++) {
+      repository.saveCandle(candle("1m", (i + 1) * 60_000));
+    }
+    assert.equal(Number.isFinite(repository.getHistorySyncAgeMs("BTC-USDT", "1m")), false);
+
+    // Batch historical sync marks historySyncAgeMs as finite
+    repository.saveCandles(
+      Array.from({ length: 12 }, (_, i) => candle("1m", (i + 20) * 60_000))
+    );
+    assert.equal(Number.isFinite(repository.getHistorySyncAgeMs("BTC-USDT", "1m")), true);
   } finally {
     engine.stop();
   }

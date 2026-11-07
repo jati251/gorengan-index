@@ -368,12 +368,23 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
       }
     });
 
-    // Handle container resize
+    // Handle container resize and recover from narrow initial hydration widths
+    let lastWidth = width;
     const resizeObserver = new ResizeObserver((entries) => {
       if (entries.length === 0 || !entries[0].contentRect) return;
       const { width: rw, height: rh } = entries[0].contentRect;
       if (rw > 0 && rh > 0) {
-        chart.applyOptions({ width: rw, height: rh });
+        const expandedFromNarrow = lastWidth < 360 && rw >= 360;
+        lastWidth = rw;
+        if (!chart.autoSizeActive()) {
+          chart.resize(rw, rh, true);
+        }
+        if (expandedFromNarrow && lastRenderedCountRef.current > 0) {
+          if (lastRenderedCountRef.current >= 30) {
+            chart.timeScale().fitContent();
+          }
+          chart.timeScale().scrollToPosition(0, false);
+        }
       }
     });
     resizeObserver.observe(containerRef.current);
@@ -476,13 +487,16 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
     }
 
     const incoming = candlesData?.candles ?? [];
-    if (incoming.length === 0 && !isNewView) {
+    if (incoming.length === 0) {
+      if (isNewView && allCandlesRef.current.length === 0) {
+        renderCandlesToSeries([], false);
+      }
       return;
     }
 
     const merged = incoming.slice();
     // Preserve any newer live bar already streamed for this exact viewKey
-    if (!isNewView && activeBarRef.current) {
+    if (activeBarRef.current) {
       const bucketMs = TIMEFRAME_MS[selectedTimeframe] ?? 60_000;
       upsertLiveBarInMemory(
         merged,
@@ -706,13 +720,28 @@ export function TradingViewChart({ symbol, className, terminalTheme = false }: T
     });
 
     return () => {
-      // Persist latest streamed candles back into TanStack Query cache on timeframe/symbol switch
-      if (allCandlesRef.current.length > 0 && !isPlaceholderData) {
-        queryClient.setQueryData(getCandlesQueryKey(symbol, selectedTimeframe), {
-          symbol,
-          timeframe: selectedTimeframe,
-          candles: allCandlesRef.current.slice(-1000),
-        });
+      // Non-destructively merge the latest live bar into existing full historical cache on switch
+      if (activeBarRef.current && !isPlaceholderData) {
+        const finalBar = activeBarRef.current;
+        queryClient.setQueryData<{ symbol: string; timeframe: Timeframe; candles: Candle[] }>(
+          getCandlesQueryKey(symbol, selectedTimeframe),
+          (old) => {
+            if (!old?.candles || old.candles.length < 30) return old;
+            const nextCandles = old.candles.slice();
+            upsertLiveBarInMemory(
+              nextCandles,
+              symbol,
+              selectedTimeframe,
+              finalBar.bucketStartMs,
+              bucketMs,
+              finalBar
+            );
+            return {
+              ...old,
+              candles: nextCandles.slice(-1000),
+            };
+          }
+        );
       }
       activeBarRef.current = null;
       last1sOpenTimeRef.current = 0;
