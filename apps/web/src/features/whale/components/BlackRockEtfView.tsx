@@ -1,5 +1,4 @@
 "use client";
-import { motion } from "framer-motion";
 import type { WhaleRadarData } from "../types";
 import { formatUsd, formatPercent, formatBtc } from "../utils/formatters";
 import { useTranslation } from "@/features/i18n";
@@ -17,12 +16,7 @@ export function BlackRockEtfView({ data }: { data: WhaleRadarData }) {
       </p>
 
       {/* Featured IBIT Holdings Card */}
-      <motion.div
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.2 }}
-        className="p-4 border border-zinc-700/80 rounded-xl bg-zinc-900/50 space-y-1 shadow-sm"
-      >
+      <div className="p-4 border border-zinc-700/80 rounded-xl bg-zinc-900/50 space-y-1 shadow-sm ui-fade-in">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h3 className="font-bold text-zinc-100 font-mono">IBIT · {id ? "Kepemilikan dilaporkan penerbit" : "Issuer-reported holdings"}</h3>
           <span className="text-xs text-zinc-400 font-mono">{id ? "Tanggal laporan" : "Disclosure date"}: {data.etfSummary.holdingsAsOf ?? "—"}</span>
@@ -32,19 +26,16 @@ export function BlackRockEtfView({ data }: { data: WhaleRadarData }) {
           <span className="text-sm font-normal text-zinc-300">({formatUsd(data.etfSummary.ibit.aumUsd, true)})</span>
         </div>
         <p className="text-xs text-zinc-400">{id ? "Nilai pasar kepemilikan BTC, bukan total AUM semua ETF." : "BTC holdings market value, not all-ETF AUM."}</p>
-      </motion.div>
+      </div>
 
       <IbitActivityView activity={data.etfSummary.activity} id={id} />
 
       {/* Grid of all ETFs */}
       <div className="grid gap-3 sm:grid-cols-2">
-        {data.etfSummary.allEtfs.map((etf, idx) => (
-          <motion.article
+        {data.etfSummary.allEtfs.map((etf) => (
+          <article
             key={etf.symbol}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: idx * 0.04, duration: 0.2 }}
-            className="p-4 rounded-xl border border-zinc-700/80 bg-zinc-900/40 space-y-2 hover:border-zinc-600 transition-colors"
+            className="p-4 rounded-xl border border-zinc-700/80 bg-zinc-900/40 space-y-2 hover:border-zinc-600 transition-colors ui-fade-in"
           >
             <h3 className="font-bold text-zinc-100">{etf.symbol} · {etf.name}</h3>
             <p className="text-xs text-zinc-400">{etf.issuer}</p>
@@ -56,7 +47,7 @@ export function BlackRockEtfView({ data }: { data: WhaleRadarData }) {
               {id ? "Volume sesi (saham)" : "Session volume (shares)"}: {etf.volume24h?.toLocaleString() ?? "—"}
             </p>
             <SourceStatus source={etf.source} asOf={etf.asOf} />
-          </motion.article>
+          </article>
         ))}
       </div>
       <a href="https://www.ishares.com/us/products/333011/ishares-bitcoin-trust-etf" target="_blank" rel="noopener noreferrer" className="text-sm underline text-amber-300">

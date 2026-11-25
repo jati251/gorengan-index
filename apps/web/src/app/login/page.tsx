@@ -4,9 +4,13 @@ import React, { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn, useSession } from "next-auth/react";
-import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, ArrowRight, AlertCircle } from "lucide-react";
 import { useTranslation, LanguageSwitcher } from "@/features/i18n";
+
+function sanitizeCallbackUrl(raw: string | null): string {
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/terminal";
+  return raw;
+}
 
 function GoogleIcon() {
   return (
@@ -36,7 +40,7 @@ function LoginForm() {
   const { status } = useSession();
   const { dict } = useTranslation();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") || "/terminal";
+  const callbackUrl = sanitizeCallbackUrl(searchParams.get("callbackUrl"));
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -45,17 +49,16 @@ function LoginForm() {
   }, [status, callbackUrl, router]);
   const urlError = searchParams.get("error");
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(
-    urlError ? dict.login.errorExpired : null
-  );
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const displayError = submitError ?? (urlError ? dict.login.errorExpired : null);
 
   const handleSignIn = async () => {
     setIsLoading(true);
-    setError(null);
+    setSubmitError(null);
     try {
       await signIn("google", { callbackUrl });
     } catch {
-      setError(dict.login.errorStartFailed);
+      setSubmitError(dict.login.errorStartFailed);
       setIsLoading(false);
     }
   };
@@ -72,12 +75,7 @@ function LoginForm() {
           <LanguageSwitcher />
         </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-          className="login-content"
-        >
+        <div className="login-content ui-slide-up">
           <div className="login-identity">
             <span className="brand-mark" aria-hidden="true">
               G<span>.</span>
@@ -101,28 +99,21 @@ function LoginForm() {
           </p>
 
           {/* Negative state: Error feedback banner */}
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, height: 0, y: -4 }}
-                animate={{ opacity: 1, height: "auto", y: 0 }}
-                exit={{ opacity: 0, height: 0, y: -4 }}
-                className="login-error flex items-center gap-2 p-2 rounded bg-rose-500/15 border border-rose-500/30 text-rose-300"
-                role="alert"
-              >
-                <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-400" />
-                <span>{error}</span>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {displayError && (
+            <div
+              className="login-error ui-pop-in flex items-center gap-2 p-2 rounded bg-rose-500/15 border border-rose-500/30 text-rose-300"
+              role="alert"
+            >
+              <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-400" />
+              <span>{displayError}</span>
+            </div>
+          )}
 
-          <motion.button
+          <button
             type="button"
             onClick={handleSignIn}
             disabled={isLoading}
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.99 }}
-            className="login-google cursor-pointer transition-transform"
+            className="login-google cursor-pointer"
           >
             <div className="flex items-center gap-2.5">
               {isLoading ? (
@@ -133,12 +124,12 @@ function LoginForm() {
               <span>{isLoading ? dict.login.connecting : dict.login.continueWithGoogle}</span>
             </div>
             <ArrowRight className="w-4 h-4 text-[#2a2839]/80" />
-          </motion.button>
+          </button>
 
           <p className="login-footnote">
             {dict.login.footnote}
           </p>
-        </motion.div>
+        </div>
 
         <p className="login-bottom">
           {dict.login.footerText}
@@ -147,12 +138,7 @@ function LoginForm() {
 
       {/* Right panel: Editorial aside split */}
       <div className="login-aside" aria-hidden="true">
-        <motion.div
-          initial={{ opacity: 0, x: 14 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.45, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
-          className="login-aside-inner"
-        >
+        <div className="login-aside-inner ui-fade-in">
           <span>{dict.login.asideTag}</span>
           <p>
             {dict.login.asideTitleMain}<br />
@@ -162,7 +148,7 @@ function LoginForm() {
           <span className="login-aside-tags">
             {dict.login.asideKeywords}
           </span>
-        </motion.div>
+        </div>
       </div>
     </main>
   );

@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { motion } from "framer-motion";
 import { clsx } from "clsx";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Timeframe } from "@gorengan/shared";
@@ -62,28 +61,16 @@ export function TimeframeSelector() {
             }}
             onClick={() => setSelectedTimeframe(tf.value)}
             className={clsx(
-              "relative shrink-0 min-h-8 px-2 py-0.5 sm:px-2.5 sm:py-1 text-xs font-mono rounded transition-colors cursor-pointer select-none",
+              "relative shrink-0 min-h-8 px-2 py-0.5 sm:px-2.5 sm:py-1 text-xs font-mono rounded transition-colors cursor-pointer select-none border",
               isSelected
                 ? isSubMinute
-                  ? "text-emerald-300 font-bold"
-                  : "text-slate-100 font-semibold"
+                  ? "text-emerald-300 font-bold bg-emerald-500/25 border-emerald-500/40 shadow-xs"
+                  : "text-slate-100 font-semibold bg-slate-800/90 border-slate-700/60 shadow-xs"
                 : isSubMinute
-                  ? "text-emerald-500/70 hover:text-emerald-400"
-                  : "text-slate-400 hover:text-slate-200"
+                  ? "border-transparent text-emerald-500/70 hover:text-emerald-400"
+                  : "border-transparent text-slate-400 hover:text-slate-200"
             )}
           >
-            {isSelected && (
-              <motion.div
-                layoutId="activeTimeframePill"
-                className={clsx(
-                  "absolute inset-0 rounded shadow-xs",
-                  isSubMinute
-                    ? "bg-emerald-500/25 border border-emerald-500/40"
-                    : "bg-slate-800/90 border border-slate-700/60"
-                )}
-                transition={{ type: "spring", stiffness: 450, damping: 35 }}
-              />
-            )}
             <span className="relative z-10">{tf.label}</span>
           </button>
         );

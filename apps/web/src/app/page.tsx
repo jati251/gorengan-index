@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -7,13 +8,23 @@ import { signIn, useSession } from "next-auth/react";
 import { ArrowRight, ArrowUpRight, BarChart3 } from "lucide-react";
 import { clsx } from "clsx";
 
-import { useMarketsQuery, useResolvedSymbols, MarketOverviewTable, MarketStats } from "@/features/markets";
-import { ChartHeader, TradingViewChart } from "@/features/chart";
+import { useMarketsQuery, useResolvedSymbols, MarketStats } from "@/features/markets";
+import { ChartHeader, ChartSkeleton } from "@/features/chart";
 import { Card } from "@/components/ui/card";
+import { DataState } from "@/components/ui/data-state";
 import RetroTerminalScene from "@/components/hero/RetroTerminalScene";
 import { useTerminalWebSocket } from "@/hooks/useTerminalWebSocket";
 import { useMarketStore } from "@/stores/marketStore";
 import { useTranslation, LanguageSwitcher } from "@/features/i18n";
+
+const TradingViewChart = dynamic(
+  () => import("@/features/chart/components/TradingViewChart").then((m) => m.TradingViewChart),
+  { ssr: false, loading: () => <ChartSkeleton /> }
+);
+const MarketOverviewTable = dynamic(
+  () => import("@/features/markets/components/MarketOverviewTable").then((m) => m.MarketOverviewTable),
+  { loading: () => <DataState loading /> }
+);
 
 function getChangeClass(change: number | null | undefined): string {
   if (change == null) return "";
@@ -66,11 +77,25 @@ export default function LandingPage() {
   useTerminalWebSocket(symbolIds, { isThrottled: !isAuthenticated, throttleMs: 5000 });
 
   const selectedSymbol = useMarketStore((state) => state.selectedSymbol);
+  const setSelectedSymbol = useMarketStore((state) => state.setSelectedSymbol);
   const tickers = useMarketStore((state) => state.tickers);
   const [activeTab, setActiveTab] = useState<"chart" | "markets">("chart");
 
+  const handleTapeSelect = (symbolId: string) => {
+    setSelectedSymbol(symbolId);
+    setActiveTab("chart");
+    document.getElementById("market")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   return (
     <main className="site-home min-h-screen">
+      <a
+        href="#market"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[200] focus:px-3 focus:py-2 focus:bg-[#f4c41b] focus:text-[#2a2839] focus:font-bold focus:text-xs"
+      >
+        {locale === "id" ? "Langsung ke papan pasar" : "Skip to market board"}
+      </a>
+
       <header className="site-header">
         <div className="site-container flex min-h-14 sm:min-h-16 items-center justify-between gap-2 sm:gap-4">
           <Link href="/" className="brand-link" aria-label="Gorengan Index home">
@@ -105,6 +130,10 @@ export default function LandingPage() {
           </div>
           <div className="hero-model-wrap">
             <RetroTerminalScene />
+            <div className="hero-model-caption" aria-hidden="true">
+              <span>IDX · CRYPTO · FX · US</span>
+              <span>LIVE STREAM</span>
+            </div>
           </div>
         </section>
 
@@ -120,8 +149,15 @@ export default function LandingPage() {
           {featuredTapeSymbols.map((symbol) => {
             const ticker = tickers[symbol.id];
             const change = ticker?.changePercent24h;
+            const isSelected = selectedSymbol === symbol.id;
             return (
-              <div key={symbol.id} className="snapshot-row">
+              <button
+                key={symbol.id}
+                type="button"
+                onClick={() => handleTapeSelect(symbol.id)}
+                className={clsx("snapshot-row text-left w-full", isSelected && "is-selected")}
+                aria-label={`${symbol.id} ${symbol.name}`}
+              >
                 <div><strong>{symbol.id}</strong><span>{symbol.name}</span></div>
                 <div className="snapshot-value">
                   <strong>
@@ -133,12 +169,12 @@ export default function LandingPage() {
                     {formatChangeText(change, dict.landing.tape.waitingForPrice)}
                   </span>
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>
 
-        <section id="market" className="market-section" aria-labelledby="market-title">
+        <section id="market" className="market-section deferred-section" aria-labelledby="market-title">
           <div className="section-heading">
             <div>
               <p className="eyebrow">{dict.landing.market.eyebrow}</p>
@@ -176,7 +212,7 @@ export default function LandingPage() {
             <div className="preview-content">
               {isError && <div role="status" className="px-4 py-3 border-b border-[#55607e] font-mono text-sm text-[#f4c41b]"><span>{locale === "id" ? "Daftar instrumen cadangan digunakan. " : "Using the fallback instrument list. "}</span><button type="button" className="underline min-h-11" onClick={() => refetch()}>{locale === "id" ? "Muat ulang" : "Retry"}</button></div>}
               {activeTab === "chart" ? (
-                <div className="preview-grid">
+                <div className="preview-grid ui-fade-in">
                   <Card className="preview-chart">
                     <ChartHeader />
                     <div className="h-[350px] sm:h-[450px]">
@@ -191,7 +227,7 @@ export default function LandingPage() {
                   </aside>
                 </div>
               ) : (
-                <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-3 ui-fade-in">
                   <Card className="preview-table">
                     <MarketOverviewTable symbols={symbols} isLoading={isLoading} />
                   </Card>
@@ -210,7 +246,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section id="about" className="about-section" aria-labelledby="about-title">
+        <section id="about" className="about-section deferred-section" aria-labelledby="about-title">
           <div>
             <p className="eyebrow">{dict.landing.about.eyebrow}</p>
             <h2 id="about-title">{dict.landing.about.title}</h2>
@@ -234,7 +270,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section id="faq" className="faq-section" aria-labelledby="faq-title">
+        <section id="faq" className="faq-section deferred-section" aria-labelledby="faq-title">
           <div>
             <p className="eyebrow">{dict.landing.faq.eyebrow}</p>
             <h2 id="faq-title">{dict.landing.faq.title}</h2>

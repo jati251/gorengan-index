@@ -3,7 +3,6 @@
 import React, { useState, useMemo, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Search, Star, TrendingUp, TrendingDown, X, SearchX } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 import { clsx } from "clsx";
 import type { MarketSymbol } from "@gorengan/shared";
 import { useMarketStore, type MarketCategory } from "@/stores/marketStore";
@@ -111,6 +110,7 @@ export function WatchlistSidebar({ symbols, onSelectSymbol, isLoading = false }:
   const setSelectedCategory = useMarketStore((s) => s.setSelectedCategory);
 
   const watchlist = useWatchlistStore((s) => s.watchlist);
+  const watchlistSet = useMemo(() => new Set(watchlist), [watchlist]);
   const toggleWatchlist = useWatchlistStore((s) => s.toggleWatchlist);
 
   // 1. Filter symbols by category and search query (live search supported)
@@ -121,8 +121,8 @@ export function WatchlistSidebar({ symbols, onSelectSymbol, isLoading = false }:
 
   // 2. Favorites subset for this active category/search
   const categoryFavorites = useMemo(() => {
-    return categoryMatchedSymbols.filter((sym) => watchlist.includes(sym.id));
-  }, [categoryMatchedSymbols, watchlist]);
+    return categoryMatchedSymbols.filter((sym) => watchlistSet.has(sym.id));
+  }, [categoryMatchedSymbols, watchlistSet]);
 
   // 3. Current active base list before trend filter (searching always searches all category symbols)
   const isSearching = (search.trim() || committedSearch.trim()).length > 0;
@@ -275,16 +275,11 @@ export function WatchlistSidebar({ symbols, onSelectSymbol, isLoading = false }:
             </div>
           )}
 
-          {/* Suggestion Dropdown with Framer Motion */}
-          <AnimatePresence>
-            {isDropdownOpen && search.trim().length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: -6, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -6, scale: 0.98 }}
-                transition={{ duration: 0.16, ease: "easeOut" }}
-                className="absolute left-0 right-0 top-full mt-1 z-50 bg-[#2a2839] border border-white/[0.14] rounded-lg shadow-2xl backdrop-blur-xl overflow-hidden font-mono text-left"
-              >
+          {/* Suggestion Dropdown */}
+          {isDropdownOpen && search.trim().length > 0 && (
+            <div
+              className="ui-pop-in absolute left-0 right-0 top-full mt-1 z-50 bg-[#2a2839] border border-white/[0.14] rounded-lg shadow-2xl backdrop-blur-xl overflow-hidden font-mono text-left"
+            >
                 <div className="px-2.5 py-1 bg-[#3c3f5f]/90 border-b border-white/[0.08] text-[9px] uppercase tracking-wider text-slate-400 font-semibold flex items-center justify-between">
                   <span>Matching Markets</span>
                   <span>{suggestions.length} results</span>
@@ -330,9 +325,8 @@ export function WatchlistSidebar({ symbols, onSelectSymbol, isLoading = false }:
                     })}
                   </div>
                 )}
-              </motion.div>
-            )}
-          </AnimatePresence>
+              </div>
+          )}
         </div>
 
         {/* Watchlist & All Tabs */}
@@ -472,7 +466,7 @@ export function WatchlistSidebar({ symbols, onSelectSymbol, isLoading = false }:
               const ticker = tickers[sym.id];
               const direction = priceDirections[sym.id] || "neutral";
               const isSelected = selectedSymbol === sym.id;
-              const isStarred = watchlist.includes(sym.id);
+              const isStarred = watchlistSet.has(sym.id);
               const isPositive = (ticker?.changePercent24h ?? 0) >= 0;
               const isFx = sym.assetClass === "fx" || isFxSymbol(sym.id);
               const isUs = sym.assetClass === "us_stocks" || isUsEquitySymbol(sym.id);

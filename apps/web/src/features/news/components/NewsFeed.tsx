@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   Newspaper,
   ExternalLink,
@@ -25,7 +24,7 @@ const impactConfig = {
   LOW: "text-slate-500 bg-slate-800/40 border-slate-700/40",
 } as const;
 
-function NewsItem({ article, index }: { article: NewsArticle; index: number }) {
+function NewsItem({ article }: { article: NewsArticle }) {
   const { dict, locale } = useTranslation();
 
   const sentimentDetails = {
@@ -58,14 +57,11 @@ function NewsItem({ article, index }: { article: NewsArticle; index: number }) {
   }[article.impact];
 
   return (
-    <motion.a
+    <a
       href={article.link}
       target="_blank"
       rel="noopener noreferrer"
-      initial={{ opacity: 0, x: -8 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ delay: index * 0.04, duration: 0.2 }}
-      className="group flex flex-col gap-1.5 px-3 py-2.5 hover:bg-white/[0.035] transition-all cursor-pointer border-b border-white/[0.04] last:border-b-0"
+      className="group flex flex-col gap-1.5 px-3 py-2.5 hover:bg-white/[0.035] transition-colors cursor-pointer border-b border-white/[0.04] last:border-b-0 ui-fade-in"
     >
       {/* Header: Source + Time + Impact */}
       <div className="flex items-center justify-between gap-2">
@@ -115,7 +111,7 @@ function NewsItem({ article, index }: { article: NewsArticle; index: number }) {
           </span>
         ))}
       </div>
-    </motion.a>
+    </a>
   );
 }
 
@@ -159,11 +155,9 @@ export function NewsFeed() {
         ) : !articles?.length ? (
           <DataState error={isError} onRetry={() => refetch()} />
         ) : (
-          <AnimatePresence initial={false}>
-            {articles.map((article, idx) => (
-              <NewsItem key={article.id} article={article} index={idx} />
-            ))}
-          </AnimatePresence>
+          articles.map((article) => (
+            <NewsItem key={article.id} article={article} />
+          ))
         )}
       </div>
     </div>

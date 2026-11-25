@@ -1,6 +1,5 @@
 "use client";
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import type { WhaleRadarData } from "../types";
 import { formatUsd, formatPercent } from "../utils/formatters";
 import { SourceStatus } from "./SourceStatus";
@@ -36,30 +35,24 @@ export function CommoditiesRadarView({ data }: { data: WhaleRadarData }) {
       </p>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <AnimatePresence mode="popLayout">
-          {filteredCommodities.map((c, idx) => (
-            <motion.article
-              key={c.id}
-              initial={{ opacity: 0, scale: 0.96 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.96 }}
-              transition={{ delay: idx * 0.03, duration: 0.18 }}
-              className="p-4 rounded-xl border border-zinc-700/80 bg-zinc-900/40 space-y-2 hover:border-zinc-600 transition-colors"
-            >
-              <h3 className="font-bold text-zinc-100">{c.symbol} · {c.name}</h3>
-              <p className="text-xl font-mono mt-1 text-zinc-100">
-                {formatUsd(c.price)}{" "}
-                <span className="text-xs text-zinc-400">
-                  {c.unit} ·{" "}
-                  <span className={c.changePercent24h != null && c.changePercent24h >= 0 ? "text-emerald-400 font-semibold" : "text-rose-400 font-semibold"}>
-                    {formatPercent(c.changePercent24h)}
-                  </span>
+        {filteredCommodities.map((c) => (
+          <article
+            key={c.id}
+            className="p-4 rounded-xl border border-zinc-700/80 bg-zinc-900/40 space-y-2 hover:border-zinc-600 transition-colors ui-fade-in"
+          >
+            <h3 className="font-bold text-zinc-100">{c.symbol} · {c.name}</h3>
+            <p className="text-xl font-mono mt-1 text-zinc-100">
+              {formatUsd(c.price)}{" "}
+              <span className="text-xs text-zinc-400">
+                {c.unit} ·{" "}
+                <span className={c.changePercent24h != null && c.changePercent24h >= 0 ? "text-emerald-400 font-semibold" : "text-rose-400 font-semibold"}>
+                  {formatPercent(c.changePercent24h)}
                 </span>
-              </p>
-              <SourceStatus source={c.source} asOf={c.asOf} />
-            </motion.article>
-          ))}
-        </AnimatePresence>
+              </span>
+            </p>
+            <SourceStatus source={c.source} asOf={c.asOf} />
+          </article>
+        ))}
       </div>
     </div>
   );

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { Landmark, Wallet, RefreshCw, AlertCircle, Sparkles, Coins, MessageSquareQuote, FileText } from "lucide-react";
 import { useWhaleRadarQuery } from "../api/useWhaleRadarQuery";
 import { BlackRockEtfView } from "./BlackRockEtfView";
@@ -127,7 +126,7 @@ export function WhaleRadarPanel() {
         </div>
       </div>
 
-      {/* Tab Switcher with smooth sliding motion pill */}
+      {/* Tab Switcher */}
       <div className="flex flex-wrap items-center gap-2 p-1.5 rounded-xl bg-zinc-950/80 border border-zinc-800/80 max-w-4xl">
         {tabItems.map((tab) => {
           const Icon = tab.icon;
@@ -138,86 +137,55 @@ export function WhaleRadarPanel() {
               type="button"
               onClick={() => setActiveTab(tab.id)}
               className={`relative flex-1 min-w-[125px] flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-colors cursor-pointer select-none ${
-                isActive ? "text-zinc-950 font-extrabold" : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60"
+                isActive
+                  ? "bg-amber-500 text-zinc-950 font-extrabold shadow-md"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60"
               }`}
             >
-              {isActive && (
-                <motion.span
-                  layoutId="activeRadarTabPill"
-                  className="absolute inset-0 bg-amber-500 rounded-lg shadow-md -z-0"
-                  transition={{ type: "spring", stiffness: 450, damping: 35 }}
-                />
-              )}
-              <span className="relative z-10 flex items-center gap-2">
-                <Icon size={15} />
-                <span>{tab.label}</span>
-              </span>
+              <Icon size={15} />
+              <span>{tab.label}</span>
             </button>
           );
         })}
       </div>
 
-      {/* Main Content Area with fluid AnimatePresence transition */}
-      <AnimatePresence mode="wait">
-        {activeTab === "insider" ? (
-          <motion.div
-            key="insider"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.18, ease: "easeOut" }}
+      {/* Main Content Area */}
+      {activeTab === "insider" ? (
+        <div key="insider" className="ui-fade-in">
+          <InsiderFilingsView />
+        </div>
+      ) : isLoading ? (
+        <div key="loading" className="ui-fade-in">
+          <RadarScannerLoader id={id} />
+        </div>
+      ) : isError ? (
+        <div
+          key="error"
+          className="ui-pop-in p-8 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 space-y-3"
+        >
+          <div className="flex items-center gap-2 font-bold text-sm">
+            <AlertCircle size={18} />
+            <span>{id ? "Gagal memuat data radar" : "Failed to load radar data"}</span>
+          </div>
+          <p className="text-xs text-rose-400/80">
+            {error?.message || (id ? "Terjadi kesalahan saat mengambil data." : "An unexpected error occurred.")}
+          </p>
+          <button
+            type="button"
+            onClick={() => void refetch()}
+            className="px-3 py-1.5 text-xs font-bold rounded-lg bg-rose-500 text-zinc-950 hover:bg-rose-400 transition-colors"
           >
-            <InsiderFilingsView />
-          </motion.div>
-        ) : isLoading ? (
-          <motion.div
-            key="loading"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
-          >
-            <RadarScannerLoader id={id} />
-          </motion.div>
-        ) : isError ? (
-          <motion.div
-            key="error"
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.98 }}
-            transition={{ duration: 0.18 }}
-            className="p-8 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 space-y-3"
-          >
-            <div className="flex items-center gap-2 font-bold text-sm">
-              <AlertCircle size={18} />
-              <span>{id ? "Gagal memuat data radar" : "Failed to load radar data"}</span>
-            </div>
-            <p className="text-xs text-rose-400/80">
-              {error?.message || (id ? "Terjadi kesalahan saat mengambil data." : "An unexpected error occurred.")}
-            </p>
-            <button
-              type="button"
-              onClick={() => void refetch()}
-              className="px-3 py-1.5 text-xs font-bold rounded-lg bg-rose-500 text-zinc-950 hover:bg-rose-400 transition-colors"
-            >
-              {id ? "Coba Lagi" : "Try Again"}
-            </button>
-          </motion.div>
-        ) : data ? (
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.18, ease: "easeOut" }}
-          >
-            {activeTab === "etf" && <BlackRockEtfView data={data} />}
-            {activeTab === "whales" && <WhaleWalletsView data={data} />}
-            {activeTab === "commodities" && <CommoditiesRadarView data={data} />}
-            {activeTab === "social" && <XVipSocialView data={data} />}
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+            {id ? "Coba Lagi" : "Try Again"}
+          </button>
+        </div>
+      ) : data ? (
+        <div key={activeTab} className="ui-fade-in">
+          {activeTab === "etf" && <BlackRockEtfView data={data} />}
+          {activeTab === "whales" && <WhaleWalletsView data={data} />}
+          {activeTab === "commodities" && <CommoditiesRadarView data={data} />}
+          {activeTab === "social" && <XVipSocialView data={data} />}
+        </div>
+      ) : null}
 
       {activeTab !== "insider" && data && (
         <details className="text-sm rounded-lg border border-zinc-800/80 bg-zinc-950/40 p-3">

@@ -13,7 +13,6 @@ import {
   ArrowUpDown,
   SearchX,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 import { clsx } from "clsx";
 import type { MarketSymbol } from "@gorengan/shared";
 import { useMarketStore, type MarketCategory } from "@/stores/marketStore";
@@ -195,6 +194,7 @@ export function MarketOverviewTable({
   const setSelectedCategory = useMarketStore((s) => s.setSelectedCategory);
 
   const watchlist = useWatchlistStore((s) => s.watchlist);
+  const watchlistSet = useMemo(() => new Set(watchlist), [watchlist]);
   const toggleWatchlist = useWatchlistStore((s) => s.toggleWatchlist);
 
   // Search & Suggestion Dropdown state
@@ -257,7 +257,7 @@ export function MarketOverviewTable({
     return displaySymbols.map((sym) => {
       const ticker = tickers[sym.id];
       const direction = priceDirections[sym.id] || "neutral";
-      const isStarred = watchlist.includes(sym.id);
+      const isStarred = watchlistSet.has(sym.id);
       const isSelected = selectedSymbol === sym.id;
       const isUs = sym.assetClass === "us_stocks" || isUsEquitySymbol(sym.id);
       const isId = sym.assetClass === "idx_stocks" || isIdxEquitySymbol(sym.id);
@@ -283,7 +283,7 @@ export function MarketOverviewTable({
         isId,
       };
     });
-  }, [displaySymbols, tickers, priceDirections, watchlist, selectedSymbol]);
+  }, [displaySymbols, tickers, priceDirections, watchlistSet, selectedSymbol]);
 
   // Sort rows based on sortColumn and sortDirection with smart null-handling and stable tie-breaker
   const sortedRows = useMemo(() => {
@@ -546,16 +546,11 @@ export function MarketOverviewTable({
             )}
           </div>
 
-          {/* Suggestion Dropdown List with Framer Motion */}
-          <AnimatePresence>
-            {isDropdownOpen && searchQuery.trim().length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: -6, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -6, scale: 0.98 }}
-                transition={{ duration: 0.16, ease: "easeOut" }}
-                className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-[#2a2839] border border-white/[0.14] rounded-lg shadow-2xl backdrop-blur-xl overflow-hidden font-mono"
-              >
+          {/* Suggestion Dropdown List */}
+          {isDropdownOpen && searchQuery.trim().length > 0 && (
+            <div
+              className="ui-pop-in absolute left-0 right-0 top-full mt-1.5 z-50 bg-[#2a2839] border border-white/[0.14] rounded-lg shadow-2xl backdrop-blur-xl overflow-hidden font-mono"
+            >
                 <div className="px-3 py-1.5 bg-[#3c3f5f]/80 border-b border-white/[0.08] text-[9.5px] uppercase tracking-wider text-slate-400 font-semibold flex items-center justify-between">
                   <span>Matching Markets</span>
                   <span>{suggestions.length} results</span>
@@ -623,9 +618,8 @@ export function MarketOverviewTable({
                     })}
                   </div>
                 )}
-              </motion.div>
-            )}
-          </AnimatePresence>
+              </div>
+          )}
         </div>
       </div>
 

@@ -129,9 +129,16 @@ export function useTerminalWebSocket(
 
   useEffect(() => {
     if (!isThrottled) return;
-    const interval = setInterval(flushPending, throttleMs);
+    const interval = setInterval(() => {
+      if (!document.hidden) flushPending();
+    }, throttleMs);
+    const onVisibility = () => {
+      if (!document.hidden) flushPending();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibility);
       flushPending();
     };
   }, [isThrottled, throttleMs, flushPending]);
@@ -145,6 +152,15 @@ export function useTerminalWebSocket(
   // Main persistent connection effect (runs once on mount)
   useEffect(() => {
     let isCancelled = false;
+    let reconnectAttempt = 0;
+
+    const scheduleReconnect = () => {
+      if (isCancelled) return;
+      const baseDelay = Math.min(30_000, 1500 * Math.pow(2, reconnectAttempt));
+      const jitter = Math.round(Math.random() * 500);
+      reconnectAttempt += 1;
+      reconnectTimeoutRef.current = setTimeout(connect, baseDelay + jitter);
+    };
 
     function connect() {
       if (isCancelled) return;
@@ -162,6 +178,7 @@ export function useTerminalWebSocket(
             ws.close();
             return;
           }
+          reconnectAttempt = 0;
           useMarketStore.getState().setProviderStatus("LIVE");
 
           activeChannelsRef.current.clear();
@@ -257,7 +274,7 @@ export function useTerminalWebSocket(
           if (isCancelled) return;
           activeChannelsRef.current.clear();
           useMarketStore.getState().setProviderStatus("RECONNECTING");
-          reconnectTimeoutRef.current = setTimeout(connect, 2000);
+          scheduleReconnect();
         };
 
         ws.onerror = () => {
@@ -266,9 +283,7 @@ export function useTerminalWebSocket(
           }
         };
       } catch {
-        if (!isCancelled) {
-          reconnectTimeoutRef.current = setTimeout(connect, 2000);
-        }
+        scheduleReconnect();
       }
     }
 
@@ -280,8 +295,13 @@ export function useTerminalWebSocket(
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
       if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
       if (wsRef.current) {
-        if (wsRef.current.readyState === WebSocket.OPEN) {
-          wsRef.current.close();
+        const ws = wsRef.current;
+        ws.onopen = null;
+        ws.onmessage = null;
+        ws.onclose = null;
+        ws.onerror = null;
+        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+          ws.close();
         }
         wsRef.current = null;
       }

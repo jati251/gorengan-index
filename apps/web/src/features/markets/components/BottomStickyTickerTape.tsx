@@ -124,20 +124,29 @@ export function BottomStickyTickerTape() {
   const setSelectedSymbol = useMarketStore((s) => s.setSelectedSymbol);
   const [isPaused, setIsPaused] = useState(false);
 
-  // Throttle store updates to 250ms to keep React updates lightweight and eliminate stutter
+  // Throttle store updates to 250ms and pause while tab is backgrounded
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const syncLatest = () => {
+      const latest = useMarketStore.getState();
+      setMarket({ tickers: latest.tickers, priceDirections: latest.priceDirections });
+    };
     const unsubscribe = useMarketStore.subscribe((state, previous) => {
+      if (document.hidden) return;
       if (state.tickers === previous.tickers && state.priceDirections === previous.priceDirections) return;
       if (timer) return;
       timer = setTimeout(() => {
-        const latest = useMarketStore.getState();
-        setMarket({ tickers: latest.tickers, priceDirections: latest.priceDirections });
+        if (!document.hidden) syncLatest();
         timer = undefined;
       }, 250);
     });
+    const onVisibility = () => {
+      if (!document.hidden) syncLatest();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       unsubscribe();
+      document.removeEventListener("visibilitychange", onVisibility);
       if (timer) clearTimeout(timer);
     };
   }, []);

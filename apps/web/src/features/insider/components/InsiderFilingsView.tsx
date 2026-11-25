@@ -1,6 +1,5 @@
 "use client";
 import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { RefreshCw } from "lucide-react";
 import { useFilingWatchStore } from "../stores/filingWatchStore";
 import { useTranslation } from "@/features/i18n";
@@ -152,13 +151,10 @@ export function InsiderFilingsView() {
     {error && <p role="alert" className="text-sm text-rose-400 p-3 rounded-lg bg-rose-500/10 border border-rose-500/20">{error.message}</p>}
     {data && <><SourceStatus source={data.source} /><p className="text-xs text-zinc-400">{data.total.toLocaleString()}{data.totalIsLowerBound ? "+" : ""} {id ? "hasil; menampilkan" : "results; showing"} {data.filings.length} · {offset + 1}–{offset + data.filings.length}</p>
       {!data.filings.length && <p role="status">{data.source.status === "unavailable" ? (id ? "Sumber SEC tidak tersedia. Ini tidak berarti tidak ada transaksi." : "SEC unavailable. This does not mean no transactions occurred.") : (id ? "Tidak ada filing cocok dalam jendela ini." : "No matching filings in this window.")}</p>}
-      {data.filings.map((filing, index) => {
+      {data.filings.map((filing) => {
         const context = filingContext(filing);
-        return <motion.article
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: Math.min(index * 0.03, 0.3), duration: 0.2 }}
-          className="border border-zinc-700/80 rounded-xl bg-zinc-900/40 p-4 space-y-2"
+        return <article
+          className="border border-zinc-700/80 rounded-xl bg-zinc-900/40 p-4 space-y-2 ui-fade-in"
           key={filing.accession}
         >
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2">
@@ -175,20 +171,12 @@ export function InsiderFilingsView() {
             {expanded === filing.accession ? (id ? "Tutup detail" : "Close details") : (id ? "Detail transaksi" : "Transaction details")}
           </button>
         </div>
-        <AnimatePresence>
-          {expanded === filing.accession && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.22, ease: "easeOut" }}
-              className="overflow-hidden"
-            >
-              <FilingDetails filing={filing} />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.article>; })}
+        {expanded === filing.accession && (
+          <div className="ui-fade-in overflow-hidden">
+            <FilingDetails filing={filing} />
+          </div>
+        )}
+      </article>; })}
       <div className="flex gap-3 justify-center sm:justify-start">
         <button type="button" className="desk-button" disabled={offset === 0 || isFetching} onClick={() => setOffset(offset - 100)}>{id ? "Sebelumnya" : "Previous"}</button>
         <button type="button" className="desk-button" disabled={isFetching || offset >= 900 || offset + 100 >= data.total} onClick={() => setOffset(offset + 100)}>{id ? "Berikutnya" : "Next"}</button>

@@ -1,6 +1,5 @@
 "use client";
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import type { WhaleRadarData } from "../types";
 import { useTranslation } from "@/features/i18n";
 
@@ -49,33 +48,27 @@ export function XVipSocialView({ data }: { data: WhaleRadarData }) {
       )}
 
       <div className="space-y-3">
-        <AnimatePresence mode="popLayout">
-          {posts.map((p, idx) => (
-            <motion.article
-              key={p.id}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ delay: Math.min(idx * 0.03, 0.25), duration: 0.18 }}
-              className="p-4 border border-zinc-700/80 rounded-xl bg-zinc-900/40 space-y-2 hover:border-zinc-600 transition-colors"
+        {posts.map((p) => (
+          <article
+            key={p.id}
+            className="p-4 border border-zinc-700/80 rounded-xl bg-zinc-900/40 space-y-2 hover:border-zinc-600 transition-colors ui-fade-in"
+          >
+            <a
+              href={p.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-zinc-100 underline hover:text-amber-300 transition-colors"
             >
-              <a
-                href={p.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-semibold text-zinc-100 underline hover:text-amber-300 transition-colors"
-              >
-                {p.title}
-              </a>
-              <p className="text-xs text-zinc-400 font-mono">
-                {p.publisher} · {new Date(p.publishedAt).toLocaleString()} ·{" "}
-                <span className={p.sentiment === "BULLISH" ? "text-emerald-400 font-bold" : p.sentiment === "BEARISH" ? "text-rose-400 font-bold" : "text-zinc-400"}>
-                  {p.sentiment}
-                </span>
-              </p>
-            </motion.article>
-          ))}
-        </AnimatePresence>
+              {p.title}
+            </a>
+            <p className="text-xs text-zinc-400 font-mono">
+              {p.publisher} · {new Date(p.publishedAt).toLocaleString()} ·{" "}
+              <span className={p.sentiment === "BULLISH" ? "text-emerald-400 font-bold" : p.sentiment === "BEARISH" ? "text-rose-400 font-bold" : "text-zinc-400"}>
+                {p.sentiment}
+              </span>
+            </p>
+          </article>
+        ))}
       </div>
     </div>
   );

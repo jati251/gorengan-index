@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
-import "@fontsource/press-start-2p/400.css";
-import "@fontsource/vt323/400.css";
+import "@fontsource/press-start-2p/latin-400.css";
+import "@fontsource/vt323/latin-400.css";
 import "./globals.css";
 import { Providers } from "./providers";
 import PwaRegister from "@/components/PwaRegister";

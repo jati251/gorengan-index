@@ -1,23 +1,65 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { Calculator, Activity, ArrowUpRight, BarChart3, CandlestickChart, ChartNoAxesCombined, ChevronDown, Focus, LayoutGrid, Layers3, Newspaper, PanelLeft, PieChart, Plus, Radar, Search, X } from "lucide-react";
-import { MarketHeaderTicker, MarketOverviewTable, MarketStats, BottomStickyTickerTape, useResolvedSymbols, useMarketsQuery } from "@/features/markets";
-import { TradingViewChart, ChartHeader } from "@/features/chart";
+import { MarketHeaderTicker, MarketStats, BottomStickyTickerTape, useResolvedSymbols, useMarketsQuery } from "@/features/markets";
+import { ChartHeader, ChartSkeleton } from "@/features/chart";
 import { WatchlistSidebar } from "@/features/watchlist";
-import { OrderBook } from "@/features/orderbook";
-import { NewsFeed, SentimentGauge } from "@/features/news";
-import { CalculatorPanel, ExchangeRateReference } from "@/features/analysis/components/CalculatorPanel";
-import { AnalysisPanel } from "@/features/analysis/components/AnalysisPanel";
-import { CryptoIntelPanel } from "@/features/analysis/components/CryptoIntelPanel";
-import { WhaleRadarPanel } from "@/features/whale";
-import { MarketComposition } from "@/features/analysis/components/MarketComposition";
-import { MarketMovers, MarketPulse } from "@/features/analysis/components/MarketPulse";
+import { ExchangeRateReference } from "@/features/analysis/components/CalculatorPanel";
+import { MarketPulse } from "@/features/analysis/components/MarketPulse";
+import { DataState } from "@/components/ui/data-state";
 import { useTerminalWebSocket } from "@/hooks/useTerminalWebSocket";
 import { useMarketStore } from "@/stores/marketStore";
 import { useWorkspaceStore, widgetKinds, type WidgetKind } from "@/stores/workspaceStore";
 import { useTranslation } from "@/features/i18n";
+
+const PanelFallback = () => <DataState loading />;
+
+const TradingViewChart = dynamic(
+  () => import("@/features/chart/components/TradingViewChart").then((m) => m.TradingViewChart),
+  { ssr: false, loading: () => <ChartSkeleton /> }
+);
+const MarketOverviewTable = dynamic(
+  () => import("@/features/markets/components/MarketOverviewTable").then((m) => m.MarketOverviewTable),
+  { loading: PanelFallback }
+);
+const OrderBook = dynamic(
+  () => import("@/features/orderbook").then((m) => m.OrderBook),
+  { loading: PanelFallback }
+);
+const NewsFeed = dynamic(
+  () => import("@/features/news").then((m) => m.NewsFeed),
+  { loading: PanelFallback }
+);
+const SentimentGauge = dynamic(
+  () => import("@/features/news").then((m) => m.SentimentGauge),
+  { loading: PanelFallback }
+);
+const CalculatorPanel = dynamic(
+  () => import("@/features/analysis/components/CalculatorPanel").then((m) => m.CalculatorPanel),
+  { loading: PanelFallback }
+);
+const AnalysisPanel = dynamic(
+  () => import("@/features/analysis/components/AnalysisPanel").then((m) => m.AnalysisPanel),
+  { loading: PanelFallback }
+);
+const CryptoIntelPanel = dynamic(
+  () => import("@/features/analysis/components/CryptoIntelPanel").then((m) => m.CryptoIntelPanel),
+  { loading: PanelFallback }
+);
+const WhaleRadarPanel = dynamic(
+  () => import("@/features/whale").then((m) => m.WhaleRadarPanel),
+  { loading: PanelFallback }
+);
+const MarketComposition = dynamic(
+  () => import("@/features/analysis/components/MarketComposition").then((m) => m.MarketComposition),
+  { loading: PanelFallback }
+);
+const MarketMovers = dynamic(
+  () => import("@/features/analysis/components/MarketPulse").then((m) => m.MarketMovers),
+  { loading: PanelFallback }
+);
 
 const widgetIcons = { whaleRadar: Radar, cryptoIntel: Activity, calculator: Calculator, overview: LayoutGrid, chart: CandlestickChart, analysis: Activity, prediction: ChartNoAxesCombined, composition: PieChart, markets: BarChart3, orderbook: Layers3, pulse: Activity, news: Newspaper };
 const compactQuery = "(max-width: 1199px)";
@@ -62,6 +104,20 @@ export default function TerminalPage() {
     document.addEventListener("keydown", escape);
     return () => { document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", escape); };
   }, [menuOpen]);
+  useEffect(() => {
+    const onShortcut = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        if (symbolDialog.current?.open) {
+          symbolDialog.current.close();
+        } else {
+          symbolDialog.current?.showModal();
+        }
+      }
+    };
+    window.addEventListener("keydown", onShortcut);
+    return () => window.removeEventListener("keydown", onShortcut);
+  }, []);
 
   const labels: Record<WidgetKind, string> = { whaleRadar: id ? "Radar Insider & Paus" : "Insider & Whale Radar", cryptoIntel: "Crypto Intel", ...(id
     ? { calculator: "Kalkulator", overview: "Ringkasan", chart: "Chart", analysis: "Analisa", prediction: "Prediksi", composition: "Komposisi", markets: "Pasar", orderbook: "Order book", pulse: "Statistik", news: "Berita" }
@@ -97,7 +153,7 @@ export default function TerminalPage() {
       </div>
       <div className="desk-widget-picker" ref={menuRef}>
         <button type="button" className="desk-add-widget" ref={addRef} aria-label={id ? "Tambah widget" : "Add widget"} aria-expanded={menuOpen} aria-controls="widget-picker" onClick={() => setMenuOpen((value) => !value)}><Plus size={17} /><span>Widget</span></button>
-        {menuOpen && <div className="desk-widget-menu" id="widget-picker"><p>{id ? "Pilih widget workspace" : "Choose a workspace widget"}</p>{widgetKinds.filter((kind) => kind !== "overview").map((kind) => {
+        {menuOpen && <div className="desk-widget-menu ui-pop-in" id="widget-picker"><p>{id ? "Pilih widget workspace" : "Choose a workspace widget"}</p>{widgetKinds.filter((kind) => kind !== "overview").map((kind) => {
           const Icon = widgetIcons[kind];
           return <button type="button" key={kind} onClick={() => switchTab(kind)}><Icon size={17} /><span>{labels[kind]}</span>{tabs.includes(kind) && <small>{id ? "Terbuka" : "Open"}</small>}</button>;
         })}</div>}
@@ -106,7 +162,7 @@ export default function TerminalPage() {
 
     <div className="desk-toolbar">
       <div><span className="desk-eyebrow">{id ? "Workspace pribadi" : "Personal workspace"}</span><h1>{labels[active]}<span>/</span><button type="button" onClick={() => symbolDialog.current?.showModal()} aria-label={id ? "Pilih instrumen" : "Choose instrument"}>{symbol}<ChevronDown size={14} /></button></h1></div>
-      <div className="desk-toolbar-actions"><ExchangeRateReference onOpen={() => open("calculator")} /><button type="button" className="desk-button" aria-label={id ? "Cari aset" : "Find asset"} onClick={() => symbolDialog.current?.showModal()}><Search size={15} /><span>{id ? "Cari aset" : "Find asset"}</span></button><button type="button" className="desk-button desk-focus-toggle" aria-pressed={focus} onClick={toggleFocus}><Focus size={15} /><span>{id ? "Fokus" : "Focus"}</span></button></div>
+      <div className="desk-toolbar-actions"><ExchangeRateReference onOpen={() => open("calculator")} /><button type="button" className="desk-button" aria-label={id ? "Cari aset (Ctrl+K)" : "Find asset (Ctrl+K)"} onClick={() => symbolDialog.current?.showModal()}><Search size={15} /><span>{id ? "Cari aset" : "Find asset"}</span><kbd className="desk-kbd" aria-hidden="true">⌘K</kbd></button><button type="button" className="desk-button desk-focus-toggle" aria-pressed={focus} onClick={toggleFocus}><Focus size={15} /><span>{id ? "Fokus" : "Focus"}</span></button></div>
     </div>
 
     <div className="workspace-grid">
@@ -114,29 +170,20 @@ export default function TerminalPage() {
       <section id="workspace-panel" role="tabpanel" aria-labelledby={`workspace-tab-${active}`} className="workspace-content">
         <p className="workspace-description">{descriptions[active]}</p>
         {isError && <div className="desk-data-note" role="status"><span>{id ? "Daftar instrumen cadangan digunakan." : "Using the fallback instrument list."}</span><button type="button" onClick={() => refetchSymbols()}>{id ? "Muat ulang daftar" : "Reload instruments"}</button></div>}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={active}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.15, ease: "easeOut" }}
-            className="flex flex-col gap-4 min-w-0"
-          >
-            {active === "overview" && <><MarketPulse loading={isLoading} symbols={symbols} />{chart}<div className="overview-analysis"><AnalysisPanel mode="summary" /><button type="button" className="projection-entry" onClick={() => open("prediction")}><ChartNoAxesCombined size={25} /><span className="desk-eyebrow">{id ? "Langkah berikutnya" : "Look ahead"}</span><strong>{id ? "Baca skenario harga" : "Explore price scenarios"}</strong><p>{id ? "Proyeksi 5, 10, atau 20 candle dengan rentang volatilitas historis." : "Project 5, 10 or 20 candles with a historical volatility range."}</p><span>{id ? "Buka prediksi" : "Open prediction"}<ArrowUpRight size={16} /></span></button></div>{isCompact && <MarketComposition symbols={symbols} loading={isLoading} />}{marketBoard}</>}
-            {active === "chart" && <>{chart}<AnalysisPanel mode="summary" /></>}
-            {active === "calculator" && <CalculatorPanel />}
-            {active === "cryptoIntel" && <CryptoIntelPanel />}
-            {active === "whaleRadar" && <WhaleRadarPanel />}
-            {active === "analysis" && <AnalysisPanel />}
-            {active === "prediction" && <AnalysisPanel mode="prediction" />}
-            {active === "composition" && <><MarketPulse loading={isLoading} symbols={symbols} /><MarketComposition symbols={symbols} loading={isLoading} /><MarketMovers symbols={symbols} onSelect={openChart} /></>}
-            {active === "markets" && marketBoard}
-            {active === "orderbook" && <section className="desk-panel standalone-widget"><div className="desk-panel-head"><h2>{labels.orderbook}</h2><span className="desk-muted">{symbol}</span></div><OrderBook className="flex-1 min-h-0" /></section>}
-            {active === "pulse" && <section className="desk-panel stats-widget"><div className="desk-panel-head"><h2>{labels.pulse}</h2><span>{symbol}</span></div><div className="desk-panel-body"><MarketStats /><SentimentGauge /></div></section>}
-            {active === "news" && <section className="desk-panel standalone-widget"><div className="desk-panel-head"><h2>{labels.news}</h2></div><NewsFeed /></section>}
-          </motion.div>
-        </AnimatePresence>
+        <div key={active} className="ui-fade-in flex flex-col gap-4 min-w-0">
+          {active === "overview" && <><MarketPulse loading={isLoading} symbols={symbols} />{chart}<div className="overview-analysis"><AnalysisPanel mode="summary" /><button type="button" className="projection-entry" onClick={() => open("prediction")}><ChartNoAxesCombined size={25} /><span className="desk-eyebrow">{id ? "Langkah berikutnya" : "Look ahead"}</span><strong>{id ? "Baca skenario harga" : "Explore price scenarios"}</strong><p>{id ? "Proyeksi 5, 10, atau 20 candle dengan rentang volatilitas historis." : "Project 5, 10 or 20 candles with a historical volatility range."}</p><span>{id ? "Buka prediksi" : "Open prediction"}<ArrowUpRight size={16} /></span></button></div>{isCompact && <MarketComposition symbols={symbols} loading={isLoading} />}{marketBoard}</>}
+          {active === "chart" && <>{chart}<AnalysisPanel mode="summary" /></>}
+          {active === "calculator" && <CalculatorPanel />}
+          {active === "cryptoIntel" && <CryptoIntelPanel />}
+          {active === "whaleRadar" && <WhaleRadarPanel />}
+          {active === "analysis" && <AnalysisPanel />}
+          {active === "prediction" && <AnalysisPanel mode="prediction" />}
+          {active === "composition" && <><MarketPulse loading={isLoading} symbols={symbols} /><MarketComposition symbols={symbols} loading={isLoading} /><MarketMovers symbols={symbols} onSelect={openChart} /></>}
+          {active === "markets" && marketBoard}
+          {active === "orderbook" && <section className="desk-panel standalone-widget"><div className="desk-panel-head"><h2>{labels.orderbook}</h2><span className="desk-muted">{symbol}</span></div><OrderBook className="flex-1 min-h-0" /></section>}
+          {active === "pulse" && <section className="desk-panel stats-widget"><div className="desk-panel-head"><h2>{labels.pulse}</h2><span>{symbol}</span></div><div className="desk-panel-body"><MarketStats /><SentimentGauge /></div></section>}
+          {active === "news" && <section className="desk-panel standalone-widget"><div className="desk-panel-head"><h2>{labels.news}</h2></div><NewsFeed /></section>}
+        </div>
       </section>
       {!isCompact && <aside className="context-panel">{active === "composition"
         ? <section className="desk-panel"><div className="desk-panel-head"><div><span className="desk-eyebrow">{symbol}</span><h2>{labels.pulse}</h2></div></div><div className="desk-panel-body"><MarketStats /><SentimentGauge /></div></section>

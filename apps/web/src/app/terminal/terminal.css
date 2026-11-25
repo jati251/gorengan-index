@@ -70,19 +70,24 @@ html:has(.terminal-app), body:has(.terminal-app) { overflow-x: clip; }
 .desk-toolbar h1 > span { color: #647e8b; font-weight: 400; }
 .desk-toolbar h1 button { display: flex; align-items: center; gap: .4rem; min-height: 28px; font-family: "VT323", monospace; font-size: 1.22rem; color: var(--desk-accent); letter-spacing: -.04em; }
 .desk-toolbar-actions { display: flex; align-items: center; gap: .5rem; }
-.desk-button, .desk-icon-button { display: inline-flex; align-items: center; justify-content: center; gap: .45rem; min-height: 36px; padding: .45rem .7rem; border: 1px solid #757e8a; border-radius: 0; background: var(--desk-panel); color: var(--desk-text); font-size: 1.05rem; }
+.desk-button, .desk-icon-button { display: inline-flex; align-items: center; justify-content: center; gap: .45rem; min-height: 36px; padding: .45rem .7rem; border: 1px solid #757e8a; border-radius: 0; background: var(--desk-panel); color: var(--desk-text); font-size: 1.05rem; transition: background .14s ease, border-color .14s ease, transform .1s ease; }
 .desk-icon-button { width: 36px; flex: 0 0 auto; padding: .4rem; }
 .desk-button:hover, .desk-icon-button:hover { background: var(--desk-raised); border-color: var(--desk-accent); }
+.desk-button:active, .desk-icon-button:active { transform: translateY(1px); }
 .desk-button[aria-pressed="true"] { color: var(--desk-accent); border-color: var(--desk-accent); }
+.desk-kbd { display: inline-flex; align-items: center; padding: 0 .3rem; margin-left: .15rem; border: 1px solid var(--desk-line); background: var(--desk-bg); color: var(--desk-muted); font-family: "VT323", monospace; font-size: .88rem; line-height: 1.25; }
 .workspace-grid { display: grid; grid-template-columns: 244px minmax(0, 1fr) 286px; min-height: calc(100dvh - 241px); }
 .workspace-content { grid-column: 2; min-width: 0; padding: 1rem; display: flex; flex-direction: column; gap: 1rem; }
 .workspace-description { margin: 0; font-size: 1.06rem; color: var(--desk-muted); }
-.watch-panel { grid-column: 1; position: sticky; top: 108px; display: flex; flex-direction: column; height: calc(100dvh - 150px); min-width: 0; border-right: 1px solid var(--desk-line); background: var(--desk-panel); }
+.watch-panel { grid-column: 1; position: sticky; top: 108px; display: flex; flex-direction: column; height: calc(100dvh - 150px); min-width: 0; border-right: 1px solid var(--desk-line); background: var(--desk-panel); content-visibility: auto; contain-intrinsic-size: auto 244px auto 720px; }
 .watch-panel-heading { display: flex; align-items: center; gap: .6rem; padding: .9rem .85rem; min-height: 48px; border-bottom: 1px solid var(--desk-line); color: var(--desk-muted); }
 .watch-panel-heading h2 { font-size: 1.09rem; color: var(--desk-text); font-weight: 600; }
 .watch-panel-heading > span { margin-left: auto; font-family: "VT323", monospace; font-size: 0.95rem; }
 .watch-panel .terminal-watchlist { min-height: 0; flex: 1; width: 100%; }
-.context-panel { grid-column: 3; display: flex; flex-direction: column; gap: 1rem; padding: 1rem 1rem 1rem 0; min-width: 0; }
+.context-panel { grid-column: 3; display: flex; flex-direction: column; gap: 1rem; padding: 1rem 1rem 1rem 0; min-width: 0; content-visibility: auto; contain-intrinsic-size: auto 286px auto 720px; }
+@supports not (content-visibility: auto) {
+  .watch-panel, .context-panel { contain: layout style paint; }
+}
 .desk-focus .workspace-grid { grid-template-columns: minmax(0, 1fr); }
 .desk-focus :is(.watch-panel, .context-panel) { display: none; }
 .desk-focus .workspace-content { grid-column: 1; max-width: 1680px; width: 100%; margin-inline: auto; }
@@ -215,8 +220,9 @@ html:has(.terminal-app), body:has(.terminal-app) { overflow-x: clip; }
 .standalone-widget { display: flex; flex-direction: column; min-height: 620px; overflow: hidden; }
 .standalone-widget > div:last-child { flex: 1; min-height: 0; }
 .context-orderbook { height: 650px; display: flex; flex-direction: column; overflow: hidden; }
-.desk-symbol-dialog { position: fixed; width: min(440px, calc(100vw - 2rem)); max-height: calc(100dvh - 3rem); margin: auto; border: 1px solid #757e8a; border-radius: 0; padding: 0; background: var(--desk-panel); color: var(--desk-text); }
-.desk-symbol-dialog::backdrop { background: #070e13b8; }
+.desk-symbol-dialog { position: fixed; width: min(440px, calc(100vw - 2rem)); max-height: calc(100dvh - 3rem); margin: auto; border: 2px solid var(--desk-accent); border-radius: 0; padding: 0; background: var(--desk-panel); color: var(--desk-text); box-shadow: 8px 8px 0 #161422; }
+.desk-symbol-dialog[open] { animation: ui-pop-in 140ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.desk-symbol-dialog::backdrop { background: rgba(14, 13, 24, 0.78); backdrop-filter: blur(2px); }
 .desk-dialog-content { display: flex; flex-direction: column; height: min(720px, calc(100dvh - 3rem)); }
 .desk-dialog-content > .terminal-watchlist { flex: 1; min-height: 0; width: 100%; }
 
@@ -284,7 +290,7 @@ html:has(.terminal-app), body:has(.terminal-app) { overflow-x: clip; }
   .desk-toolbar h1 { gap: .4rem; font-size: 1.12rem; }
   .desk-toolbar h1 button { font-size: 1.06rem; }
   .desk-toolbar-actions .desk-button { min-width: 44px; min-height: 44px; padding: .5rem; }
-  .desk-toolbar-actions .desk-button span { display: none; }
+  .desk-toolbar-actions .desk-button span, .desk-toolbar-actions .desk-kbd { display: none; }
   .workspace-content { padding: .75rem; gap: .75rem; }
   .workspace-description { font-size: 1.01rem; }
   .market-pulse-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 0; }
